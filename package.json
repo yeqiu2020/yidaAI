@@ -1,6 +1,6 @@
 {
   "name": "yida-ai-assistant",
-  "version": "1.6.8",
+  "version": "1.7.1",
   "description": "宜搭AI助手 - 统一依赖管理",
   "scripts": {
     "install:playwright": "npx playwright install chromium"
