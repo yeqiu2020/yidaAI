@@ -1,0 +1,146 @@
+{
+  "_comment": "宜搭数据测试配置文件模板 - 用于生成测试数据和提交配置",
+  "_version": "1.0.0",
+  "_created": "2026-03-13",
+
+  "testName": "采购申请单公式测试",
+  "formUuid": "FORM-XXXX-XXXX-XXXX-XXXX",
+  "formName": "采购申请单",
+  
+  "submitMode": "api",
+  "testCount": 10,
+  
+  "fields": [
+    {
+      "fieldId": "textField_申请人",
+      "fieldName": "申请人",
+      "type": "TextField",
+      "required": true,
+      "generateRule": {
+        "type": "name"
+      }
+    },
+    {
+      "fieldId": "textField_申请部门",
+      "fieldName": "申请部门",
+      "type": "TextField",
+      "generateRule": {
+        "type": "enum",
+        "enum": ["技术部", "销售部", "财务部", "人事部", "运营部"]
+      }
+    },
+    {
+      "fieldId": "dateField_申请日期",
+      "fieldName": "申请日期",
+      "type": "DateField",
+      "generateRule": {
+        "type": "range",
+        "start": -7,
+        "end": 0,
+        "format": "timestamp"
+      }
+    },
+    {
+      "fieldId": "selectField_采购类型",
+      "fieldName": "采购类型",
+      "type": "SelectField",
+      "generateRule": {
+        "options": [
+          { "label": "办公用品", "value": "office" },
+          { "label": "设备器材", "value": "equipment" },
+          { "label": "原材料", "value": "material" },
+          { "label": "服务", "value": "service" }
+        ]
+      }
+    },
+    {
+      "fieldId": "numberField_采购数量",
+      "fieldName": "采购数量",
+      "type": "NumberField",
+      "required": true,
+      "generateRule": {
+        "type": "range",
+        "min": 1,
+        "max": 1000,
+        "precision": 0
+      }
+    },
+    {
+      "fieldId": "moneyField_单价",
+      "fieldName": "单价",
+      "type": "MoneyField",
+      "required": true,
+      "generateRule": {
+        "type": "range",
+        "min": 10,
+        "max": 10000
+      }
+    },
+    {
+      "fieldId": "formulaField_总金额",
+      "fieldName": "总金额",
+      "type": "FormulaField",
+      "validate": true,
+      "expectedFormula": "numberField_采购数量 * moneyField_单价"
+    },
+    {
+      "fieldId": "textareaField_采购说明",
+      "fieldName": "采购说明",
+      "type": "TextareaField",
+      "generateRule": {
+        "type": "random",
+        "lines": 2
+      }
+    },
+    {
+      "fieldId": "employeeField_审批人",
+      "fieldName": "审批人",
+      "type": "EmployeeField",
+      "generateRule": {}
+    },
+    {
+      "fieldId": "tableField_采购明细",
+      "fieldName": "采购明细",
+      "type": "TableField",
+      "generateRule": {
+        "rowCount": 3,
+        "columns": [
+          {
+            "fieldId": "itemName",
+            "type": "TextField",
+            "generateRule": { "type": "random", "length": 10 }
+          },
+          {
+            "fieldId": "itemQty",
+            "type": "NumberField",
+            "generateRule": { "type": "range", "min": 1, "max": 100 }
+          },
+          {
+            "fieldId": "itemPrice",
+            "type": "MoneyField",
+            "generateRule": { "type": "range", "min": 10, "max": 1000 }
+          }
+        ]
+      }
+    }
+  ],
+
+  "validation": {
+    "checkFormula": true,
+    "checkValidation": false,
+    "checkProcess": false,
+    "expectedProcessStatus": "RUNNING"
+  },
+
+  "formConfig": {
+    "formulaFields": [
+      {
+        "fieldId": "formulaField_总金额",
+        "fieldName": "总金额",
+        "expectedFormula": "numberField_采购数量 * moneyField_单价"
+      }
+    ],
+    "validationRules": [],
+    "processCode": "PROC-XXXX-XXXX"
+  }
+}

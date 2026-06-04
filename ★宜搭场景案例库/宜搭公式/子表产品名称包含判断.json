@@ -1,0 +1,20 @@
+{
+  "text": "IF(GT(SEARCH(\"宜搭专业版\",TEXT(​产品明细.产品名称​)),0),\"✅ 包含宜搭专业版\",\"❌ 不包含宜搭专业版\")",
+  "marks": [
+    {
+      "from": {
+        "line": 0,
+        "ch": 27,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 36,
+        "sticky": null
+      },
+      "value": "textField_mmg109t6",
+      "invalid": false
+    }
+  ],
+  "isCmData": true
+}

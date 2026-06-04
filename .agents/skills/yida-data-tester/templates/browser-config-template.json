@@ -1,0 +1,50 @@
+{
+  "_comment": "宜搭浏览器提交配置模板 - 用于通过Playwright模拟浏览器提交",
+  "_version": "1.0.0",
+  "_created": "2026-03-13",
+
+  "testName": "采购申请单浏览器测试",
+  "formName": "采购申请单",
+  
+  "submitMode": "browser",
+  "delay": 3000,
+
+  "username": "your-username",
+  "password": "your-password",
+  "loginUrl": "https://login.dingtalk.com/",
+  "formUrl": "https://www.aliwork.com/yida/form/FORM-XXXX-XXXX",
+
+  "browserOptions": {
+    "headless": false,
+    "slowMo": 100,
+    "timeout": 30000,
+    "viewport": {
+      "width": 1920,
+      "height": 1080
+    },
+    "screenshotOnError": true,
+    "recordVideo": false,
+    "videoDir": "./videos/"
+  },
+
+  "formConfig": {
+    "fields": [
+      {
+        "fieldId": "textField_申请人",
+        "type": "TextField"
+      },
+      {
+        "fieldId": "numberField_采购数量",
+        "type": "NumberField"
+      },
+      {
+        "fieldId": "selectField_采购类型",
+        "type": "SelectField"
+      },
+      {
+        "fieldId": "dateField_申请日期",
+        "type": "DateField"
+      }
+    ]
+  }
+}

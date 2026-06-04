@@ -1,0 +1,35 @@
+{
+  "_comment": "宜搭API提交配置模板 - 用于通过OpenAPI提交数据",
+  "_version": "1.0.0",
+  "_created": "2026-03-13",
+
+  "testName": "采购申请单API测试",
+  "formUuid": "FORM-XXXX-XXXX-XXXX-XXXX",
+  "formName": "采购申请单",
+  
+  "submitMode": "api",
+  "delay": 500,
+  "stopOnError": false,
+
+  "appKey": "your-app-key-here",
+  "appSecret": "your-app-secret-here",
+  "baseUrl": "https://api.dingtalk.com",
+  "useUid": "",
+
+  "formConfig": {
+    "fields": [
+      {
+        "fieldId": "textField_申请人",
+        "type": "TextField"
+      },
+      {
+        "fieldId": "numberField_采购数量",
+        "type": "NumberField"
+      },
+      {
+        "fieldId": "moneyField_单价",
+        "type": "MoneyField"
+      }
+    ]
+  }
+}

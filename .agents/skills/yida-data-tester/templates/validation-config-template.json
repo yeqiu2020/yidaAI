@@ -1,0 +1,51 @@
+{
+  "_comment": "宜搭结果验证配置模板 - 用于验证测试结果",
+  "_version": "1.0.0",
+  "_created": "2026-03-13",
+
+  "testName": "采购申请单验证",
+  
+  "appKey": "your-app-key-here",
+  "appSecret": "your-app-secret-here",
+  "baseUrl": "https://api.dingtalk.com",
+
+  "validationRules": {
+    "checkDataIntegrity": true,
+    "checkFormula": true,
+    "checkValidation": false,
+    "checkProcess": false,
+    "expectedProcessStatus": "RUNNING"
+  },
+
+  "formConfig": {
+    "formUuid": "FORM-XXXX-XXXX-XXXX-XXXX",
+    "processCode": "PROC-XXXX-XXXX",
+    
+    "formulaFields": [
+      {
+        "fieldId": "formulaField_总金额",
+        "fieldName": "总金额",
+        "expectedFormula": "numberField_采购数量 * moneyField_单价"
+      },
+      {
+        "fieldId": "formulaField_税额",
+        "fieldName": "税额",
+        "expectedFormula": "formulaField_总金额 * 0.13"
+      }
+    ],
+
+    "validationRules": [
+      {
+        "fieldId": "numberField_采购数量",
+        "rule": "required",
+        "message": "采购数量不能为空"
+      },
+      {
+        "fieldId": "numberField_采购数量",
+        "rule": "min",
+        "value": 1,
+        "message": "采购数量必须大于0"
+      }
+    ]
+  }
+}

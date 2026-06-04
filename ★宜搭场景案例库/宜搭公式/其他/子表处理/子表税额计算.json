@@ -1,0 +1,48 @@
+{
+  "text": "​售卖产品指标.单价​*​售卖产品指标.数量​*​税率​/100",
+  "marks": [
+    {
+      "from": {
+        "line": 0,
+        "ch": 0,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 11,
+        "sticky": null
+      },
+      "value": "textField_danjia",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 12,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 23,
+        "sticky": null
+      },
+      "value": "numberField_shuliang",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 24,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 28,
+        "sticky": null
+      },
+      "value": "numberField_shuilv",
+      "invalid": false
+    }
+  ],
+  "isCmData": true
+}

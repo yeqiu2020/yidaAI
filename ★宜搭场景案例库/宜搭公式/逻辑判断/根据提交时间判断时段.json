@@ -1,0 +1,48 @@
+{
+  "text": "IF(LT(HOUR(DATE(​提交日期​)),6),\"凌晨\",IF(LT(HOUR(DATE(​提交日期​)),12),\"上午\",IF(LT(HOUR(DATE(​提交日期​)),18),\"下午\",\"晚上\")))",
+  "marks": [
+    {
+      "from": {
+        "line": 0,
+        "ch": 17,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 21,
+        "sticky": null
+      },
+      "value": "dateField_mmfwf6ks",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 50,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 54,
+        "sticky": null
+      },
+      "value": "dateField_mmfwf6ks",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 84,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 88,
+        "sticky": null
+      },
+      "value": "dateField_mmfwf6ks",
+      "invalid": false
+    }
+  ],
+  "isCmData": true
+}

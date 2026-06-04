@@ -1,0 +1,118 @@
+{
+  "text": "IF(AND(ISEMPTY(​成员1​),ISEMPTY(​成员2​)),[],IF(ISEMPTY(​成员1​),​成员2​,IF(ISEMPTY(​成员2​),​成员1​,CONCATENATE(​成员1​,​成员2​))))",
+  "marks": [
+    {
+      "from": {
+        "line": 0,
+        "ch": 16,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 19,
+        "sticky": null
+      },
+      "value": "employeeField_mmg109t0",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 53,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 56,
+        "sticky": null
+      },
+      "value": "employeeField_mmg109t0",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 84,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 87,
+        "sticky": null
+      },
+      "value": "employeeField_mmg109t0",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 102,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 105,
+        "sticky": null
+      },
+      "value": "employeeField_mmg109t0",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 31,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 34,
+        "sticky": null
+      },
+      "value": "employeeField_mmg109t2",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 60,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 63,
+        "sticky": null
+      },
+      "value": "employeeField_mmg109t2",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 77,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 80,
+        "sticky": null
+      },
+      "value": "employeeField_mmg109t2",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 108,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 111,
+        "sticky": null
+      },
+      "value": "employeeField_mmg109t2",
+      "invalid": false
+    }
+  ],
+  "isCmData": true
+}

@@ -1,0 +1,342 @@
+{
+  "text": "IF(OR(AND(GE(VALUE(MID(​身份证号码​,11,4)),120),LE(VALUE(MID(​身份证号码​,11,4)),218)),AND(GE(VALUE(MID(​身份证号码​,11,4)),1222),LE(VALUE(MID(​身份证号码​,11,4)),1231))),\"水瓶座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),219),LE(VALUE(MID(​身份证号码​,11,4)),320)),\"双鱼座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),321),LE(VALUE(MID(​身份证号码​,11,4)),419)),\"白羊座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),420),LE(VALUE(MID(​身份证号码​,11,4)),520)),\"金牛座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),521),LE(VALUE(MID(​身份证号码​,11,4)),621)),\"双子座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),622),LE(VALUE(MID(​身份证号码​,11,4)),722)),\"巨蟹座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),723),LE(VALUE(MID(​身份证号码​,11,4)),822)),\"狮子座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),823),LE(VALUE(MID(​身份证号码​,11,4)),922)),\"处女座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),923),LE(VALUE(MID(​身份证号码​,11,4)),1023)),\"天秤座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),1024),LE(VALUE(MID(​身份证号码​,11,4)),1122)),\"天蝎座\",IF(AND(GE(VALUE(MID(​身份证号码​,11,4)),1123),LE(VALUE(MID(​身份证号码​,11,4)),1221)),\"射手座\",\"摩羯座\")))))))))))",
+  "marks": [
+    {
+      "from": {
+        "line": 0,
+        "ch": 23,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 30,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 56,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 63,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 94,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 101,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 128,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 135,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 177,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 184,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 210,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 217,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 257,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 264,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 290,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 297,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 337,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 344,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 370,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 377,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 417,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 424,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 450,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 457,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 497,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 504,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 530,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 537,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 577,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 584,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 610,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 617,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 657,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 664,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 690,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 697,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 737,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 744,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 770,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 777,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 818,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 825,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 852,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 859,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 900,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 907,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    },
+    {
+      "from": {
+        "line": 0,
+        "ch": 934,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 941,
+        "sticky": null
+      },
+      "value": "textField_mmm7t1ao",
+      "invalid": false
+    }
+  ],
+  "isCmData": true
+}

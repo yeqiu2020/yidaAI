@@ -1,0 +1,20 @@
+{
+  "name": "js-action-tester",
+  "version": "1.0.0",
+  "description": "宜搭表单JS动作代码自动化测试工具",
+  "main": "scripts/run-test.js",
+  "scripts": {
+    "test": "node scripts/run-test.js"
+  },
+  "dependencies": {
+    "playwright": "^1.58.0"
+  },
+  "keywords": [
+    "yida",
+    "automation",
+    "testing",
+    "playwright"
+  ],
+  "author": "",
+  "license": "MIT"
+}

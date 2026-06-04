@@ -1,0 +1,20 @@
+{
+  "text": "IF(LT(HOUR(DATE(​提交日期​)),20),\"✅ 提交时间符合要求\",\"❌ 提交时间不能超过晚上8点\")",
+  "marks": [
+    {
+      "from": {
+        "line": 0,
+        "ch": 17,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 21,
+        "sticky": null
+      },
+      "value": "dateField_mmfwf6ks",
+      "invalid": false
+    }
+  ],
+  "isCmData": true
+}

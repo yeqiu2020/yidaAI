@@ -1,0 +1,1761 @@
+{
+  "type": "nodeSchema",
+  "componentsMap": {},
+  "componentsTree": [
+    {
+      "componentName": "TextField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "单行文本",
+          "en_US": "单行文本"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [
+          {
+            "type": "required"
+          }
+        ],
+        "__gridSpan": 1,
+        "fieldId": "textField_mlnf1e6mtq83a",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请输入文本内容",
+          "en_US": "请输入文本内容"
+        },
+        "validationType": "text",
+        "hasClear": true,
+        "maxLength": 200,
+        "scanCode": {
+          "enabled": false,
+          "type": "all",
+          "editable": true
+        },
+        "rows": 4,
+        "complexValue": {
+          "complexType": "custom",
+          "value": {
+            "type": "i18n",
+            "zh_CN": "",
+            "en_US": ""
+          },
+          "formula": ""
+        },
+        "valueType": "custom",
+        "value": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "onFocus": {
+          "ignored": true
+        },
+        "onBlur": {
+          "ignored": true
+        },
+        "onPaste": {
+          "ignored": true
+        },
+        "onKeyDown": {
+          "ignored": true
+        },
+        "onPressEnter": {
+          "ignored": true
+        },
+        "onScanCodeSuccess": {
+          "ignored": true
+        },
+        "onScanCodeError": {
+          "ignored": true
+        },
+        "formularZoneCode": "",
+        "formula": "",
+        "linkage": "",
+        "variable": "",
+        "autoHeight": false,
+        "hasLimitHint": false
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "TextareaField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "多行文本",
+          "en_US": "多行文本"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 2,
+        "fieldId": "textareaField_mlnf1e6mz8y7c",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "htmlType": "textarea",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请输入详细描述",
+          "en_US": "请输入详细描述"
+        },
+        "hasClear": true,
+        "rows": 6,
+        "showEmptyRows": true,
+        "complexValue": {
+          "complexType": "custom",
+          "value": {
+            "type": "i18n",
+            "zh_CN": "",
+            "en_US": ""
+          },
+          "formula": ""
+        },
+        "valueType": "custom",
+        "value": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "onFocus": {
+          "ignored": true
+        },
+        "onBlur": {
+          "ignored": true
+        },
+        "onPaste": {
+          "ignored": true
+        },
+        "onKeyDown": {
+          "ignored": true
+        },
+        "formularZoneCode": "",
+        "formula": "",
+        "linkage": "",
+        "variable": "",
+        "autoHeight": false,
+        "hasLimitHint": false,
+        "maxLength": ""
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "NumberField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "数值",
+          "en_US": "数值"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [
+          {
+            "type": "maxLength",
+            "param": "25"
+          }
+        ],
+        "__gridSpan": 1,
+        "fieldId": "numberField_mlnf1e6n6tbw0",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请输入数字",
+          "en_US": "请输入数字"
+        },
+        "complexValue": {
+          "complexType": "custom",
+          "formula": ""
+        },
+        "valueType": "custom",
+        "innerAfter": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "step": 1,
+        "onKeyDown": {
+          "ignored": true
+        },
+        "onFocus": {
+          "ignored": true
+        },
+        "onBlur": {
+          "ignored": true
+        },
+        "onCorrect": {
+          "ignored": true
+        },
+        "labelColOffset": 0,
+        "wrapperColSpan": 0,
+        "wrapperColOffset": 0,
+        "formularZoneCode": "",
+        "formula": "",
+        "linkage": "",
+        "variable": "",
+        "precision": 2,
+        "thousandsSeparators": false
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "RateField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "评分",
+          "en_US": "评分"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "rateField_mlnf1e6nb6phj",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "count": 5,
+        "allowHalf": false,
+        "showGrade": false,
+        "onHoverChange": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "RadioField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "单选",
+          "en_US": "单选"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "radioField_mlnf1e6ntaeok",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "complexValue": {
+          "complexType": "custom",
+          "value": "",
+          "formula": ""
+        },
+        "valueType": "custom",
+        "itemDirection": "hoz",
+        "defaultDataSource": {
+          "complexType": "custom",
+          "options": [
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "选项A",
+                "en_US": "选项A"
+              },
+              "value": "A",
+              "sid": "serial_m3itm5rzp",
+              "disable": false,
+              "defaultChecked": false
+            },
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "选项B",
+                "en_US": "选项B"
+              },
+              "value": "B",
+              "sid": "serial_pyo5x266l",
+              "disable": false,
+              "defaultChecked": false
+            },
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "选项C",
+                "en_US": "选项C"
+              },
+              "value": "C",
+              "sid": "serial_vqr8jws1z",
+              "disable": false,
+              "defaultChecked": false
+            }
+          ],
+          "formula": "",
+          "url": "",
+          "searchConfig": {
+            "type": "JSONP",
+            "url": "",
+            "beforeFetch": "",
+            "afterFetch": ""
+          }
+        },
+        "dataSourceType": "custom",
+        "dataSource": [
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "选项A",
+              "en_US": "选项A"
+            },
+            "value": "A",
+            "sid": "serial_m3itm5rzp",
+            "disable": false,
+            "defaultChecked": false
+          },
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "选项B",
+              "en_US": "选项B"
+            },
+            "value": "B",
+            "sid": "serial_pyo5x266l",
+            "disable": false,
+            "defaultChecked": false
+          },
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "选项C",
+              "en_US": "选项C"
+            },
+            "value": "C",
+            "sid": "serial_vqr8jws1z",
+            "disable": false,
+            "defaultChecked": false
+          }
+        ],
+        "searchConfig": {
+          "dataType": "jsonp",
+          "url": "",
+          "beforeFetch": "function willFetch(params) {\n  return params;\n}",
+          "afterFetch": "function didFetch(content) {\n  return content;\n}"
+        },
+        "formularZoneCode": "",
+        "value": "",
+        "formula": "",
+        "linkage": "",
+        "variable": "",
+        "supportInverse": false,
+        "isUseDataSourceColor": false,
+        "dataSourceLinkage": "",
+        "reusePrivilege": false
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "CheckboxField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "复选",
+          "en_US": "复选"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "checkboxField_mlnf1e6n4by5j",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": [],
+        "itemDirection": "hoz",
+        "defaultDataSource": {
+          "complexType": "custom",
+          "options": [
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "苹果",
+                "en_US": "苹果"
+              },
+              "value": "apple",
+              "sid": "serial_alo2zpu9a",
+              "disable": false,
+              "defaultChecked": false
+            },
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "香蕉",
+                "en_US": "香蕉"
+              },
+              "value": "banana",
+              "sid": "serial_7tplpx6qv",
+              "disable": false,
+              "defaultChecked": false
+            },
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "橙子",
+                "en_US": "橙子"
+              },
+              "value": "orange",
+              "sid": "serial_s0ohd2nsi",
+              "disable": false,
+              "defaultChecked": false
+            }
+          ],
+          "formula": "",
+          "url": "",
+          "searchConfig": {
+            "type": "JSONP",
+            "url": "",
+            "beforeFetch": "",
+            "afterFetch": ""
+          }
+        },
+        "dataSourceType": "custom",
+        "dataSource": [
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "苹果",
+              "en_US": "苹果"
+            },
+            "value": "apple",
+            "sid": "serial_alo2zpu9a",
+            "disable": false,
+            "defaultChecked": false
+          },
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "香蕉",
+              "en_US": "香蕉"
+            },
+            "value": "banana",
+            "sid": "serial_7tplpx6qv",
+            "disable": false,
+            "defaultChecked": false
+          },
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "橙子",
+              "en_US": "橙子"
+            },
+            "value": "orange",
+            "sid": "serial_s0ohd2nsi",
+            "disable": false,
+            "defaultChecked": false
+          }
+        ],
+        "searchConfig": {
+          "dataType": "jsonp",
+          "url": "",
+          "beforeFetch": "function willFetch(params) {\n  return params;\n}",
+          "afterFetch": "function didFetch(content) {\n  return content;\n}"
+        },
+        "isUseDataSourceColor": false,
+        "dataSourceLinkage": "",
+        "reusePrivilege": false
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "SelectField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "下拉单选",
+          "en_US": "下拉单选"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "selectField_mlnf1e6nogy2q",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "mode": "single",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择",
+          "en_US": "please select"
+        },
+        "hasClear": true,
+        "autoWidth": true,
+        "showSearch": true,
+        "filterLocal": true,
+        "notFoundContent": {
+          "type": "i18n",
+          "zh_CN": "无数据",
+          "en_US": "Not Found"
+        },
+        "complexValue": {
+          "complexType": "custom",
+          "value": "",
+          "formula": ""
+        },
+        "valueType": "custom",
+        "defaultDataSource": {
+          "complexType": "custom",
+          "options": [
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "北京",
+                "en_US": "北京"
+              },
+              "value": "beijing",
+              "sid": "serial_888reky0y",
+              "disable": false,
+              "defaultChecked": false
+            },
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "上海",
+                "en_US": "上海"
+              },
+              "value": "shanghai",
+              "sid": "serial_af7abvyrf",
+              "disable": false,
+              "defaultChecked": false
+            },
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "广州",
+                "en_US": "广州"
+              },
+              "value": "guangzhou",
+              "sid": "serial_szk8yc8zv",
+              "disable": false,
+              "defaultChecked": false
+            }
+          ],
+          "formula": "",
+          "url": "",
+          "searchConfig": {
+            "type": "JSONP",
+            "url": "",
+            "beforeFetch": "",
+            "afterFetch": ""
+          }
+        },
+        "dataSourceType": "custom",
+        "dataSource": [
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "北京",
+              "en_US": "北京"
+            },
+            "value": "beijing",
+            "sid": "serial_888reky0y",
+            "disable": false,
+            "defaultChecked": false
+          },
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "上海",
+              "en_US": "上海"
+            },
+            "value": "shanghai",
+            "sid": "serial_af7abvyrf",
+            "disable": false,
+            "defaultChecked": false
+          },
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "广州",
+              "en_US": "广州"
+            },
+            "value": "guangzhou",
+            "sid": "serial_szk8yc8zv",
+            "disable": false,
+            "defaultChecked": false
+          }
+        ],
+        "searchConfig": {
+          "dataType": "jsonp",
+          "url": "",
+          "beforeFetch": "function willFetch(params) {\n  return params;\n}",
+          "afterFetch": "function didFetch(content) {\n  return content;\n}"
+        },
+        "onVisibleChange": {
+          "ignored": true
+        },
+        "onSearch": {
+          "ignored": true
+        },
+        "formularZoneCode": "",
+        "value": "",
+        "formula": "",
+        "linkage": "",
+        "variable": "",
+        "isUseDataSourceColor": false,
+        "dataSourceLinkage": "",
+        "reusePrivilege": false
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "MultiSelectField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "下拉复选",
+          "en_US": "下拉复选"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "multiselectField_mlnf1e6nzayow",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "mode": "multiple",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择",
+          "en_US": "please select"
+        },
+        "value": [],
+        "autoWidth": true,
+        "showSearch": true,
+        "filterLocal": true,
+        "defaultDataSource": {
+          "complexType": "custom",
+          "options": [
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "阅读",
+                "en_US": "阅读"
+              },
+              "value": "reading",
+              "sid": "serial_qbk58upbf",
+              "disable": false,
+              "defaultChecked": false
+            },
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "运动",
+                "en_US": "运动"
+              },
+              "value": "sports",
+              "sid": "serial_xvrec7azq",
+              "disable": false,
+              "defaultChecked": false
+            },
+            {
+              "text": {
+                "type": "i18n",
+                "zh_CN": "音乐",
+                "en_US": "音乐"
+              },
+              "value": "music",
+              "sid": "serial_edmuvla99",
+              "disable": false,
+              "defaultChecked": false
+            }
+          ],
+          "formula": "",
+          "url": "",
+          "searchConfig": {
+            "type": "JSONP",
+            "url": "",
+            "beforeFetch": "",
+            "afterFetch": ""
+          }
+        },
+        "dataSourceType": "custom",
+        "dataSource": [
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "阅读",
+              "en_US": "阅读"
+            },
+            "value": "reading",
+            "sid": "serial_qbk58upbf",
+            "disable": false,
+            "defaultChecked": false
+          },
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "运动",
+              "en_US": "运动"
+            },
+            "value": "sports",
+            "sid": "serial_xvrec7azq",
+            "disable": false,
+            "defaultChecked": false
+          },
+          {
+            "text": {
+              "type": "i18n",
+              "zh_CN": "音乐",
+              "en_US": "音乐"
+            },
+            "value": "music",
+            "sid": "serial_edmuvla99",
+            "disable": false,
+            "defaultChecked": false
+          }
+        ],
+        "searchConfig": {
+          "dataType": "jsonp",
+          "url": "",
+          "beforeFetch": "function willFetch(params) {\n  return params;\n}",
+          "afterFetch": "function didFetch(content) {\n  return content;\n}"
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "EmployeeField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "成员选择",
+          "en_US": "成员选择"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "employeeField_mlnf1e6ny7i2l",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择",
+          "en_US": "please select"
+        },
+        "hasClear": true,
+        "value": [],
+        "multiple": true,
+        "notFoundContent": {
+          "type": "i18n",
+          "zh_CN": "无数据",
+          "en_US": "Not Found"
+        },
+        "defaultValue": [],
+        "onVisibleChange": {
+          "ignored": true
+        },
+        "onSearch": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "DepartmentSelectField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "部门选择",
+          "en_US": "部门选择"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "departmentselectField_mlnf1e6ndwkus",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择",
+          "en_US": "please select"
+        },
+        "hasClear": true,
+        "value": [],
+        "multiple": false,
+        "notFoundContent": {
+          "type": "i18n",
+          "zh_CN": "无数据",
+          "en_US": "Not Found"
+        },
+        "defaultValue": [],
+        "onVisibleChange": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "DateField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "日期",
+          "en_US": "日期"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "dateField_mlnf1e6o329j2",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择日期",
+          "en_US": "Please select date"
+        },
+        "hasClear": true,
+        "format": "yyyy-MM-dd",
+        "showTime": false,
+        "complexValue": {
+          "complexType": "custom",
+          "value": {
+            "type": "i18n",
+            "zh_CN": "",
+            "en_US": ""
+          },
+          "formula": ""
+        },
+        "valueType": "custom",
+        "value": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "onVisibleChange": {
+          "ignored": true
+        },
+        "formularZoneCode": "",
+        "formula": "",
+        "linkage": "",
+        "variable": ""
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "CascadeDateField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "日期区间",
+          "en_US": "日期区间"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "cascadedateField_mlnf1e6o2rban",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择日期区间",
+          "en_US": "Please select date range"
+        },
+        "hasClear": true,
+        "format": "yyyy-MM-dd",
+        "showTime": false,
+        "value": [],
+        "onVisibleChange": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "ImageField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "图片上传",
+          "en_US": "图片上传"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "imageField_mlnf1e6ojqekb",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": [],
+        "listType": "picture-card",
+        "multiple": true,
+        "limit": 5,
+        "onRemove": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "AttachmentField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "附件上传",
+          "en_US": "附件上传"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "attachmentField_mlnf1e6ojr226",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": [],
+        "multiple": true,
+        "limit": 10,
+        "onRemove": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "AssociationFormField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "关联表单",
+          "en_US": "关联表单"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "associationformField_mlnf1e6ov5wyi",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择",
+          "en_US": "please select"
+        },
+        "hasClear": true,
+        "value": [],
+        "multiple": true,
+        "associationFormId": "FORM001",
+        "associationFormName": "产品表",
+        "notFoundContent": {
+          "type": "i18n",
+          "zh_CN": "无数据",
+          "en_US": "Not Found"
+        },
+        "onVisibleChange": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "AssociationQuery",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "关联查询",
+          "en_US": "关联查询"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "associationqueryField_mlnf1e6ossw16",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择",
+          "en_US": "please select"
+        },
+        "hasClear": true,
+        "value": [],
+        "multiple": true,
+        "notFoundContent": {
+          "type": "i18n",
+          "zh_CN": "无数据",
+          "en_US": "Not Found"
+        },
+        "onVisibleChange": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "SerialNumberField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "流水号",
+          "en_US": "流水号"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "serialnumberField_mlnf1e6olt49q",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": "",
+        "prefix": "SN",
+        "suffix": "",
+        "digit": 6,
+        "startValue": 1
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "AddressField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "地址",
+          "en_US": "地址"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "addressField_mlnf1e6ojjo05",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请输入地址",
+          "en_US": "Please enter address"
+        },
+        "hasClear": true,
+        "value": {
+          "address": "",
+          "lat": "",
+          "lng": ""
+        },
+        "showMap": true
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "CountrySelectField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "国家/地区",
+          "en_US": "国家/地区"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "countryselectField_mlnf1e6oid6j6",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择",
+          "en_US": "please select"
+        },
+        "hasClear": true,
+        "value": "",
+        "onVisibleChange": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "LocationField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "定位",
+          "en_US": "定位"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "locationField_mlnf1e6pzbuja",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": {
+          "address": "",
+          "lat": "",
+          "lng": ""
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "CascadeSelectField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "级联选择",
+          "en_US": "级联选择"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "cascadeselectField_mlnf1e6pq2t6m",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "placeholder": {
+          "type": "i18n",
+          "zh_CN": "请选择",
+          "en_US": "please select"
+        },
+        "hasClear": true,
+        "value": [],
+        "dataSource": [],
+        "onVisibleChange": {
+          "ignored": true
+        }
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "EditorField",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "富文本编辑",
+          "en_US": "富文本编辑"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "editorField_mlnf1e6pyd2tm",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": ""
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "RichText",
+      "props": {
+        "__category__": "form",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "富文本展示",
+          "en_US": "富文本展示"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "richtextField_mlnf1e6p50f5t",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": ""
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    },
+    {
+      "componentName": "PageSection",
+      "props": {
+        "__category__": "layout",
+        "__useMediator": "value",
+        "label": {
+          "type": "i18n",
+          "zh_CN": "分组标题",
+          "en_US": "分组标题"
+        },
+        "labelAlign": "top",
+        "labelTextAlign": "left",
+        "tips": {
+          "type": "i18n",
+          "zh_CN": "",
+          "en_US": ""
+        },
+        "behavior": "NORMAL",
+        "validation": [],
+        "__gridSpan": 1,
+        "fieldId": "pagesectionField_mlnf1e6p7ls4d",
+        "visibility": [
+          "PC",
+          "MOBILE"
+        ],
+        "submittable": "DEFAULT",
+        "events": {
+          "ignored": true
+        },
+        "onChange": {
+          "ignored": true
+        },
+        "dataEntryMode": false,
+        "labelColSpan": 4,
+        "size": "medium",
+        "value": "",
+        "children": []
+      },
+      "condition": true,
+      "hidden": false,
+      "title": "",
+      "isLocked": false,
+      "conditionGroup": ""
+    }
+  ]
+}

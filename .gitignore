@@ -1,0 +1,28 @@
+node_modules/
+.cookies.json
+*.bak
+*.log
+debug-*.html
+debug-*.png
+login-step-*.png
+storageState.json
+.cache/
+temp-file/
+
+# 宜搭同步的应用数据（表单结构、组件ID清单等）
+# 忽略所有表单文件夹（格式：表单名称「表单类型」）
+*/「普通表单」/
+*/「流程表单」/
+*「普通表单」/
+*「流程表单」/
+
+# 宜搭配置文件
+系统配置清单.md
+组织及应用信息.md
+组件ID清单.md
+表单结构变更.md
+*_schema.json
+
+# 部署运维信息
+deploy-*.json
+.temp_*/

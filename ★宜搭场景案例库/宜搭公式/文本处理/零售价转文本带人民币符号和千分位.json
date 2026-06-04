@@ -1,0 +1,20 @@
+{
+  "text": "CONCATENATE(\"¥\", TEXT(​零售价​, \"#,##0.00\"))",
+  "marks": [
+    {
+      "from": {
+        "line": 0,
+        "ch": 23,
+        "sticky": null
+      },
+      "to": {
+        "line": 0,
+        "ch": 26,
+        "sticky": null
+      },
+      "value": "numberField_mlbmfsvz",
+      "invalid": false
+    }
+  ],
+  "isCmData": true
+}
