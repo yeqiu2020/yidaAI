@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>宜搭AI助手 - 组织管理门户</title>
+  <link rel="stylesheet" href="css/style.css">
+  <style>
+    .tab-nav { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; }
+    .tab-btn { padding: 10px 16px; font-size: 14px; font-weight: 500; border: none; background: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }
+    .tab-btn:hover { color: var(--primary); }
+    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* 开发流程 */
+    .flow-section { margin-bottom: 24px; }
+    .flow-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    .flow-steps { display: flex; flex-wrap: wrap; gap: 12px; }
+    .flow-step { background: var(--card-bg); border-radius: 8px; padding: 12px 16px; box-shadow: var(--shadow); flex: 1; min-width: 220px; border-left: 4px solid var(--primary); }
+    .flow-step-num { font-size: 12px; color: var(--primary); font-weight: 600; margin-bottom: 4px; }
+    .flow-step-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .flow-step-skill { font-size: 12px; color: var(--text-muted); }
+    .flow-step-output { font-size: 11px; color: var(--success); margin-top: 4px; }
+    .flow-step-prompt { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
+    .flow-step-prompt-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+    .flow-step-prompt-text { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: inline-block; max-width: 100%; word-break: break-all; }
+    .flow-step-prompt-text:hover { background: #e6f4ff; }
+    .flow-step-prompt-text:active { background: #bae0ff; }
+    .flow-arrow { display: flex; align-items: center; color: var(--text-muted); font-size: 20px; flex-shrink: 0; }
+    .flow-compare { background: #fff8e1; border-radius: var(--radius); padding: 16px 20px; margin-top: 16px; }
+    .flow-compare table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .flow-compare th { background: #fff3e0; padding: 8px 12px; text-align: left; }
+    .flow-compare td { padding: 8px 12px; border-bottom: 1px solid #ffe0b2; }
+
+    /* 提示词卡片 */
+    .prompt-category { margin-bottom: 24px; }
+    .prompt-category-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
+    .prompt-category-title { font-size: 16px; font-weight: 600; }
+    .prompt-add-btn { font-size: 12px; padding: 4px 12px; border: 1px dashed var(--primary); border-radius: 4px; background: none; color: var(--primary); cursor: pointer; transition: all 0.2s; }
+    .prompt-add-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .prompt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .prompt-table th { background: var(--primary-bg); padding: 8px 12px; text-align: left; font-weight: 600; color: var(--primary); }
+    .prompt-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    .prompt-table tr:hover td { background: #fafafa; }
+    .prompt-text { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+    .prompt-text:hover { background: #e6f4ff; }
+    .prompt-text:active { background: #bae0ff; }
+    .prompt-skill { font-size: 11px; color: var(--text-muted); }
+    .copy-hint { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 16px; }
+
+    /* 工具卡片 */
+    .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .tool-card { background: var(--card-bg); border-radius: 8px; padding: 16px; box-shadow: var(--shadow); border-left: 4px solid var(--primary); }
+    .tool-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+    .tool-card-title { font-size: 14px; font-weight: 600; }
+    .tool-card-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; color: #fff; }
+    .tool-card-badge.auto { background: #52c41a; }
+    .tool-card-badge.prompt { background: #faad14; color: #333; }
+    .tool-card-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
+    .tool-card-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    .tool-select { font-size: 12px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: #fff; max-width: 180px; }
+    .tool-btn { font-size: 12px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: #333; background: #fff; transition: all 0.2s; }
+    .tool-btn:hover { opacity: 0.85; }
+    .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .tool-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .tool-btn.danger { background: #ff4d4f; color: #fff; border-color: #ff4d4f; }
+    .tool-btn.success { background: #52c41a; color: #fff; border-color: #52c41a; }
+    .tool-btn.warning { background: #faad14; color: #333; border-color: #faad14; }
+    .tool-result { margin-top: 8px; padding: 8px; background: #f6f6f6; border-radius: 4px; font-size: 12px; font-family: monospace; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; display: none; }
+    .tool-result.show { display: block; }
+    .tool-result.success { background: #f6ffed; border: 1px solid #b7eb8f; }
+    .tool-result.error { background: #fff2f0; border: 1px solid #ffccc7; }
+
+    /* 弹窗 */
+    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+    .modal-content { background: #fff; border-radius: 8px; max-width: 500px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+    .modal-header h3 { font-size: 16px; margin: 0; }
+    .modal-close { font-size: 20px; cursor: pointer; color: #999; line-height: 1; }
+    .modal-close:hover { color: #333; }
+    .modal-body { padding: 20px; }
+    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+
+    /* 确认对话框 */
+    .confirm-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; justify-content: center; align-items: center; }
+    .confirm-box { background: #fff; border-radius: 8px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+    .confirm-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #ff4d4f; }
+    .confirm-msg { font-size: 14px; margin-bottom: 20px; color: #333; }
+    .confirm-actions { display: flex; gap: 12px; justify-content: flex-end; }
+  </style>
+</head>
+<body>
+  <div id="service-indicator" class="service-indicator" title="同步服务状态">
+    <span class="indicator-dot"></span>
+    <span class="indicator-text">检测中...</span>
+  </div>
+
+  <div class="container">
+    <header class="org-header">
+      <div class="org-icon">&#127970;</div>
+      <h1 class="org-name" id="orgName">加载中...</h1>
+      <div class="org-meta" id="orgMeta"></div>
+    </header>
+
+    <nav class="tab-nav">
+      <button class="tab-btn active" data-tab="apps" onclick="switchTab('apps')">&#128241; 应用管理</button>
+      <button class="tab-btn" data-tab="flow" onclick="switchTab('flow')">&#128260; 开发流程</button>
+      <button class="tab-btn" data-tab="prompts" onclick="switchTab('prompts')">&#128221; 常用提示词</button>
+      <button class="tab-btn" data-tab="sync" onclick="switchTab('sync')">&#128260; 配置同步</button>
+      <button class="tab-btn" data-tab="data" onclick="switchTab('data')">&#128230; 数据管理</button>
+      <button class="tab-btn" data-tab="tools" onclick="switchTab('tools')">&#128295; 系统工具</button>
+    </nav>
+
+    <!-- Tab 1: 应用管理 -->
+    <div class="tab-content active" id="tab-apps">
+      <section class="app-section">
+        <div class="section-header">
+          <div class="section-stats" id="appStats"></div>
+          <button class="btn btn-primary" id="createProjectBtn" onclick="showCreateProjectModal()">+ 创建新应用</button>
+        </div>
+        <div class="app-list" id="appList"><div class="loading">加载中...</div></div>
+      </section>
+    </div>
+
+    <!-- Tab 2: 开发流程 -->
+    <div class="tab-content" id="tab-flow">
+      <div class="copy-hint" style="margin-top:0; margin-bottom:16px;">&#128161; 点击提示词可复制到剪贴板，粘贴到AI对话框即可使用</div>
+      <div class="flow-section">
+        <div class="flow-title" style="color: #1976d2;">&#128640; 创建新应用流程（从零开始）</div>
+        <div class="flow-steps">
+          <div class="flow-step" style="border-left-color:#1976d2;"><div class="flow-step-num">步骤 1</div><div class="flow-step-name">组织初始化</div><div class="flow-step-skill">org-init</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">初始化组织信息到本地</span></div></div>
+          <div class="flow-arrow">&#10145;&#65039;</div>
+          <div class="flow-step" style="border-left-color:#1976d2;"><div class="flow-step-num">步骤 2</div><div class="flow-step-name">项目初始化</div><div class="flow-step-skill">project-creator</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">在本地创建一个项目，项目名称为【xxx】</span></div></div>
+          <div class="flow-arrow">&#10145;&#65039;</div>
+          <div class="flow-step" style="border-left-color:#388e3c;"><div class="flow-step-num">步骤 3</div><div class="flow-step-name">需求分析</div><div class="flow-step-skill">flow-to-form / excel-to-form</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">将流程图【粘贴图片路径】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。</span><div style="height:4px"></div><span class="flow-step-prompt-text" onclick="copyText(this)">将 Excel【xxx】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。</span></div></div>
+          <div class="flow-arrow">&#10145;&#65039;</div>
+          <div class="flow-step" style="border-left-color:#388e3c;"><div class="flow-step-num">步骤 4</div><div class="flow-step-name">原型设计</div><div class="flow-step-skill">form-to-prototype</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">按照【01需求梳理】，生成本地原型页面。</span></div></div>
+          <div class="flow-arrow">&#10145;&#65039;</div>
+          <div class="flow-step" style="border-left-color:#d84315;"><div class="flow-step-num">步骤 5</div><div class="flow-step-name">系统构建</div><div class="flow-step-skill">form_creator</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">按照【01需求梳理/字段清单.md】，生成宜搭表单并推送到宜搭创建应用。</span></div></div>
+          <div class="flow-arrow">&#10145;&#65039;</div>
+          <div class="flow-step" style="border-left-color:#d84315;"><div class="flow-step-num">步骤 6</div><div class="flow-step-name">配置同步</div><div class="flow-step-skill">yida-config-sync</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">将【xxx】的系统配置信息同步到本地。</span></div></div>
+        </div>
+        <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">&#9888;&#65039; 步骤5创建后需等待3-5分钟再执行步骤6</div>
+      </div>
+      <div class="flow-section">
+        <div class="flow-title" style="color:#7b1fa2;">&#128736;&#65039; 操作老应用流程</div>
+        <div class="flow-steps">
+          <div class="flow-step" style="border-left-color:#7b1fa2;"><div class="flow-step-num">步骤 1</div><div class="flow-step-name">组织初始化</div><div class="flow-step-prompt"><span class="flow-step-prompt-text" onclick="copyText(this)">初始化组织信息到本地</span></div></div>
+          <div class="flow-arrow">&#10145;&#65039;</div>
+          <div class="flow-step" style="border-left-color:#7b1fa2;"><div class="flow-step-num">步骤 2</div><div class="flow-step-name">同步应用</div><div class="flow-step-prompt"><span class="flow-step-prompt-text" onclick="copyText(this)">将组织内应用【应用名称1, 应用名称2】同步到本地</span></div></div>
+        </div>
+      </div>
+      <div class="flow-compare">
+        <div style="font-weight:600;margin-bottom:8px;">两种模式关键对比</div>
+        <table><tr><th>对比项</th><th>创建新应用</th><th>操作老应用</th></tr><tr><td>起点</td><td>从0开始</td><td>宜搭已有应用</td></tr><tr><td>同步方向</td><td>本地 → 宜搭</td><td>宜搭 → 本地</td></tr></table>
+      </div>
+    </div>
+
+    <!-- Tab 3: 常用提示词 -->
+    <div class="tab-content" id="tab-prompts">
+      <div class="copy-hint" style="margin-top:0;margin-bottom:16px;">&#128161; 点击提示词可复制到剪贴板，粘贴到AI对话框即可使用</div>
+      <div class="prompt-category" data-category="应用创建">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128640; 应用创建</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>创建项目目录</td><td><span class="prompt-text" onclick="copyText(this)">在本地创建一个项目，项目名称为【xxx】</span></td><td class="prompt-skill">project-creator</td></tr>
+            <tr><td>流程图转字段清单</td><td><span class="prompt-text" onclick="copyText(this)">将流程图【粘贴图片路径】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。</span></td><td class="prompt-skill">flow-to-form</td></tr>
+            <tr><td>Excel转字段清单</td><td><span class="prompt-text" onclick="copyText(this)">将 Excel【xxx】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。</span></td><td class="prompt-skill">excel-to-form</td></tr>
+            <tr><td>生成原型页面</td><td><span class="prompt-text" onclick="copyText(this)">按照【01需求梳理】，生成本地原型页面。</span></td><td class="prompt-skill">form-to-prototype</td></tr>
+            <tr><td>创建应用到宜搭</td><td><span class="prompt-text" onclick="copyText(this)">按照【01需求梳理/字段清单.md】，生成宜搭表单并推送到宜搭创建应用。</span></td><td class="prompt-skill">form_creator</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="表单设计">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128203; 表单设计</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>设计新表单</td><td><span class="prompt-text" onclick="copyText(this)">在【xxx】目录下设计一个表单，表单名称叫做xxx，包含的字段有：</span></td><td class="prompt-skill">form_designer</td></tr>
+            <tr><td>更新表单字段</td><td><span class="prompt-text" onclick="copyText(this)">更新【xxx】目录下的【xxx】表单，添加xxx字段</span></td><td class="prompt-skill">form_designer</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="表单创建">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#127959; 表单创建</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>在应用中创建表单</td><td><span class="prompt-text" onclick="copyText(this)">在【xxx】应用中创建【xxx】表单</span></td><td class="prompt-skill">form_creator</td></tr>
+            <tr><td>根据字段清单创建</td><td><span class="prompt-text" onclick="copyText(this)">根据【xxx/字段清单.md】，在【xxx】应用中创建【xxx】表单</span></td><td class="prompt-skill">form_creator</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="公式开发">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#129518; 公式开发</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>生成公式提示词</td><td><span class="prompt-text" onclick="copyText(this)">设计一个提示词，根据【XXX】表单内容，实现公式功能，功能需求如下：</span></td><td class="prompt-skill">prompt-assistant</td></tr>
+            <tr><td>生成公式</td><td><span class="prompt-text" onclick="copyText(this)">根据【xxx】提示词，生成宜搭公式</span></td><td class="prompt-skill">formula-generator</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="代码开发">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128187; 代码开发</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>生成代码提示词</td><td><span class="prompt-text" onclick="copyText(this)">设计一个提示词，根据【XXX】表单内容，实现代码功能，功能需求如下：</span></td><td class="prompt-skill">prompt-assistant</td></tr>
+            <tr><td>生成代码</td><td><span class="prompt-text" onclick="copyText(this)">根据【xxx】提示词，生成宜搭代码</span></td><td class="prompt-skill">code-expert</td></tr>
+            <tr><td>生成自动化脚本</td><td><span class="prompt-text" onclick="copyText(this)">编写宜搭自动化脚本：1.输入input结构 2.输出output结构</span></td><td class="prompt-skill">code-expert</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="数据管理">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128230; 数据管理</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>添加测试数据</td><td><span class="prompt-text" onclick="copyText(this)">在宜搭内的【xxx】系统里所有的表单里添加5条测试数据，模拟的城市是湖北武汉</span></td><td class="prompt-skill">yida-data-tester</td></tr>
+            <tr><td>删除数据</td><td><span class="prompt-text" onclick="copyText(this)">清空应用【xxx】里的所有数据</span></td><td class="prompt-skill">data-clean</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="自定义页面">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#127912; 自定义页面</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>创建自定义页面</td><td><span class="prompt-text" onclick="copyText(this)">基于应用【XXX】里的表单数据【xxx】制作一个名称为【xxx】的自定义页面，主要功能描述如下：</span></td><td class="prompt-skill">custom-page</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="表单配置">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#9881;&#65039; 表单配置</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>更新数据标题</td><td><span class="prompt-text" onclick="copyText(this)">更新【XXX】的数据标题</span></td><td class="prompt-skill">form-settings</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="流程配置">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128260; 流程配置</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>设置自动审批</td><td><span class="prompt-text" onclick="copyText(this)">把xxx的流程设置为自动通过</span></td><td class="prompt-skill">flow-settings</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="系统维护">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128736;&#65039; 系统维护</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
+          <tbody>
+            <tr><td>重新登录</td><td><span class="prompt-text" onclick="copyText(this)">帮我重新登录宜搭平台</span></td><td class="prompt-skill">simulated-login</td></tr>
+            <tr><td>排查问题</td><td><span class="prompt-text" onclick="copyText(this)">宜搭AI助手遇到问题，帮我排查</span></td><td class="prompt-skill">skill-creator</td></tr>
+            <tr><td>更新skill</td><td><span class="prompt-text" onclick="copyText(this)">总结问题，并更新到skill或文档中去，确保下次不再出现同样的问题</span></td><td class="prompt-skill">skill-creator</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 4: 配置同步 -->
+    <div class="tab-content" id="tab-sync">
+      <div class="tool-grid">
+        <!-- 一站式同步 -->
+        <div class="tool-card" style="border-left-color:#722ed1;">
+          <div class="tool-card-header"><div class="tool-card-title">&#128640; 一站式同步</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">同步配置+Schema+规则+原型页面，一步到位</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="projectSyncApp"></select>
+            <button class="tool-btn primary" onclick="runTool('project-sync',this)">执行同步</button>
+          </div>
+          <div class="tool-result" id="result-project-sync"></div>
+        </div>
+        <!-- 配置同步 -->
+        <div class="tool-card" style="border-left-color:#1677ff;">
+          <div class="tool-card-header"><div class="tool-card-title">&#128203; 配置同步</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">同步应用ID、表单UUID、组件ID到本地</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="configSyncApp"></select>
+            <button class="tool-btn primary" onclick="runTool('sync-config',this)">同步配置</button>
+          </div>
+          <div class="tool-result" id="result-sync-config"></div>
+        </div>
+        <!-- Schema同步 -->
+        <div class="tool-card" style="border-left-color:#13c2c2;">
+          <div class="tool-card-header"><div class="tool-card-title">&#128196; Schema同步</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">同步表单结构到本地JSON，记录变更历史</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="schemaSyncApp"></select>
+            <button class="tool-btn primary" onclick="runTool('sync-schema',this)">同步Schema</button>
+          </div>
+          <div class="tool-result" id="result-sync-schema"></div>
+        </div>
+        <!-- 规则同步 -->
+        <div class="tool-card" style="border-left-color:#eb2f96;">
+          <div class="tool-card-header"><div class="tool-card-title">&#128221; 规则同步</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">同步公式、联动、校验、代码等业务规则</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="ruleSyncApp"></select>
+            <button class="tool-btn primary" onclick="runTool('sync-rules',this)">同步规则</button>
+          </div>
+          <div class="tool-result" id="result-sync-rules"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 5: 数据管理 -->
+    <div class="tab-content" id="tab-data">
+      <div class="tool-grid">
+        <!-- 数据清空 -->
+        <div class="tool-card" style="border-left-color:#ff4d4f;">
+          <div class="tool-card-header"><div class="tool-card-title">&#128465; 数据清空</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">清空表单数据（保留结构），危险操作需二次确认</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="cleanDataApp"></select>
+            <button class="tool-btn danger" onclick="confirmCleanData(this)">清空所有数据</button>
+          </div>
+          <div class="tool-result" id="result-clean-data"></div>
+        </div>
+        <!-- 数据测试 -->
+        <div class="tool-card" style="border-left-color:#52c41a;">
+          <div class="tool-card-header"><div class="tool-card-title">&#129518; 数据测试</div><span class="tool-card-badge prompt">提示词</span></div>
+          <div class="tool-card-desc">自动生成测试数据并提交到宜搭表单，验证功能</div>
+          <div class="tool-card-actions">
+            <span class="prompt-text" onclick="copyText(this)">在宜搭内的【xxx】系统里所有的表单里添加5条测试数据，模拟的城市是湖北武汉</span>
+          </div>
+        </div>
+        <!-- JS代码测试 -->
+        <div class="tool-card" style="border-left-color:#fa8c16;">
+          <div class="tool-card-header"><div class="tool-card-title">&#128187; JS代码测试</div><span class="tool-card-badge prompt">提示词</span></div>
+          <div class="tool-card-desc">自动化测试宜搭JS动作代码</div>
+          <div class="tool-card-actions">
+            <span class="prompt-text" onclick="copyText(this)">测试宜搭表单JS动作代码</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab 6: 系统工具 -->
+    <div class="tab-content" id="tab-tools">
+      <div class="tool-grid">
+        <!-- 系统图谱 -->
+        <div class="tool-card" style="border-left-color:#722ed1;">
+          <div class="tool-card-header"><div class="tool-card-title">&#128506; 系统图谱</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">生成系统功能关系图谱（表单关系、字段依赖、数据联动）</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="systemMapApp"></select>
+            <button class="tool-btn primary" onclick="runTool('generate-system-map',this)">生成图谱</button>
+          </div>
+          <div class="tool-result" id="result-generate-system-map"></div>
+        </div>
+        <!-- 表单设置 -->
+        <div class="tool-card" style="border-left-color:#1677ff;">
+          <div class="tool-card-header"><div class="tool-card-title">&#9881;&#65039; 表单设置</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">设置数据标题、复制流程、表单权限</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="formSettingsApp" onchange="loadFormList('formSettingsForm',this)"></select>
+            <select class="tool-select" id="formSettingsForm" style="display:none"></select>
+            <button class="tool-btn primary" onclick="runFormSettings('list-fields',this)">查看字段</button>
+          </div>
+          <div style="margin-top:4px"><span class="prompt-text" onclick="copyText(this)">更新【XXX】的数据标题</span></div>
+          <div class="tool-result" id="result-form-settings"></div>
+        </div>
+        <!-- 流程设置 -->
+        <div class="tool-card" style="border-left-color:#13c2c2;">
+          <div class="tool-card-header"><div class="tool-card-title">&#128260; 流程设置</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">设置自动审批、流程配置</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="flowSettingsApp" onchange="loadFormList('flowSettingsForm',this)"></select>
+            <select class="tool-select" id="flowSettingsForm" style="display:none"></select>
+            <button class="tool-btn primary" onclick="runFlowSettings('list-flow-forms',this)">查看流程表单</button>
+          </div>
+          <div style="margin-top:4px"><span class="prompt-text" onclick="copyText(this)">把xxx的流程设置为自动通过</span></div>
+          <div class="tool-result" id="result-flow-settings"></div>
+        </div>
+        <!-- 服务管理 -->
+        <div class="tool-card" style="border-left-color:#52c41a;">
+          <div class="tool-card-header"><div class="tool-card-title">&#127760; 服务管理</div><span class="tool-card-badge auto">自动</span></div>
+          <div class="tool-card-desc">查看服务状态、管理HTTP和同步服务</div>
+          <div class="tool-card-actions">
+            <button class="tool-btn success" onclick="checkServiceStatus()">检查状态</button>
+            <span class="prompt-text" onclick="copyText(this)">启动http服务和同步服务</span>
+          </div>
+          <div class="tool-result" id="result-service-status"></div>
+        </div>
+      </div>
+    </div>
+
+    <footer class="portal-footer">
+      <p>宜搭AI助手 &copy; 2026 | 组织管理门户 v2.1.0</p>
+    </footer>
+  </div>
+
+  <div id="syncModal" class="modal" style="display:none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+      <div class="modal-header"><h3 id="syncModalTitle">同步中...</h3></div>
+      <div class="modal-body">
+        <div class="sync-progress">
+          <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          <p class="progress-text" id="progressText">正在同步，请稍候...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 新增提示词弹窗 -->
+  <div id="addPromptModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>新增提示词</h3>
+        <span class="modal-close" onclick="closeAddPromptModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">你想做什么</label>
+          <input type="text" id="addPromptLabel" class="form-input" placeholder="如：导出表单数据" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">提示词内容</label>
+          <textarea id="addPromptText" rows="4" placeholder="如：将【xxx】表单的数据导出为Excel文件" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
+        </div>
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">关联技能（可选）</label>
+          <input type="text" id="addPromptSkill" class="form-input" placeholder="如：data-clean" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="tool-btn" onclick="closeAddPromptModal()">取消</button>
+        <button class="tool-btn primary" onclick="saveNewPrompt()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 创建新应用弹窗 -->
+  <div id="createProjectModal" class="modal" style="display:none;">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>创建新应用</h3>
+        <span class="modal-close" onclick="closeCreateProjectModal()">&times;</span>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:16px">
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">应用名称</label>
+          <input type="text" id="createProjectName" class="form-input" placeholder="如：进销存管理" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+        </div>
+        <div style="font-size:12px;color:var(--text-muted);background:var(--primary-bg);padding:10px 12px;border-radius:6px;">
+          <div style="font-weight:600;margin-bottom:4px;">将自动创建以下内容：</div>
+          <ul style="margin:0;padding-left:16px;line-height:1.8;">
+            <li>项目目录（根目录下）</li>
+            <li>01需求梳理 文件夹</li>
+            <li>系统配置清单.md</li>
+            <li>README.md</li>
+          </ul>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="tool-btn" onclick="closeCreateProjectModal()">取消</button>
+        <button class="tool-btn primary" id="confirmCreateProjectBtn" onclick="doCreateProject()">创建</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" style="display:none;"></div>
+
+  <script src="js/dashboard.js"></script>
+  <script>
+    // ========== 全局变量 ==========
+    let orgApps = []; // {name, appId, synced}
+
+    // ========== Tab 切换 ==========
+    function switchTab(tabId) {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
+      document.getElementById(`tab-${tabId}`).classList.add('active');
+    }
+
+    // ========== 复制提示词 ==========
+    function copyText(el) {
+      const text = el.textContent;
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(text).then(() => showToast('已复制到剪贴板', 'success')).catch(() => fallbackCopy(text));
+      } else { fallbackCopy(text); }
+    }
+    function fallbackCopy(text) {
+      const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); showToast('已复制到剪贴板', 'success'); } catch(_) { showToast('复制失败', 'error'); }
+      document.body.removeChild(ta);
+    }
+
+    // ========== 加载应用列表到下拉框 ==========
+    async function loadAppSelects() {
+      try {
+        const res = await fetch('http://127.0.0.1:3457/org-info');
+        const data = await res.json();
+        if (!data.success) return;
+        orgApps = data.apps || [];
+        const selects = ['projectSyncApp','configSyncApp','schemaSyncApp','ruleSyncApp','cleanDataApp','systemMapApp','formSettingsApp','flowSettingsApp'];
+        selects.forEach(id => {
+          const sel = document.getElementById(id);
+          if (!sel) return;
+          sel.innerHTML = '<option value="">选择应用...</option>' + orgApps.map(a =>
+            `<option value="${a.appId}" data-name="${a.name}">${a.name}</option>`
+          ).join('');
+        });
+      } catch(e) { console.log('加载应用列表失败:', e); }
+    }
+
+    // ========== 加载表单列表 ==========
+    async function loadFormList(formSelectId, appSelect) {
+      const formSel = document.getElementById(formSelectId);
+      if (!formSel) return;
+      const appName = appSelect.selectedOptions[0]?.dataset?.name;
+      if (!appName) { formSel.style.display = 'none'; return; }
+      formSel.innerHTML = '<option value="">加载中...</option>';
+      formSel.style.display = 'inline-block';
+      try {
+        const res = await fetch(`http://127.0.0.1:3457/app-forms?appName=${encodeURIComponent(appName)}`);
+        const data = await res.json();
+        if (data.success && data.forms.length > 0) {
+          formSel.innerHTML = '<option value="">选择表单...</option>' + data.forms.map(f =>
+            `<option value="${f.formUuid}" data-name="${f.name}">${f.name}</option>`
+          ).join('');
+        } else {
+          formSel.innerHTML = '<option value="">请先同步应用</option>';
+        }
+      } catch(e) {
+        formSel.innerHTML = '<option value="">加载失败</option>';
+      }
+    }
+
+    // ========== 通用工具执行 ==========
+    async function runTool(tool, btn) {
+      const resultEl = document.getElementById('result-' + tool);
+      const appId = btn.parentElement.querySelector('select')?.value;
+      const appName = btn.parentElement.querySelector('select')?.selectedOptions[0]?.dataset?.name;
+
+      if (!appId && tool !== 'generate-system-map') {
+        showToast('请先选择应用', 'error'); return;
+      }
+
+      btn.disabled = true; btn.textContent = '执行中...';
+      if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = '正在执行，请稍候...'; }
+
+      const body = { appId, appName };
+      try {
+        const res = await fetch(`http://127.0.0.1:3457/${tool}`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (resultEl) { resultEl.className = 'tool-result show success'; resultEl.textContent = truncate(data.data || '执行成功', 2000); }
+          showToast('执行成功', 'success');
+        } else {
+          if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '执行失败'; }
+          showToast('执行失败: ' + (data.error || ''), 'error');
+        }
+      } catch(e) {
+        if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
+        showToast('请求失败', 'error');
+      }
+      btn.disabled = false; btn.textContent = btn.dataset.origText || '执行';
+    }
+
+    // ========== 表单设置 ==========
+    async function runFormSettings(action, btn) {
+      const resultEl = document.getElementById('result-form-settings');
+      const appSel = document.getElementById('formSettingsApp');
+      const formSel = document.getElementById('formSettingsForm');
+      const appId = appSel.value;
+      const appName = appSel.selectedOptions[0]?.dataset?.name;
+      const formUuid = formSel?.value;
+      if (!appId) { showToast('请先选择应用', 'error'); return; }
+      if (!formUuid) { showToast('请先选择表单', 'error'); return; }
+
+      btn.disabled = true;
+      if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = '正在查询...'; }
+
+      try {
+        const res = await fetch('http://127.0.0.1:3457/form-settings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appId, formUuid, action, appName })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (resultEl) { resultEl.className = 'tool-result show success'; resultEl.textContent = truncate(data.data || '查询成功', 3000); }
+        } else {
+          if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '查询失败'; }
+        }
+      } catch(e) {
+        if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
+      }
+      btn.disabled = false;
+    }
+
+    // ========== 流程设置 ==========
+    async function runFlowSettings(action, btn) {
+      const resultEl = document.getElementById('result-flow-settings');
+      const appSel = document.getElementById('flowSettingsApp');
+      const formSel = document.getElementById('flowSettingsForm');
+      const appId = appSel.value;
+      const appName = appSel.selectedOptions[0]?.dataset?.name;
+      const formUuid = formSel?.value;
+
+      if (!appId) { showToast('请先选择应用', 'error'); return; }
+      // list-flow-forms 不需要 formUuid，其他操作需要
+      if (action !== 'list-flow-forms' && !formUuid) { showToast('请先选择表单', 'error'); return; }
+
+      btn.disabled = true;
+      if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = '正在查询...'; }
+
+      try {
+        const res = await fetch('http://127.0.0.1:3457/flow-settings', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appId, formUuid, action, appName })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (resultEl) { resultEl.className = 'tool-result show success'; resultEl.textContent = truncate(data.data || '查询成功', 3000); }
+        } else {
+          if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '查询失败'; }
+        }
+      } catch(e) {
+        if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
+      }
+      btn.disabled = false;
+    }
+
+    // ========== 数据清空（二次确认） ==========
+    function confirmCleanData(btn) {
+      const sel = document.getElementById('cleanDataApp');
+      const appId = sel.value;
+      const appName = sel.selectedOptions[0]?.dataset?.name;
+      if (!appId) { showToast('请先选择应用', 'error'); return; }
+
+      const overlay = document.createElement('div'); overlay.className = 'confirm-overlay';
+      overlay.innerHTML = `<div class="confirm-box">
+        <div class="confirm-title">&#9888;&#65039; 危险操作确认</div>
+        <div class="confirm-msg">确定要清空应用【${appName}】的所有数据吗？<br><br>此操作不可撤销，数据将被永久删除！</div>
+        <div class="confirm-actions">
+          <button class="tool-btn" style="background:#999" onclick="this.closest('.confirm-overlay').remove()">取消</button>
+          <button class="tool-btn danger" id="confirmCleanBtn">确认清空</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+      document.getElementById('confirmCleanBtn').onclick = async () => {
+        overlay.remove();
+        const resultEl = document.getElementById('result-clean-data');
+        btn.disabled = true; btn.textContent = '执行中...';
+        if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = '正在清空数据，请稍候...'; }
+        try {
+          const res = await fetch('http://127.0.0.1:3457/clean-data', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appId, appName, mode: 'all' })
+          });
+          const data = await res.json();
+          if (data.success) {
+            if (resultEl) { resultEl.className = 'tool-result show success'; resultEl.textContent = truncate(data.data || '清空成功', 2000); }
+            showToast('清空成功', 'success');
+          } else {
+            if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '清空失败'; }
+            showToast('清空失败: ' + (data.error || ''), 'error');
+          }
+        } catch(e) {
+          if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
+          showToast('请求失败', 'error');
+        }
+        btn.disabled = false; btn.textContent = btn.dataset.origText || '清空所有数据';
+      };
+    }
+
+    // ========== 服务状态检查 ==========
+    async function checkServiceStatus() {
+      const resultEl = document.getElementById('result-service-status');
+      if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = '正在检查...'; }
+      try {
+        const res = await fetch('http://127.0.0.1:3457/health');
+        const data = await res.json();
+        if (resultEl) {
+          resultEl.className = 'tool-result show success';
+          resultEl.textContent = `HTTP服务: 运行中 (端口 8080)\n同步服务: 运行中 (端口 3457)\n版本: ${data.version || '未知'}\n工作目录: ${data.cwd || '未知'}`;
+        }
+      } catch(e) {
+        if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '服务未运行，请在对话框输入"启动宜搭服务"'; }
+      }
+    }
+
+    // ========== 工具函数 ==========
+    function truncate(str, max) { return str && str.length > max ? str.substring(0, max) + '...' : str; }
+
+    // ========== 新增提示词弹窗 ==========
+    let currentPromptCategory = null;
+
+    function showAddPromptModal(btn) {
+      const category = btn.closest('.prompt-category');
+      currentPromptCategory = category;
+      document.getElementById('addPromptLabel').value = '';
+      document.getElementById('addPromptText').value = '';
+      document.getElementById('addPromptSkill').value = '';
+      document.getElementById('addPromptModal').style.display = 'flex';
+    }
+
+    function closeAddPromptModal() {
+      document.getElementById('addPromptModal').style.display = 'none';
+      currentPromptCategory = null;
+    }
+
+    function saveNewPrompt() {
+      const label = document.getElementById('addPromptLabel').value.trim();
+      const text = document.getElementById('addPromptText').value.trim();
+      const skill = document.getElementById('addPromptSkill').value.trim();
+
+      if (!label) { showToast('请输入"你想做什么"的内容', 'error'); return; }
+      if (!text) { showToast('请输入提示词内容', 'error'); return; }
+
+      if (!currentPromptCategory) return;
+
+      const tableBody = currentPromptCategory.querySelector('table tbody');
+      const newRow = document.createElement('tr');
+      newRow.innerHTML = `<td>${escapeHtml(label)}</td><td><span class="prompt-text" onclick="copyText(this)">${escapeHtml(text)}</span></td>${skill ? `<td class="prompt-skill">${escapeHtml(skill)}</td>` : '<td class="prompt-skill"></td>'}`;
+      tableBody.appendChild(newRow);
+
+      closeAddPromptModal();
+      showToast('提示词已添加', 'success');
+    }
+
+    function escapeHtml(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    // ========== 保存按钮原始文本 ==========
+    document.querySelectorAll('.tool-btn').forEach(btn => { btn.dataset.origText = btn.textContent; });
+
+    // ========== 创建新应用弹窗 ==========
+    function showCreateProjectModal() {
+      document.getElementById('createProjectName').value = '';
+      document.getElementById('createProjectModal').style.display = 'flex';
+      document.getElementById('createProjectName').focus();
+    }
+
+    function closeCreateProjectModal() {
+      document.getElementById('createProjectModal').style.display = 'none';
+    }
+
+    async function doCreateProject() {
+      const projectName = document.getElementById('createProjectName').value.trim();
+      if (!projectName) {
+        showToast('请输入应用名称', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('confirmCreateProjectBtn');
+      btn.disabled = true;
+      btn.textContent = '创建中...';
+
+      try {
+        const res = await fetch('http://127.0.0.1:3457/create-project', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ projectName })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(`应用【${projectName}】创建成功！`, 'success');
+          closeCreateProjectModal();
+          // 刷新应用列表
+          setTimeout(() => loadOrgInfo(), 500);
+        } else {
+          showToast('创建失败：' + (data.error || '未知错误'), 'error');
+        }
+      } catch (e) {
+        showToast('请求失败：' + e.message, 'error');
+      }
+
+      btn.disabled = false;
+      btn.textContent = '创建';
+    }
+
+    // 回车键触发创建
+    document.getElementById('createProjectName')?.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doCreateProject();
+    });
+
+    // ========== 初始化 ==========
+    loadAppSelects();
+  </script>
+</body>
+</html>

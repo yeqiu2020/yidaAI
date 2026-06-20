@@ -1,13 +1,22 @@
 /**
  * 宜搭表单原型页面生成器 - 通用模板方案
- * 版本: 2.7.1
+ * 版本: 2.9.0
  *
  * 功能: 读取Markdown字段清单，生成通用HTML原型页面模板
  * 用法: node prototype_generator.js <字段清单md文件路径> [输出目录]
  * 示例: node prototype_generator.js "../../../出入库管理/01需求梳理/字段清单.md" "../../../出入库管理/01需求梳理/原型页面"
  *
  * 更新说明:
- * - v2.7.1: 【重要修复】修复组织及应用信息.md更新时表格格式混乱的问题
+ * - v2.9.0: 新增开发引导页面
+ *          1. 新增 templates/guide.html 开发引导页（3步引导：需求分析→原型设计→系统构建）
+ *          2. 侧边栏菜单第一个位置添加「📋 开发引导」菜单项（橙色高亮）
+ *          3. renderMenu() 自动生成开发引导链接
+ *          4. 新增 .guide-menu-item CSS 样式
+ *          5. getCurrentFormName() 默认返回空字符串（去除占位表单名）
+ * - v2.8.0: 新增"回到组织主页"按钮
+ *          1. 在原型页面右上角添加"组织主页"链接按钮，点击可回到组织门户首页
+ *          2. 更新 index.html、list.html、form.html 三个模板的 header 区域
+ *          3. 新增 .btn-portal-link CSS 样式
  *          1. 改进 updateOrgInfoPrototypeUrl 函数的正则匹配逻辑
  *          2. 确保表格行格式与现有表格完全一致（使用 <URL> 格式）
  *          3. 修复section替换逻辑，避免重复添加分隔线
@@ -394,7 +403,10 @@ function generateIndexHtml(systemInfo, allForms) {
       <button class="btn btn-sync-app" id="syncAppBtn" onclick="syncApp()" title="同步宜搭中新增的手工单表到本地">🔄 同步应用表单</button>
       <span id="syncAppStatus" class="sync-status" style="display:none;margin-left:8px;"></span>
     </div>
-    <div class="user-info">👤 管理员</div>
+    <div class="user-info">
+      <a href="/index.html" class="btn-portal-link" title="回到组织主页">&#127968; 组织主页</a>
+      👤 管理员
+    </div>
   </header>
   
   <div class="container">
@@ -412,11 +424,6 @@ function generateIndexHtml(systemInfo, allForms) {
     
     <!-- 主内容区 -->
     <main class="main-content">
-      <!-- 原型提示 -->
-      <div class="prototype-notice">
-        本页面为原型预览，仅供界面体验使用。数据为模拟数据，不涉及真实业务逻辑。
-      </div>
-      
       <!-- 欢迎区域 -->
       <div class="prototype-intro">
         <h1>欢迎使用${systemName}原型</h1>
@@ -425,7 +432,28 @@ function generateIndexHtml(systemInfo, allForms) {
           通过本原型，您可以快速体验系统界面，验证字段和规则设计是否符合预期。
         </p>
       </div>
-      
+
+      <!-- 原型提示 -->
+      <div class="prototype-notice">
+        本页面为原型预览，仅供界面体验使用。数据为模拟数据，不涉及真实业务逻辑。
+      </div>
+
+      <!-- 系统统计 -->
+      <div class="welcome-stats" style="margin-top: 0; margin-bottom: 32px;">
+        <div class="stat-card">
+          <div class="stat-number" id="statFormCount">-</div>
+          <div class="stat-label">表单总数</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statProcessCount">0</div>
+          <div class="stat-label">流程表单</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-number" id="statSubTableCount">-</div>
+          <div class="stat-label">子表明细</div>
+        </div>
+      </div>
+
       <!-- 功能特性 -->
       <div class="feature-cards">
         <div class="feature-card">
@@ -444,28 +472,12 @@ function generateIndexHtml(systemInfo, allForms) {
           <p>通过文字说明和提示框理解业务规则、审批流程</p>
         </div>
       </div>
-      
+
       <!-- 快速链接 -->
       <div class="quick-links">
         <h2>快速访问</h2>
         <div class="link-grid" id="linkGrid">
           <!-- 快速链接由JavaScript动态生成 -->
-        </div>
-      </div>
-
-      <!-- 系统统计 -->
-      <div class="welcome-stats" style="margin-top: 48px;">
-        <div class="stat-card">
-          <div class="stat-number" id="statFormCount">-</div>
-          <div class="stat-label">表单总数</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number" id="statProcessCount">0</div>
-          <div class="stat-label">流程表单</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-number" id="statSubTableCount">-</div>
-          <div class="stat-label">子表明细</div>
         </div>
       </div>
     </main>
@@ -515,7 +527,10 @@ function generateListTemplateHtml(allForms) {
       <button class="btn btn-sync-app" id="syncAppBtn" onclick="syncApp()" title="同步宜搭中新增的手工单表到本地">🔄 同步应用表单</button>
       <span id="syncAppStatus" class="sync-status" style="display:none;margin-left:8px;"></span>
     </div>
-    <div class="user-info">👤 管理员</div>
+    <div class="user-info">
+      <a href="/index.html" class="btn-portal-link" title="回到组织主页">&#127968; 组织主页</a>
+      👤 管理员
+    </div>
   </header>
 
   <div class="container">
@@ -734,7 +749,10 @@ function generateFormTemplateHtml(allForms) {
       <button class="btn btn-sync-app" id="syncAppBtn" onclick="syncApp()" title="同步宜搭中新增的手工单表到本地">🔄 同步应用表单</button>
       <span id="syncAppStatus" class="sync-status" style="display:none;margin-left:8px;"></span>
     </div>
-    <div class="user-info">👤 管理员</div>
+    <div class="user-info">
+      <a href="/index.html" class="btn-portal-link" title="回到组织主页">&#127968; 组织主页</a>
+      👤 管理员
+    </div>
   </header>
 
   <div class="container">
@@ -887,6 +905,238 @@ function generateFormTemplateHtml(allForms) {
     function saveDraft() {
       alert('草稿已保存');
     }
+  </script>
+</body>
+</html>`;
+}
+
+/**
+ * 生成开发引导页模板
+ * @returns {string} HTML代码
+ */
+function generateGuideHtml() {
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>开发引导 - 原型预览</title>
+  <link rel="stylesheet" href="../css/style.css">
+  <style>
+    .guide-container { max-width: 800px; margin: 0 auto; padding: 32px 0; }
+    .guide-welcome { background: linear-gradient(135deg, #1565c0 0%, #42a5f5 100%); color: #fff; padding: 36px 40px; border-radius: 8px; margin-bottom: 32px; text-align: center; box-shadow: 0 4px 16px rgba(21,101,192,0.3); }
+    .guide-welcome h1 { font-size: 24px; margin-bottom: 8px; }
+    .guide-welcome p { font-size: 14px; opacity: 0.85; line-height: 1.6; }
+    .guide-progress { display: flex; justify-content: space-between; margin-bottom: 32px; padding: 0 16px; position: relative; }
+    .guide-progress::before { content: ''; position: absolute; top: 20px; left: 60px; right: 60px; height: 2px; background: #e8e8e8; z-index: 0; }
+    .guide-progress-step { display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; z-index: 1; }
+    .guide-progress-num { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 16px; background: #e8e8e8; color: #999; }
+    .guide-progress-step.active .guide-progress-num { background: #1677ff; color: #fff; box-shadow: 0 2px 8px rgba(22,119,255,0.4); }
+    .guide-progress-step.done .guide-progress-num { background: #52c41a; color: #fff; }
+    .guide-progress-label { font-size: 12px; color: #8c8c8c; }
+    .guide-progress-step.active .guide-progress-label { color: #1677ff; font-weight: 500; }
+    .guide-card { background: #fff; border-radius: 8px; border: 1px solid #f0f0f0; padding: 28px 32px; margin-bottom: 24px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); transition: all 0.3s; }
+    .guide-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.08); border-color: #1677ff; }
+    .guide-card-header { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; }
+    .guide-card-icon { width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 20px; color: #fff; flex-shrink: 0; }
+    .guide-card-title { font-size: 17px; font-weight: 600; color: #262626; }
+    .guide-card-skill { font-size: 11px; color: #1677ff; background: #e6f4ff; padding: 2px 8px; border-radius: 4px; margin-left: 8px; }
+    .guide-card-desc { font-size: 14px; color: #595959; margin-bottom: 16px; line-height: 1.7; }
+    .guide-path { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 12px; background: #fff8e1; border: 1px solid #ffe0b2; padding: 10px 14px; border-radius: 6px; margin-bottom: 16px; word-break: break-all; color: #e65100; line-height: 1.5; user-select: all; }
+    .guide-prompt-box { background: #fafafa; border: 1px solid #e8e8e8; border-radius: 6px; padding: 14px 16px; }
+    .guide-prompt-label { font-size: 11px; color: #8c8c8c; margin-bottom: 8px; }
+    .guide-prompt-text { font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace; font-size: 13px; background: #fff; border: 1px solid #e8e8e8; padding: 10px 14px; border-radius: 4px; cursor: pointer; display: block; word-break: break-all; line-height: 1.6; transition: all 0.2s; color: #262626; }
+    .guide-prompt-text:hover { background: #e6f4ff; border-color: #91d5ff; }
+    .guide-prompt-text:active { background: #bae0ff; }
+    .guide-prompt-text .copy-hint { float: right; font-size: 11px; color: #8c8c8c; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', sans-serif; }
+    .guide-card-note { margin-top: 16px; padding: 10px 14px; background: #fffbe6; border: 1px solid #ffe58f; border-radius: 6px; font-size: 13px; color: #d48806; }
+    @media (max-width: 640px) {
+      .guide-container { padding: 16px; }
+      .guide-welcome { padding: 24px 20px; }
+      .guide-progress { padding: 0 8px; }
+      .guide-progress::before { left: 40px; right: 40px; }
+      .guide-card { padding: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <div class="header-left">
+      <div class="logo" id="systemLogo">开发引导</div>
+      <span style="font-size:12px;color:#8c8c8c;padding:2px 8px;background:#f0f0f0;border-radius:4px;">新建应用</span>
+    </div>
+    <div class="user-info">
+      <a href="/index.html" class="btn-portal-link" title="回到组织主页">&#127968; 组织主页</a>
+      &#128100; 管理员
+    </div>
+  </header>
+
+  <div class="container">
+    <aside class="sidebar">
+      <nav class="menu" id="mainMenu">
+        <div class="menu-group">
+          <div class="menu-group-title">&#19994;&#21153;&#34920;&#21333;</div>
+          <div id="menuItems"></div>
+        </div>
+      </nav>
+    </aside>
+
+    <main class="main-content">
+      <div class="prototype-notice">
+        &#26412;&#39029;&#38754;&#20026;&#24320;&#21457;&#24341;&#23548;&#65292;&#24110;&#21161;&#24744;&#23436;&#25104;&#20174;&#38656;&#27714;&#20998;&#26512;&#21040;&#31995;&#32479;&#26500;&#24314;&#30340;&#23436;&#25972;&#27969;&#31243;&#12290;
+      </div>
+
+      <div class="guide-container">
+        <div class="guide-welcome">
+          <h1>&#128640; &#26032;&#24314;&#24212;&#29992; - &#24320;&#21457;&#24341;&#23548;</h1>
+          <p>&#36319;&#38543;&#20197;&#19979;&#19977;&#20010;&#27493;&#39588;&#65292;&#20174;&#38656;&#27714;&#20998;&#26512;&#21040;&#31995;&#32479;&#26500;&#24314;&#65292;&#24555;&#36895;&#23436;&#25104;&#24212;&#29992;&#30340;&#24320;&#21457;&#19982;&#37096;&#32626;</p>
+        </div>
+
+        <div class="guide-progress">
+          <div class="guide-progress-step" id="stepDot1">
+            <div class="guide-progress-num" style="background:#1976d2;color:#fff;">1</div>
+            <div class="guide-progress-label">&#38656;&#27714;&#20998;&#26512;</div>
+          </div>
+          <div class="guide-progress-step" id="stepDot2">
+            <div class="guide-progress-num">2</div>
+            <div class="guide-progress-label">&#21407;&#22411;&#35774;&#35745;</div>
+          </div>
+          <div class="guide-progress-step" id="stepDot3">
+            <div class="guide-progress-num">3</div>
+            <div class="guide-progress-label">&#31995;&#32479;&#26500;&#24314;</div>
+          </div>
+        </div>
+
+        <div class="guide-card">
+          <div class="guide-card-header">
+            <div class="guide-card-icon" style="background:#1976d2;">1</div>
+            <div>
+              <span class="guide-card-title">&#38656;&#27714;&#20998;&#26512;</span>
+              <span class="guide-card-skill">excel-to-form</span>
+            </div>
+          </div>
+          <div class="guide-card-desc">
+            &#35831;&#23558;&#24744;&#30340; Excel &#38656;&#27714;&#25991;&#26723;&#22797;&#21046;&#21040;&#20197;&#19979;&#30446;&#24405;&#65292;&#28982;&#21518;&#20351;&#29992;&#19979;&#26041;&#25552;&#31034;&#35789;&#35753; AI &#33258;&#21160;&#29983;&#25104;&#23383;&#27573;&#28165;&#21333;&#21644;&#35268;&#21017;&#28165;&#21333;&#65306;
+          </div>
+          <div class="guide-path" id="excelPathDisplay">d:\\&#23452;&#25645;AI&#32534;&#31243;\\&#23452;&#25645;AI&#21161;&#25163;V1.7.3\\&#24212;&#29992;&#21517;\\01&#38656;&#27714;&#26803;&#29702;\\&#24212;&#29992;&#21517;&#34920;&#21333;&#28165;&#21333;.xlsx</div>
+          <div class="guide-prompt-box">
+            <div class="guide-prompt-label">&#128203; &#25552;&#31034;&#35789;&#65288;&#28857;&#20987;&#22797;&#21046;&#21040;&#21098;&#36148;&#26495;&#65292;&#28982;&#21518;&#31896;&#36148;&#32473; AI &#21161;&#25163;&#65289;</div>
+            <div class="guide-prompt-text" id="guidePrompt1" onclick="copyGuidePrompt(this)">
+              <span>&#23558; Excel&#12304;&#31896;&#36148;Excel&#25991;&#20214;&#36335;&#24452;&#12305;&#36716;&#25442;&#25104;&#26412;&#22320;&#23383;&#27573;&#28165;&#21333;&#21644;&#35268;&#21017;&#28165;&#21333;&#65292;&#29983;&#25104;&#21040;&#12304;01&#38656;&#27714;&#26803;&#29702;&#12305;&#30446;&#24405;&#19979;&#12290;</span>
+              <span class="copy-hint">&#128203; &#28857;&#20987;&#22797;&#21046;</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="guide-card">
+          <div class="guide-card-header">
+            <div class="guide-card-icon" style="background:#388e3c;">2</div>
+            <div>
+              <span class="guide-card-title">&#21407;&#22411;&#35774;&#35745;</span>
+              <span class="guide-card-skill">form-to-prototype</span>
+            </div>
+          </div>
+          <div class="guide-card-desc">
+            &#26681;&#25454;&#24050;&#29983;&#25104;&#30340;&#23383;&#27573;&#28165;&#21333;&#65292;&#33258;&#21160;&#29983;&#25104;&#21407;&#22411;&#39029;&#38754;&#39044;&#35272;&#24212;&#29992;&#30028;&#38754;&#25928;&#26524;&#12290;&#22914;&#26524;&#23545;&#40664;&#35748;&#21407;&#22411;&#19981;&#28385;&#24847;&#65292;&#21487;&#22312;&#27492;&#22522;&#30784;&#19978;&#36827;&#34892;&#32654;&#21270;&#12290;
+          </div>
+          <div class="guide-prompt-box">
+            <div class="guide-prompt-label">&#128203; &#25552;&#31034;&#35789;&#65288;&#28857;&#20987;&#22797;&#21046;&#21040;&#21098;&#36148;&#26495;&#65292;&#28982;&#21518;&#31896;&#36148;&#32473; AI &#21161;&#25163;&#65289;</div>
+            <div class="guide-prompt-text" id="guidePrompt2" onclick="copyGuidePrompt(this)">
+              <span>&#25353;&#29031;&#12304;&#24212;&#29992;&#21517;/01&#38656;&#27714;&#26803;&#29702;&#12305;&#65292;&#29983;&#25104;&#26412;&#22320;&#21407;&#22411;&#39029;&#38754;&#12290;</span>
+              <span class="copy-hint">&#128203; &#28857;&#20987;&#22797;&#21046;</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="guide-card">
+          <div class="guide-card-header">
+            <div class="guide-card-icon" style="background:#d84315;">3</div>
+            <div>
+              <span class="guide-card-title">&#31995;&#32479;&#26500;&#24314;</span>
+              <span class="guide-card-skill">form_creator</span>
+            </div>
+          </div>
+          <div class="guide-card-desc">
+            &#23558;&#23383;&#27573;&#28165;&#21333;&#25512;&#36865;&#21040;&#23452;&#25645;&#24179;&#21488;&#65292;&#33258;&#21160;&#21019;&#24314;&#24212;&#29992;&#21644;&#34920;&#21333;&#12290;&#31995;&#32479;&#20250;&#33258;&#21160;&#23436;&#25104;&#34920;&#21333;&#21019;&#24314;&#12289;&#23383;&#27573;&#37197;&#32622;&#21644;&#22522;&#30784;&#35774;&#32622;&#12290;
+          </div>
+          <div class="guide-prompt-box">
+            <div class="guide-prompt-label">&#128203; &#25552;&#31034;&#35789;&#65288;&#28857;&#20987;&#22797;&#21046;&#21040;&#21098;&#36148;&#26495;&#65292;&#28982;&#21518;&#31896;&#36148;&#32473; AI &#21161;&#25163;&#65289;</div>
+            <div class="guide-prompt-text" id="guidePrompt3" onclick="copyGuidePrompt(this)">
+              <span>&#25353;&#29031;&#12304;&#24212;&#29992;&#21517;/01&#38656;&#27714;&#26803;&#29702;/&#23383;&#27573;&#28165;&#21333;.md&#12305;&#65292;&#29983;&#25104;&#23452;&#25645;&#34920;&#21333;&#24182;&#25512;&#36865;&#21040;&#23452;&#25645;&#21019;&#24314;&#24212;&#29992;&#12290;</span>
+              <span class="copy-hint">&#128203; &#28857;&#20987;&#22797;&#21046;</span>
+            </div>
+          </div>
+          <div class="guide-card-note">&#9888;&#65039; &#21019;&#24314;&#21518;&#38656;&#31561;&#24453; 3-5 &#20998;&#38047;&#20877;&#21516;&#27493;&#37197;&#32622;&#21040;&#26412;&#22320;&#65292;&#28982;&#21518;&#28857;&#20987;&#24038;&#20391;&#33756;&#21333;&#30340;&#12300;&#21516;&#27493;&#24212;&#29992;&#34920;&#21333;&#12301;&#25353;&#38062;&#21516;&#27493;&#26032;&#34920;&#21333;&#12290;</div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script src="../js/app.js"></script>
+  <script src="../js/form-config.js"></script>
+  <script>
+    function copyGuidePrompt(el) {
+      const textSpan = el.querySelector('span:first-child');
+      if (!textSpan) return;
+      let text = textSpan.textContent;
+      const appName = getAppNameFromPath();
+      if (appName && appName !== '&#24212;&#29992;&#21517;') {
+        text = text.replace('&#31896;&#36148;Excel&#25991;&#20214;&#36335;&#24452;', 'd:\\&#23452;&#25645;AI&#32534;&#31243;\\&#23452;&#25645;AI&#21161;&#25163;V1.7.3\\' + appName + '\\01&#38656;&#27714;&#26803;&#29702;\\' + appName + '&#34920;&#21333;&#28165;&#21333;.xlsx');
+        text = text.replace(/&#24212;&#29992;&#21517;/g, appName);
+      }
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(text).then(function() { showCopyToast(el); });
+      } else {
+        const input = document.createElement('input');
+        input.value = text;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        showCopyToast(el);
+      }
+    }
+
+    function showCopyToast(el) {
+      const toast = document.createElement('div');
+      toast.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:#52c41a;color:#fff;padding:10px 24px;border-radius:4px;font-size:14px;z-index:9999;box-shadow:0 4px 12px rgba(82,196,26,0.4);';
+      toast.textContent = '&#9989; &#25552;&#31034;&#35789;&#24050;&#22797;&#21046;&#21040;&#21098;&#36148;&#26495;';
+      document.body.appendChild(toast);
+      const hint = el.querySelector('.copy-hint');
+      if (hint) {
+        const origText = hint.textContent;
+        hint.textContent = '&#9989; &#24050;&#22797;&#21046;';
+        setTimeout(function() { hint.textContent = origText; }, 2000);
+      }
+      setTimeout(function() { toast.remove(); }, 2000);
+    }
+
+    function getAppNameFromPath() {
+      const pathParts = window.location.pathname.split('/').filter(Boolean);
+      return pathParts[0] || '';
+    }
+
+    document.addEventListener('DOMContentLoaded', function() {
+      if (typeof FormConfig !== 'undefined') {
+        FormConfig.loadFormListFromConfig().then(function() {
+          renderListMenu();
+          setTimeout(function() {
+            document.querySelectorAll('.menu-item').forEach(function(item) {
+              if (item.dataset.form === '__guide__') { item.classList.add('active'); }
+            });
+          }, 100);
+        });
+      }
+      const appName = getAppNameFromPath();
+      if (appName) {
+        const excelPath = 'd:\\&#23452;&#25645;AI&#32534;&#31243;\\&#23452;&#25645;AI&#21161;&#25163;V1.7.3\\' + appName + '\\01&#38656;&#27714;&#26803;&#29702;\\' + appName + '&#34920;&#21333;&#28165;&#21333;.xlsx';
+        document.getElementById('excelPathDisplay').textContent = excelPath;
+        const prompts = document.querySelectorAll('.guide-prompt-text span:first-child');
+        if (prompts[0]) prompts[0].textContent = '&#23558; Excel&#12304;' + excelPath + '&#12305;&#36716;&#25442;&#25104;&#26412;&#22320;&#23383;&#27573;&#28165;&#21333;&#21644;&#35268;&#21017;&#28165;&#21333;&#65292;&#29983;&#25104;&#21040;&#12304;01&#38656;&#27714;&#26803;&#29702;&#12305;&#30446;&#24405;&#19979;&#12290;';
+        if (prompts[1]) prompts[1].textContent = '&#25353;&#29031;&#12304;' + appName + '/01&#38656;&#27714;&#26803;&#29702;&#12305;&#65292;&#29983;&#25104;&#26412;&#22320;&#21407;&#22411;&#39029;&#38754;&#12290;';
+        if (prompts[2]) prompts[2].textContent = '&#25353;&#29031;&#12304;' + appName + '/01&#38656;&#27714;&#26803;&#29702;/&#23383;&#27573;&#28165;&#21333;.md&#12305;&#65292;&#29983;&#25104;&#23452;&#25645;&#34920;&#21333;&#24182;&#25512;&#36865;&#21040;&#23452;&#25645;&#21019;&#24314;&#24212;&#29992;&#12290;';
+      }
+    });
   </script>
 </body>
 </html>`;
@@ -1102,7 +1352,7 @@ ${formPathsEntries}
 
   // 获取当前表单名称
   getCurrentFormName() {
-    return this.getUrlParam('form') || '${allForms[0]?.name || '产品信息'}';
+    return this.getUrlParam('form') || '';
   },
 
   // 根据当前页面URL计算基础路径前缀
@@ -1943,6 +2193,8 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .logo { font-size: 16px; font-weight: 500; color: #262626; display: flex; align-items: center; gap: 8px; }
 .logo::before { content: '◆'; color: #1890ff; font-size: 18px; }
 .user-info { color: #595959; font-size: 14px; display: flex; align-items: center; gap: 8px; }
+.btn-portal-link { display: inline-flex; align-items: center; gap: 4px; padding: 4px 12px; border-radius: 6px; font-size: 13px; color: #1677ff; text-decoration: none; border: 1px solid #1677ff; background: #fff; transition: all 0.2s; white-space: nowrap; }
+.btn-portal-link:hover { background: #e6f4ff; border-color: #4096ff; }
 
 /* 同步应用按钮 */
 .btn-sync-app { background: #fa8c16; color: #fff; border-color: #fa8c16; font-size: 13px; padding: 3px 12px; height: 28px; }
@@ -1959,6 +2211,9 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .menu-item:hover { background: #e6f7ff; color: #1890ff; }
 .menu-item.active { background: #e6f7ff; color: #1890ff; border-left-color: #1890ff; }
 .menu-item.process::before { content: '▸'; position: absolute; left: 16px; color: #52c41a; font-size: 10px; }
+.guide-menu-item { border-left: 3px solid #fa8c16; }
+.guide-menu-item:hover { border-left-color: #fa8c16; }
+.guide-menu-item.active { border-left-color: #fa8c16; background: #fff7e6; color: #d46b08; }
 
 /* 主内容区 */
 .main-content { flex: 1; margin-left: 208px; padding: 16px; background: #f0f2f5; min-height: calc(100vh - 48px); }
@@ -2732,6 +2987,8 @@ function renderMenu(containerId, linkPrefix) {
 
   const formNames = Object.keys(FormConfig.staticConfigData);
   let html = '';
+  // 【开发引导】作为第一个菜单项
+  html += '<a href="' + linkPrefix + 'guide.html" class="menu-item guide-menu-item" data-form="__guide__">📋 开发引导</a>';
   for (const name of formNames) {
     const encodedName = encodeURIComponent(name);
     html += '<a href="' + linkPrefix + 'list.html?form=' + encodedName + '" class="menu-item" data-form="' + name + '">' + name + '</a>';
@@ -2923,6 +3180,11 @@ async function generatePrototype(markdownPath, outputDir) {
   fs.writeFileSync(path.join(templatesDir, 'form.html'), formTemplateHtml, 'utf-8');
   console.log('  [生成] templates/form.html - 通用新增/详情页模板');
 
+  // 生成开发引导页模板
+  const guideHtml = generateGuideHtml();
+  fs.writeFileSync(path.join(templatesDir, 'guide.html'), guideHtml, 'utf-8');
+  console.log('  [生成] templates/guide.html - 开发引导页模板');
+
   // 生成表单配置加载器（包含静态配置数据）
   const formConfigJs = generateFormConfigJs(systemInfo.forms, outputDir);
   fs.writeFileSync(path.join(outputDir, 'js', 'form-config.js'), formConfigJs, 'utf-8');
@@ -2944,7 +3206,8 @@ async function generatePrototype(markdownPath, outputDir) {
   console.log('  │   └── 📄 form-config.js');
   console.log('  └── 📁 templates/');
   console.log('      ├── 📄 list.html');
-  console.log('      └── 📄 form.html');
+  console.log('      ├── 📄 form.html');
+  console.log('      └── 📄 guide.html');
   console.log('\n使用方式:');
   console.log('  1. 启动HTTP服务器: npx http-server "' + path.dirname(outputDir) + '" -p 8080');
   console.log('  2. 访问: http://localhost:8080/' + path.basename(path.dirname(outputDir)) + '/' + path.basename(outputDir) + '/index.html');

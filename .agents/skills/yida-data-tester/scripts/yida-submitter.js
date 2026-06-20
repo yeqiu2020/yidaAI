@@ -290,11 +290,20 @@ function extractFieldMapping(schema) {
         }
 
         if (label) {
-          mapping[label] = {
+          const fieldInfo = {
             fieldId,
             componentName: fieldComponentName,
             label
           };
+          
+          // 提取数据源信息（用于RadioField、CheckboxField、SelectField等）
+          if (comp.props.dataSource && Array.isArray(comp.props.dataSource)) {
+            fieldInfo.dataSource = comp.props.dataSource;
+          } else if (comp.props.defaultDataSource && comp.props.defaultDataSource.dataSource) {
+            fieldInfo.dataSource = comp.props.defaultDataSource.dataSource;
+          }
+          
+          mapping[label] = fieldInfo;
         }
       }
 

@@ -1,18 +1,14 @@
 #!/usr/bin/env node
 /**
- * 宜搭服务管理器 v2.0.0
+ * 宜搭服务管理器 v2.1.0
  * 一键启动/停止/检查宜搭开发所需的本地服务
  *
  * 用法:
- *   node server_manager.js [start|stop|status|restart]
+ *   node server_manager.js [start|stop|status|restart|autostart-on|autostart-off]
  *
- * v2.0.0 修复:
- * - 修复http-server路径检测（Windows使用.bin/http-server.cmd）
- * - 修复内置HTTP服务器阻塞主进程的问题（改为独立子进程）
- * - 修复npx+detached在Windows上不可靠的问题
- * - 新增HTTP健康检查（实际发送请求验证服务可用）
- * - 新增详细启动日志输出
- * - 启动完成后进程自动退出
+ * v2.1.0 新增:
+ * - 新增 autostart-on/autostart-off 命令，注册/取消开机自启
+ * - 开机自启通过 Windows 启动文件夹实现（放置 .bat 快捷方式）
  */
 
 const { spawn, exec, execSync } = require('child_process');
@@ -436,6 +432,8 @@ async function startAll() {
     console.log('   3. 点击"同步配置"按钮即可同步表单配置');
     console.log('\n📁 示例访问路径:');
     console.log('   http://127.0.0.1:8080/项目管理/01需求梳理/原型页面/index.html');
+    console.log('\n🏠 组织门户:');
+    console.log('   http://127.0.0.1:8080/  (组织管理门户)');
 
     await updateOrgInfo();
   }
@@ -534,15 +532,94 @@ async function main() {
     case 'restart':
       await restartAll();
       break;
+    case 'update-org':
+      await updateOrgInfo();
+      break;
+    case 'autostart-on':
+      enableAutoStart();
+      break;
+    case 'autostart-off':
+      disableAutoStart();
+      break;
     default:
-      console.log('用法: node server_manager.js [start|stop|status|restart]');
+      console.log('用法: node server_manager.js [start|stop|status|restart|autostart-on|autostart-off]');
       console.log('');
       console.log('命令:');
-      console.log('  start    启动所有服务（默认）');
-      console.log('  stop     停止所有服务');
-      console.log('  status   检查服务状态');
-      console.log('  restart  重启所有服务');
+      console.log('  start          启动所有服务（默认）');
+      console.log('  stop           停止所有服务');
+      console.log('  status         检查服务状态');
+      console.log('  restart        重启所有服务');
+      console.log('  autostart-on   注册开机自启');
+      console.log('  autostart-off  取消开机自启');
       process.exit(1);
+  }
+}
+
+/**
+ * 注册开机自启（Windows 启动文件夹方式）
+ */
+function enableAutoStart() {
+  logHeader('🔌 注册开机自启');
+
+  const startupFolder = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+  const batPath = path.join(CONFIG.projectRoot, '启动宜搭服务.bat');
+  const shortcutPath = path.join(startupFolder, '宜搭AI助手-启动服务.bat');
+
+  if (!fs.existsSync(batPath)) {
+    log('❌ 未找到 启动宜搭服务.bat，请确认项目目录正确', 'red');
+    process.exit(1);
+  }
+
+  // 创建启动脚本（使用 start /min 最小化运行，避免弹窗干扰）
+  // 注意：bat 文件必须使用 GBK 编码，否则中文路径会乱码
+  const startupScript = `@echo off
+chcp 65001 >nul 2>&1
+cd /d "${CONFIG.projectRoot}"
+start /min "" node ".agents\\skills\\yida-server-manager\\scripts\\server_manager.js" start
+`;
+
+  try {
+    // 使用 GBK 编码写入 bat 文件（Windows cmd 默认使用 GBK）
+    const iconv = require('iconv-lite');
+    if (iconv) {
+      fs.writeFileSync(shortcutPath, iconv.encode(startupScript, 'gbk'));
+    } else {
+      // 没有 iconv-lite 时使用 Buffer 手动处理
+      fs.writeFileSync(shortcutPath, startupScript, 'utf-8');
+    }
+    log(`✅ 已注册开机自启`, 'green');
+    log(`   启动文件夹: ${startupFolder}`, 'cyan');
+    log(`   快捷方式: ${shortcutPath}`, 'cyan');
+    console.log('');
+    log('💡 下次开机将自动启动宜搭服务', 'yellow');
+    log('   取消自启: 在对话框输入 "取消宜搭服务开机自启"', 'yellow');
+  } catch (error) {
+    log(`❌ 注册失败: ${error.message}`, 'red');
+    log('💡 请尝试以管理员身份运行', 'yellow');
+    process.exit(1);
+  }
+}
+
+/**
+ * 取消开机自启
+ */
+function disableAutoStart() {
+  logHeader('🔌 取消开机自启');
+
+  const startupFolder = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+  const shortcutPath = path.join(startupFolder, '宜搭AI助手-启动服务.bat');
+
+  if (!fs.existsSync(shortcutPath)) {
+    log('⚠️ 未找到开机自启快捷方式，可能未注册', 'yellow');
+    return;
+  }
+
+  try {
+    fs.unlinkSync(shortcutPath);
+    log('✅ 已取消开机自启', 'green');
+  } catch (error) {
+    log(`❌ 取消失败: ${error.message}`, 'red');
+    process.exit(1);
   }
 }
 

@@ -406,6 +406,14 @@ function numberToChinese(num) {
   return num;
 }
 
+/**
+ * 去除模块名称中已有的中文序号前缀（如"一、基础信息" → "基础信息"）
+ * 避免脚本自动添加序号时出现"一、一、基础信息"的重复
+ */
+function stripModuleNumberPrefix(moduleName) {
+  return moduleName.replace(/^[一二三四五六七八九十]+[、.．]\s*/, '');
+}
+
 // ==================== 生成字段清单 Markdown ====================
 
 function generateFieldListMarkdown(forms, systemName, version) {
@@ -456,7 +464,7 @@ function generateFieldListMarkdown(forms, systemName, version) {
 
   let moduleIndex = 1;
   for (const [moduleName, moduleForms] of Object.entries(modules)) {
-    md += `## ${numberToChinese(moduleIndex)}、${moduleName}\n\n`;
+    md += `## ${numberToChinese(moduleIndex)}、${stripModuleNumberPrefix(moduleName)}\n\n`;
     
     moduleForms.forEach((form, formIndex) => {
       md += `### (${numberToChinese(formIndex + 1)}) ${form.name}「${form.type}」\n\n`;
@@ -543,7 +551,7 @@ function generateRuleListMarkdown(forms, systemName, version) {
 
   let moduleIndex = 1;
   for (const [moduleName, moduleForms] of Object.entries(modules)) {
-    md += `## ${numberToChinese(moduleIndex)}、${moduleName}\n\n`;
+    md += `## ${numberToChinese(moduleIndex)}、${stripModuleNumberPrefix(moduleName)}\n\n`;
     
     moduleForms.forEach((form, formIndex) => {
       md += `### ${formIndex + 1}. ${form.name}\n\n`;

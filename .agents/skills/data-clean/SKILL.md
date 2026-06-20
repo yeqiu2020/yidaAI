@@ -59,6 +59,7 @@ node scripts/clear-form-data.js [应用ID] [选项]
 - `--all`：清空所有表单数据
 - `--form <formUuid>`：清空指定表单数据
 - `--forms <formUuid1,formUuid2,...>`：清空多个指定表单数据
+- `--appName <应用名称>`：指定应用名称，直接定位系统配置清单（推荐通过API调用时使用）
 
 ### 第5步：输出执行结果
 
@@ -103,6 +104,9 @@ node scripts/clear-form-data.js [应用ID] [选项]
 # 清空所有表单数据
 node scripts/clear-form-data.js APP_XXXXXXXX --all
 
+# 清空所有表单数据（指定应用名称，推荐）
+node scripts/clear-form-data.js APP_XXXXXXXX --all --appName AI宜搭场景
+
 # 清空指定表单数据
 node scripts/clear-form-data.js APP_XXXXXXXX --form FORM-XXXXXXXX
 
@@ -136,4 +140,5 @@ POST /dingtalk/web/{appId}/v1/process/deleteInstance.json
 
 ## 七、版本历史
 
-- v1.0.0 (2026-05-11): 初始版本，支持批量清空宜搭表单数据
+- v2.1.2 (2026-06-05): 根因修复—Markdown转义下划线导致appId包含反斜杠（APP\_XXX→APP_XXX），sync_server和clear-form-data均添加unescape处理
+- v2.1.1 (2026-06-05): 修复getRequest未传csrfToken导致API调用失败；appName容错处理

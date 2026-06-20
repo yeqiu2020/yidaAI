@@ -26,3 +26,6 @@ temp-file/
 # 部署运维信息
 deploy-*.json
 .temp_*/
+
+# 具体应用案例/场景（不需要同步到 GitHub）
+AI宜搭场景/

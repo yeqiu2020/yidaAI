@@ -649,6 +649,7 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
 
 | 版本 | 日期 | 更新内容 |
 |-----|------|---------|
+| 2.11.0 | 2026/06/08 | **首页布局调整**：将系统统计卡片（welcome-stats）移到页面最上方，调整margin样式（margin-top: 0; margin-bottom: 32px），确保以后生成的原型页面统计卡片都在最上面显示 |
 | 2.10.0 | 2026/06/03 | **删除表单后原型页面仍显示的修复**：1) `loadFormListFromConfig()`新增清理逻辑——从系统配置清单解析有效表单名称集合，移除`formPaths`、`staticConfigData`、`FormConfigData`中已不存在的表单；2) `app.js`的`DOMContentLoaded`中自动调用`loadFormListFromConfig()`并重新渲染菜单；3) `prototype_generator.js`新增`--form-config-only`参数，支持仅重新生成`form-config.js`而不重新生成整个原型页面；4) 按钮名称优化："同步应用"→"同步应用表单"，"同步配置"→"同步表单字段" |
 | 2.9.0 | 2026/06/03 | **模板字符串正则转义修复**：1) 修复prototype_generator.js模板字符串中`/^\d+$/`转义问题——模板字符串中`\d`会被JS解释器消耗变成`d`，导致生成的form-config.js中正则变成`/^d+$/`（匹配字母d而非数字），使loadFormListFromConfig()永远无法解析系统配置清单；2) 已将模板中`/^\d+$/`改为`/^\\d+$/`确保生成正确；3) 全面审查模板字符串中所有正则（\d、\s、\_(、\)等），确认均已正确使用双反斜杠 |
 | 2.8.0 | 2026/05/09 | **动态加载修复**：1) form-config.js的loadFormConfig()添加fetch缓存控制(cache:no-cache)；2) fetch失败时回退到staticConfigData而非返回空配置 |

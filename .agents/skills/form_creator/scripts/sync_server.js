@@ -2,9 +2,23 @@
 /**
  * 本地同步服务
  * 提供HTTP接口供原型页面调用，实现单个表单同步
- * 
+ *
  * 启动: node sync_server.js
  * 端口: 默认3457（可通过环境变量 SYNC_SERVICE_PORT 覆盖）
+ *
+ * v2.5.0: 新增备份数据接口
+ * - POST /backup-app-data: 备份应用数据
+ *
+ * v2.4.0: 新增8个API端点
+ * - POST /sync-config: 同步应用配置
+ * - POST /sync-schema: 同步表单Schema
+ * - POST /sync-rules: 同步业务规则
+ * - POST /project-sync: 一站式同步
+ * - POST /clean-data: 清空表单数据
+ * - POST /generate-system-map: 生成系统图谱
+ * - POST /form-settings: 表单设置
+ * - POST /flow-settings: 流程设置
+ * - GET /local-files: 读取本地文件
  */
 
 const http = require('http');
@@ -14,7 +28,7 @@ const fs = require('fs');
 const url = require('url');
 
 const PORT = parseInt(process.env.SYNC_SERVICE_PORT || '3457', 10);
-const SERVER_VERSION = '2.2.0';
+const SERVER_VERSION = '2.5.0';
 const CONFIG_FILE = '系统配置清单.md';
 const SCAN_IGNORE_DIRS = new Set([
   'node_modules',
@@ -31,6 +45,59 @@ let configScanCache = {
   expiresAt: 0,
   dirs: []
 };
+
+// Skills 目录和项目根目录
+const SKILLS_DIR = path.join(__dirname, '..', '..');
+const PROJECT_ROOT = process.cwd();
+
+// 脚本路径映射
+const SCRIPTS = {
+  configSync: path.join(SKILLS_DIR, 'yida-config-sync', 'scripts', 'sync_all_configs.js'),
+  schemaSync: path.join(SKILLS_DIR, 'yida-get-schema', 'scripts', 'sync-schema.js'),
+  ruleSync: path.join(SKILLS_DIR, 'yida-rule-sync', 'scripts', 'sync_rules.js'),
+  projectSync: path.join(SKILLS_DIR, 'yida-project-sync', 'scripts', 'sync_project.js'),
+  dataClean: path.join(SKILLS_DIR, 'data-clean', 'scripts', 'clear-form-data.js'),
+  dataBackup: path.join(SKILLS_DIR, 'data-backup', 'scripts', 'backup-app-data.js'),
+  systemMap: path.join(SKILLS_DIR, 'yida-system-map', 'scripts', 'generate_map.js'),
+  formSettings: path.join(SKILLS_DIR, 'form-settings', 'scripts', 'form-settings.js'),
+  flowSettings: path.join(SKILLS_DIR, 'flow-settings', 'scripts', 'flow-settings.js'),
+  projectCreator: path.join(SKILLS_DIR, 'project-creator', 'scripts', 'create-project.js'),
+};
+
+/**
+ * 通用脚本执行辅助函数
+ * @param {string} scriptPath - 脚本绝对路径
+ * @param {string[]} args - 命令行参数数组
+ * @returns {Promise<string>} 脚本 stdout 输出
+ */
+function runScript(scriptPath, args, timeout = 60000) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [scriptPath, ...args], {
+      cwd: PROJECT_ROOT,
+      env: { ...process.env },
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', d => stdout += d);
+    child.stderr.on('data', d => stderr += d);
+    child.on('close', code => {
+      if (code === 0) resolve(stdout);
+      else reject(new Error(stderr || stdout));
+    });
+    child.on('error', reject);
+    // 可配置超时，默认60秒
+    setTimeout(() => { child.kill(); reject(new Error('执行超时')); }, timeout);
+  });
+}
+
+/**
+ * 去除 Markdown 转义字符
+ * Markdown 中下划线 _ 会被转义为 \_，需要还原
+ */
+function unescapeMarkdown(str) {
+  if (!str) return str;
+  return str.replace(/\\([\\`*_{}[\]()#+\-.!~|])/g, '$1');
+}
 
 // 颜色输出
 const colors = {
@@ -235,6 +302,77 @@ function findProjectDir(req, payload = {}) {
 }
 
 /**
+ * 将新应用添加到组织及应用信息.md的应用列表中
+ * @param {string} appName - 应用名称
+ * @param {string} appId - 应用ID，默认为'待创建'
+ */
+function addAppToOrgConfig(appName, appId = '待创建') {
+  const orgConfigPath = path.join(PROJECT_ROOT, '组织及应用信息.md');
+  if (!fs.existsSync(orgConfigPath)) {
+    log('组织及应用信息.md 不存在，跳过注册新应用', 'yellow');
+    return false;
+  }
+
+  try {
+    let content = fs.readFileSync(orgConfigPath, 'utf-8');
+
+    // 检查应用是否已存在
+    const appExists = content.includes(`| ${appName} |`);
+    if (appExists) {
+      log(`应用【${appName}】已在组织信息中，跳过`, 'yellow');
+      return false;
+    }
+
+    // 查找应用列表表格，获取最大序号
+    const lines = content.split('\n');
+    let appTableEndIndex = -1;
+    let maxNum = 0;
+    let inAppTable = false;
+
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trim();
+      if (trimmed.includes('应用名称') && trimmed.includes('应用ID')) {
+        inAppTable = true;
+        continue;
+      }
+      if (inAppTable) {
+        if (trimmed.startsWith('|') && !trimmed.startsWith('|--') && !trimmed.startsWith('| ---')) {
+          const cells = trimmed.split('|').map(c => c.trim()).filter(c => c);
+          if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+            maxNum = Math.max(maxNum, parseInt(cells[0], 10));
+          }
+        } else if (!trimmed.startsWith('|')) {
+          appTableEndIndex = i;
+          inAppTable = false;
+        }
+      }
+    }
+
+    // 如果表格在文件末尾
+    if (inAppTable && appTableEndIndex === -1) {
+      appTableEndIndex = lines.length;
+    }
+
+    if (appTableEndIndex === -1) {
+      log('未找到应用列表表格，跳过注册', 'yellow');
+      return false;
+    }
+
+    // 插入新行
+    const newNum = maxNum + 1;
+    const newRow = `| ${newNum} | ${appName} | ${appId} |`;
+    lines.splice(appTableEndIndex, 0, newRow);
+
+    fs.writeFileSync(orgConfigPath, lines.join('\n'), 'utf-8');
+    log(`应用【${appName}】已注册到组织信息（序号 ${newNum}）`, 'green');
+    return true;
+  } catch (error) {
+    log(`注册应用到组织信息失败: ${error.message}`, 'red');
+    return false;
+  }
+}
+
+/**
  * 从系统配置清单读取应用信息和表单列表
  */
 function readSystemConfig(projectDir) {
@@ -253,15 +391,15 @@ function readSystemConfig(projectDir) {
       appName = appNameMatch[1].trim();
     }
 
-    // 提取应用ID
+    // 提取应用ID（兼容 Markdown 转义：APP\_XXX → APP_XXX）
     let appId = null;
-    const appIdMatch = content.match(/\|\s*\*\*(应用ID|应用编码)\*\*\s*\|\s*`?(APP_[A-Z0-9]+)`?/i);
+    const appIdMatch = content.match(/\|\s*\*\*(应用ID|应用编码)\*\*\s*\|\s*`?(APP(?:\\?_)[A-Z0-9]+)`?/i);
     if (appIdMatch) {
-      appId = appIdMatch[2];
+      appId = unescapeMarkdown(appIdMatch[2]);
     }
     if (!appId) {
-      const fallbackMatch = content.match(/\b(APP_[A-Z0-9]+)\b/);
-      if (fallbackMatch) appId = fallbackMatch[1];
+      const fallbackMatch = content.match(/\b(APP(?:\\?_)[A-Z0-9]+)\b/);
+      if (fallbackMatch) appId = unescapeMarkdown(fallbackMatch[1]);
     }
 
     // 提取表单列表（新格式：| 1 | 名称「类型」 | FORM-XXX |）
@@ -987,6 +1125,772 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // ========== 组织门户 API ==========
+
+  /**
+   * 获取组织信息及应用列表（含同步状态）
+   * GET /org-info
+   */
+  if (parsedUrl.pathname === '/org-info') {
+    try {
+      const orgInfoPath = path.join(process.cwd(), '组织及应用信息.md');
+      if (!fs.existsSync(orgInfoPath)) {
+        res.writeHead(404);
+        res.end(JSON.stringify({ success: false, error: '组织及应用信息.md 不存在' }));
+        return;
+      }
+
+      const content = fs.readFileSync(orgInfoPath, 'utf-8');
+
+      // 解析组织信息
+      const orgInfo = {};
+      const orgNameMatch = content.match(/\|\s*组织名称\s*\|\s*([^|\n]+)/);
+      if (orgNameMatch) orgInfo.orgName = orgNameMatch[1].trim();
+      const domainMatch = content.match(/\|\s*域名前缀\s*\|\s*([^|\n]+)/);
+      if (domainMatch) orgInfo.domainPrefix = domainMatch[1].trim();
+      const fullDomainMatch = content.match(/\|\s*完整域名\s*\|\s*([^|\n]+)/);
+      if (fullDomainMatch) orgInfo.fullDomain = fullDomainMatch[1].trim();
+      const corpIdMatch = content.match(/\|\s*corpId\s*\|\s*([^|\n]+)/);
+      if (corpIdMatch) orgInfo.corpId = corpIdMatch[1].trim();
+      const corpNameMatch = content.match(/\|\s*corp名称\s*\|\s*([^|\n]+)/);
+      if (corpNameMatch) orgInfo.corpName = corpNameMatch[1].trim();
+
+      // 解析应用列表
+      const apps = [];
+      const lines = content.split('\n');
+      let inAppTable = false;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.includes('应用名称') && trimmed.includes('应用ID')) {
+          inAppTable = true;
+          continue;
+        }
+        if (inAppTable) {
+          if (trimmed.startsWith('|') && !trimmed.startsWith('|--') && !trimmed.startsWith('| ---')) {
+            const cells = trimmed.split('|').map(c => c.trim()).filter(c => c);
+            if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+              const appName = cells[1];
+              const appId = unescapeMarkdown(cells[2]);
+              // 检查同步状态
+              const appDir = path.join(process.cwd(), appName);
+              const configPath = path.join(appDir, CONFIG_FILE);
+              const prototypePath = path.join(appDir, '01需求梳理', '原型页面', 'index.html');
+              const isSynced = fs.existsSync(configPath);
+              const hasPrototype = fs.existsSync(prototypePath);
+
+              apps.push({
+                name: appName,
+                appId: appId,
+                synced: isSynced,
+                hasPrototype: hasPrototype,
+                prototypeUrl: hasPrototype ? `http://127.0.0.1:8080/${encodeURIComponent(appName)}/01需求梳理/原型页面/index.html` : null
+              });
+            }
+          } else if (!trimmed.startsWith('|')) {
+            inAppTable = false;
+          }
+        }
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        success: true,
+        orgInfo,
+        apps,
+        totalApps: apps.length,
+        syncedApps: apps.filter(a => a.synced).length
+      }));
+    } catch (error) {
+      log(`获取组织信息失败: ${error.message}`, 'red');
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+    return;
+  }
+
+  /**
+   * 同步应用到本地
+   * POST /sync-app-to-local
+   * Body: { appName: "xxx", appId: "APP_XXX" }
+   */
+  if (parsedUrl.pathname === '/sync-app-to-local' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appName, appId } = data;
+
+        if (!appName || !appId) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少应用名称或应用ID' }));
+          return;
+        }
+
+        log(`收到同步应用到本地请求: ${appName} (${appId})`, 'yellow');
+
+        const projectDir = path.join(process.cwd(), appName);
+        const syncScript = path.join(__dirname, '..', '..', 'yida-config-sync', 'scripts', 'sync_all_configs.js');
+
+        if (!fs.existsSync(syncScript)) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ success: false, error: '同步脚本不存在: ' + syncScript }));
+          return;
+        }
+
+        // 确保项目目录存在
+        if (!fs.existsSync(projectDir)) {
+          fs.mkdirSync(projectDir, { recursive: true });
+        }
+
+        log(`执行同步: node ${syncScript} "${projectDir}" "${appId}" "${appName}"`, 'cyan');
+
+        const child = spawn(process.execPath, [syncScript, projectDir, appId, appName], {
+          cwd: process.cwd(),
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        let stderr = '';
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', (chunk) => { stdout += chunk; });
+        child.stderr.on('data', (chunk) => { stderr += chunk; });
+
+        child.on('error', (error) => {
+          log(`同步应用失败: ${error.message}`, 'red');
+          // 尝试发送错误响应（可能已发送）
+          try {
+            res.writeHead(500);
+            res.end(JSON.stringify({ success: false, error: error.message }));
+          } catch (_) {}
+        });
+
+        child.on('close', (code) => {
+          if (code !== 0) {
+            const errorMsg = (stderr || stdout || `退出码: ${code}`).toString().trim();
+            log(`同步应用失败: ${errorMsg}`, 'red');
+            try {
+              res.writeHead(500);
+              res.end(JSON.stringify({ success: false, error: errorMsg }));
+            } catch (_) {}
+            return;
+          }
+
+          log(`同步应用成功: ${appName}`, 'green');
+
+          // 更新组织及应用信息.md中的原型页面地址
+          try {
+            const serverMgr = path.join(__dirname, '..', '..', 'yida-server-manager', 'scripts', 'server_manager.js');
+            if (fs.existsSync(serverMgr)) {
+              spawn(process.execPath, [serverMgr, 'update-org'], {
+                cwd: process.cwd(),
+                detached: true,
+                stdio: ['ignore', 'ignore', 'ignore'],
+                windowsHide: true
+              }).unref();
+            }
+          } catch (_) {}
+
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            message: `应用【${appName}】同步完成`,
+            appName,
+            appId
+          }));
+        });
+      } catch (error) {
+        log(`处理请求失败: ${error.message}`, 'red');
+        try {
+          res.writeHead(500);
+          res.end(JSON.stringify({ success: false, error: error.message }));
+        } catch (_) {}
+      }
+    });
+    return;
+  }
+
+  /**
+   * 备份应用数据
+   * POST /backup-app-data
+   * Body: { appName: "xxx", appId: "APP_XXX" }
+   */
+  if (parsedUrl.pathname === '/backup-app-data' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appName, appId, format = 'json' } = data;
+
+        if (!appName || !appId) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少应用名称或应用ID' }));
+          return;
+        }
+
+        if (!['json', 'excel'].includes(format)) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '格式参数错误，仅支持 json 或 excel' }));
+          return;
+        }
+
+        log(`收到备份应用数据请求: ${appName} (${appId}) [${format}]`, 'yellow');
+
+        const backupScript = SCRIPTS.dataBackup;
+        if (!fs.existsSync(backupScript)) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ success: false, error: '备份脚本不存在: ' + backupScript }));
+          return;
+        }
+
+        log(`执行备份: node ${backupScript} "${appId}" "${appName}" "${format}"`, 'cyan');
+
+        const child = spawn(process.execPath, [backupScript, appId, appName, format], {
+          cwd: process.cwd(),
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'pipe']
+        });
+
+        let stdout = '';
+        let stderr = '';
+        child.stdout.setEncoding('utf8');
+        child.stderr.setEncoding('utf8');
+        child.stdout.on('data', (chunk) => { stdout += chunk; });
+        child.stderr.on('data', (chunk) => { stderr += chunk; });
+
+        child.on('error', (error) => {
+          log(`备份应用数据失败: ${error.message}`, 'red');
+          try {
+            res.writeHead(500);
+            res.end(JSON.stringify({ success: false, error: error.message }));
+          } catch (_) {}
+        });
+
+        child.on('close', (code) => {
+          if (code !== 0) {
+            const errorMsg = (stderr || stdout || `退出码: ${code}`).toString().trim();
+            log(`备份应用数据失败: ${errorMsg}`, 'red');
+            try {
+              res.writeHead(500);
+              res.end(JSON.stringify({ success: false, error: errorMsg }));
+            } catch (_) {}
+            return;
+          }
+
+          log(`备份应用数据成功: ${appName}`, 'green');
+
+          // 尝试从stdout最后一行解析JSON结果
+          let resultData = {};
+          try {
+            const lines = stdout.trim().split('\n');
+            const lastLine = lines[lines.length - 1];
+            if (lastLine && lastLine.startsWith('{')) {
+              resultData = JSON.parse(lastLine);
+            }
+          } catch (_) {}
+
+          res.writeHead(200);
+          res.end(JSON.stringify({
+            success: true,
+            message: `应用【${appName}】数据备份完成`,
+            appName,
+            appId,
+            outputDir: resultData.outputDir || null,
+            zipPath: resultData.zipPath || null,
+            totalRecords: resultData.totalRecords || 0,
+            totalForms: resultData.totalForms || 0
+          }));
+        });
+      } catch (error) {
+        log(`处理备份请求失败: ${error.message}`, 'red');
+        try {
+          res.writeHead(500);
+          res.end(JSON.stringify({ success: false, error: error.message }));
+        } catch (_) {}
+      }
+    });
+    return;
+  }
+
+  /**
+   * 获取所有应用的同步状态
+   * GET /app-sync-status
+   */
+  if (parsedUrl.pathname === '/app-sync-status') {
+    try {
+      const orgInfoPath = path.join(process.cwd(), '组织及应用信息.md');
+      if (!fs.existsSync(orgInfoPath)) {
+        res.writeHead(404);
+        res.end(JSON.stringify({ success: false, error: '组织及应用信息.md 不存在' }));
+        return;
+      }
+
+      const content = fs.readFileSync(orgInfoPath, 'utf-8');
+      const apps = [];
+      const lines = content.split('\n');
+      let inAppTable = false;
+      for (const line of lines) {
+        const trimmed = line.trim();
+        if (trimmed.includes('应用名称') && trimmed.includes('应用ID')) {
+          inAppTable = true;
+          continue;
+        }
+        if (inAppTable) {
+          if (trimmed.startsWith('|') && !trimmed.startsWith('|--') && !trimmed.startsWith('| ---')) {
+            const cells = trimmed.split('|').map(c => c.trim()).filter(c => c);
+            if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+              const appName = cells[1];
+              const appId = unescapeMarkdown(cells[2]);
+              const appDir = path.join(process.cwd(), appName);
+              const configPath = path.join(appDir, CONFIG_FILE);
+              const prototypePath = path.join(appDir, '01需求梳理', '原型页面', 'index.html');
+              const isSynced = fs.existsSync(configPath);
+              const hasPrototype = fs.existsSync(prototypePath);
+
+              // 读取表单数量
+              let formCount = 0;
+              if (isSynced) {
+                try {
+                  const config = readSystemConfig(appDir);
+                  if (config && config.forms) formCount = config.forms.length;
+                } catch (_) {}
+              }
+
+              apps.push({
+                name: appName,
+                appId: appId,
+                synced: isSynced,
+                hasPrototype: hasPrototype,
+                formCount,
+                prototypeUrl: hasPrototype ? `http://127.0.0.1:8080/${encodeURIComponent(appName)}/01需求梳理/原型页面/index.html` : null
+              });
+            }
+          } else if (!trimmed.startsWith('|')) {
+            inAppTable = false;
+          }
+        }
+      }
+
+      res.writeHead(200);
+      res.end(JSON.stringify({
+        success: true,
+        apps,
+        totalApps: apps.length,
+        syncedApps: apps.filter(a => a.synced).length
+      }));
+    } catch (error) {
+      log(`获取同步状态失败: ${error.message}`, 'red');
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+    return;
+  }
+
+  // ========== 新增 API 端点 (v2.4.0) ==========
+
+  /**
+   * POST /sync-config - 同步应用配置
+   * Body: { appName, appId }
+   */
+  if (parsedUrl.pathname === '/sync-config' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appName, appId } = data;
+        if (!appName || !appId) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少 appName 或 appId 参数' }));
+          return;
+        }
+        const projectDir = path.join(PROJECT_ROOT, appName);
+        const result = await runScript(SCRIPTS.configSync, [projectDir, appId, appName], 120000); // 2分钟
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
+  /**
+   * POST /sync-schema - 同步表单Schema
+   * Body: { appId, formUuid, formName, appName }
+   */
+  if (parsedUrl.pathname === '/sync-schema' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appId, formUuid, formName, appName } = data;
+        if (!appId || !formUuid || !formName || !appName) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少必要参数 (appId, formUuid, formName, appName)' }));
+          return;
+        }
+        const localJsonPath = path.join(PROJECT_ROOT, appName, '02基础信息', formName, formName + '.json');
+        const result = await runScript(SCRIPTS.schemaSync, [appId, formUuid, localJsonPath]);
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
+  /**
+   * POST /sync-rules - 同步业务规则
+   * Body: { appId, appName }
+   */
+  if (parsedUrl.pathname === '/sync-rules' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appId, appName } = data;
+        if (!appId || !appName) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少 appId 或 appName 参数' }));
+          return;
+        }
+        const outputDir = path.join(PROJECT_ROOT, appName);
+        const result = await runScript(SCRIPTS.ruleSync, ['--appId', appId, '--output', outputDir]);
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
+  /**
+   * POST /project-sync - 一站式同步
+   * Body: { appId, appName }
+   */
+  if (parsedUrl.pathname === '/project-sync' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appId, appName } = data;
+        if (!appId || !appName) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少 appId 或 appName 参数' }));
+          return;
+        }
+        const outputDir = path.join(PROJECT_ROOT, appName);
+        const result = await runScript(SCRIPTS.projectSync, ['--appId', appId, '--output', outputDir], 300000); // 5分钟
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
+  /**
+   * POST /clean-data - 清空表单数据
+   * Body: { appId, mode: 'all'|'form', formUuid, appName }
+   */
+  if (parsedUrl.pathname === '/clean-data' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appId, mode, formUuid, appName } = data;
+        if (!appId || !mode) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少 appId 或 mode 参数' }));
+          return;
+        }
+        let args;
+        if (mode === 'all') {
+          args = [appId, '--all'];
+          if (appName) args.push('--appName', appName);
+        } else if (mode === 'form') {
+          if (!formUuid) {
+            res.writeHead(400);
+            res.end(JSON.stringify({ success: false, error: 'form 模式下缺少 formUuid 参数' }));
+            return;
+          }
+          args = [appId, '--form', formUuid];
+          if (appName) args.push('--appName', appName);
+        } else {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: 'mode 必须为 all 或 form' }));
+          return;
+        }
+        const result = await runScript(SCRIPTS.dataClean, args, 300000); // 5分钟超时
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
+  /**
+   * POST /generate-system-map - 生成系统图谱
+   * Body: { appName }
+   */
+  if (parsedUrl.pathname === '/generate-system-map' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appName } = data;
+        if (!appName) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少 appName 参数' }));
+          return;
+        }
+        const configPath = path.join(PROJECT_ROOT, appName, '系统配置清单.md');
+        if (!fs.existsSync(configPath)) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '系统配置清单.md 不存在: ' + configPath }));
+          return;
+        }
+        const outputDir = path.join(PROJECT_ROOT, appName, '系统功能图谱');
+        const result = await runScript(SCRIPTS.systemMap, [configPath, outputDir]);
+
+        // 扫描输出目录，返回生成的图谱文件列表
+        const files = [];
+        if (fs.existsSync(outputDir)) {
+          const entries = fs.readdirSync(outputDir, { withFileTypes: true });
+          for (const entry of entries) {
+            if (entry.isFile()) {
+              files.push(entry.name);
+            }
+          }
+        }
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result, files }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
+  /**
+   * POST /form-settings - 表单设置
+   * Body: { appId, formUuid, action, options }
+   * action: 'get-settings'|'set-title'|'list-fields'|'set-restart'|'set-permission'
+   */
+  if (parsedUrl.pathname === '/form-settings' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appId, formUuid, action, options } = data;
+        if (!appId || !formUuid || !action) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少 appId, formUuid 或 action 参数' }));
+          return;
+        }
+        const validActions = ['get-settings', 'set-title', 'list-fields', 'set-restart', 'set-permission'];
+        if (!validActions.includes(action)) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: `action 必须为: ${validActions.join(', ')}` }));
+          return;
+        }
+        const args = [action, '--app', appId, '--form', formUuid];
+        // 根据 action 和 options 构建额外参数
+        if (options) {
+          if (options.title) args.push('--title', options.title);
+          if (options.field) args.push('--field', options.field);
+          if (options.restart !== undefined) args.push('--restart', String(options.restart));
+          if (options.permission) args.push('--permission', options.permission);
+        }
+        const result = await runScript(SCRIPTS.formSettings, args);
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
+  /**
+   * POST /flow-settings - 流程设置
+   * Body: { appId, formUuid, action, options }
+   * action: 'list-flow-forms'|'get-settings'|'set-auto-approval'
+   */
+  if (parsedUrl.pathname === '/flow-settings' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { appId, formUuid, action, options } = data;
+        if (!appId || !action) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少 appId 或 action 参数' }));
+          return;
+        }
+        const validActions = ['list-flow-forms', 'get-settings', 'set-auto-approval'];
+        if (!validActions.includes(action)) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: `action 必须为: ${validActions.join(', ')}` }));
+          return;
+        }
+        // list-flow-forms 只需要 appId
+        const args = [action, '--app', appId];
+        if (formUuid) args.push('--form', formUuid);
+        // 根据 options 构建额外参数
+        if (options) {
+          if (options.autoApproval !== undefined) args.push('--auto-approval', String(options.autoApproval));
+        }
+        const result = await runScript(SCRIPTS.flowSettings, args);
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
+  /**
+   * GET /app-forms - 获取应用的表单列表（从本地系统配置清单读取）
+   * Query: appName (应用名称)
+   */
+  if (parsedUrl.pathname === '/app-forms' && req.method === 'GET') {
+    try {
+      const appName = parsedUrl.query && parsedUrl.query.appName;
+      if (!appName) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ success: false, error: '缺少 appName 参数' }));
+        return;
+      }
+      const configPath = path.join(PROJECT_ROOT, appName, '系统配置清单.md');
+      if (!fs.existsSync(configPath)) {
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, forms: [], message: '未找到系统配置清单，请先同步应用' }));
+        return;
+      }
+      const content = fs.readFileSync(configPath, 'utf-8');
+      // 解析表单列表：匹配 | 序号 | 表单名称 | FORM-xxx | ... | 格式的行
+      const forms = [];
+      const lines = content.split('\n');
+      for (const line of lines) {
+        // 匹配包含 FORM-xxx 的表格行
+        const formMatch = line.match(/\|\s*\d+\s*\|\s*(.+?)\s*\|\s*(FORM-[\w-]+)\s*\|/);
+        if (formMatch && formMatch[2] && formMatch[2].startsWith('FORM-')) {
+          forms.push({ name: formMatch[1].trim(), formUuid: formMatch[2] });
+        }
+      }
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true, forms }));
+    } catch (error) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+    return;
+  }
+
+  /**
+   * GET /local-files - 读取本地文件内容
+   * Query: file (相对路径)
+   * 只允许读取 .md, .json, .js 文件，路径不能包含 '..'
+   */
+  if (parsedUrl.pathname === '/local-files' && req.method === 'GET') {
+    try {
+      const filePath = parsedUrl.query && parsedUrl.query.file;
+      if (!filePath) {
+        res.writeHead(400);
+        res.end(JSON.stringify({ success: false, error: '缺少 file 参数' }));
+        return;
+      }
+      // 安全检查：路径不能包含 '..'
+      if (filePath.includes('..')) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ success: false, error: '路径不允许包含 ..' }));
+        return;
+      }
+      // 只允许读取 .md, .json, .js 文件
+      const ext = path.extname(filePath).toLowerCase();
+      if (!['.md', '.json', '.js'].includes(ext)) {
+        res.writeHead(403);
+        res.end(JSON.stringify({ success: false, error: '只允许读取 .md, .json, .js 文件' }));
+        return;
+      }
+      const fullPath = path.join(PROJECT_ROOT, filePath);
+      if (!fs.existsSync(fullPath)) {
+        res.writeHead(404);
+        res.end(JSON.stringify({ success: false, error: '文件不存在' }));
+        return;
+      }
+      const content = fs.readFileSync(fullPath, 'utf-8');
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true, data: content }));
+    } catch (error) {
+      res.writeHead(500);
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+    return;
+  }
+
+  /**
+   * POST /create-project - 创建新项目
+   * Body: { projectName: "xxx" }
+   */
+  if (parsedUrl.pathname === '/create-project' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk.toString(); });
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        const { projectName } = data;
+        if (!projectName) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ success: false, error: '缺少 projectName 参数' }));
+          return;
+        }
+        if (!fs.existsSync(SCRIPTS.projectCreator)) {
+          res.writeHead(500);
+          res.end(JSON.stringify({ success: false, error: 'project-creator 脚本不存在' }));
+          return;
+        }
+        // 直接 require 调用，避免 Windows spawn 中文编码问题
+        const { createProject } = require(SCRIPTS.projectCreator);
+        const result = createProject(projectName);
+        // 将新应用注册到组织信息
+        addAppToOrgConfig(projectName, '待创建');
+        res.writeHead(200);
+        res.end(JSON.stringify({ success: true, data: result }));
+      } catch (error) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+    return;
+  }
+
   // 404
   res.writeHead(404);
   res.end(JSON.stringify({ success: false, error: '接口不存在' }));
@@ -999,10 +1903,24 @@ server.listen(PORT, () => {
   log('='.repeat(60), 'green');
   log(`服务地址: http://localhost:${PORT}`, 'cyan');
   log('可用接口:', 'cyan');
-  log(`  - GET  http://localhost:${PORT}/health    健康检查`, 'cyan');
-  log(`  - GET  http://localhost:${PORT}/app-info  应用信息`, 'cyan');
-  log(`  - POST http://localhost:${PORT}/sync-app  同步应用（只同步新增表单）`, 'cyan');
-  log(`  - POST http://localhost:${PORT}/sync-form 同步单个表单`, 'cyan');
+  log(`  - GET  http://localhost:${PORT}/health            健康检查`, 'cyan');
+  log(`  - GET  http://localhost:${PORT}/app-info          应用信息`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/sync-app          同步应用（只同步新增表单）`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/sync-form         同步单个表单`, 'cyan');
+  log(`  - GET  http://localhost:${PORT}/org-info          组织信息及应用列表`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/sync-app-to-local 同步应用到本地`, 'cyan');
+  log(`  - GET  http://localhost:${PORT}/app-sync-status   应用同步状态`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/sync-config       同步应用配置`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/sync-schema       同步表单Schema`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/sync-rules        同步业务规则`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/project-sync      一站式同步`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/clean-data        清空表单数据`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/backup-app-data   备份应用数据`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/generate-system-map 生成系统图谱`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/form-settings     表单设置`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/flow-settings     流程设置`, 'cyan');
+  log(`  - GET  http://localhost:${PORT}/local-files       读取本地文件`, 'cyan');
+  log(`  - POST http://localhost:${PORT}/create-project    创建新项目`, 'cyan');
   log('='.repeat(60), 'green');
   log('按 Ctrl+C 停止服务', 'yellow');
   log('='.repeat(60), 'green');

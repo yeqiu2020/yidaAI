@@ -247,6 +247,16 @@ const results = await submitBatch({
 ---
 
 ## 版本
+### v2.3.0 (2026-06-05)
+- 修复：基础字段（TextField、NumberField）数据为空的问题
+  - context-data-generator.js 新增 `generateDataByType` 函数，根据字段类型生成数据
+  - 支持 RadioField、CheckboxField、SelectField、CascadeSelectField、AddressField、DateField、NumberField、TextareaField、TextField 等类型
+  - yida-submitter.js 的 extractFieldMapping 现在提取 dataSource 信息（用于单选/多选字段）
+  - NumberField 默认返回 1-1000 的随机数，确保数值字段一定有值
+  - TextField 兜底逻辑增强，确保任何字段名都能生成有效数据
+  - 修复兜底逻辑依赖行业数据可能为空的问题
+- 新增：CLI 命令行工具 cli.js，支持直接命令行调用批量提交功能
+
 ### v2.2.1 (2026-05-17)
 - 优化：数据生成器全面消除"测试数据"等明显假数据
   - data-generator.js 中关联表单、图片、附件字段默认值改为真实业务内容

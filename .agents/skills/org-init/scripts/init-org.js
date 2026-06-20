@@ -1,5 +1,5 @@
 /**
- * 组织初始化脚本 - V1.3.2
+ * 组织初始化脚本 - V1.4.0
  * 自动从宜搭平台获取应用列表并更新到配置文件
  * 修复：配合 login-manager v1.0.11，修复页面跳转后登录流程提前退出的问题
  * 修复：文件不存在时自动创建默认配置文件
@@ -16,7 +16,8 @@
  * 重大更新：使用 API 接口 /query/app/getAppList.json 直接获取应用列表，无需逐个打开浏览器页面
  * 修复：尝试多个 API 端点获取应用列表，提高成功率
  * 修复：添加必要的请求头（Referer、User-Agent等），使API调用成功
- * 修复：添加 UTF-8 编码支持，解决 Windows 终端中文乱码
+ * 修复：添加 UTF-8 编码支持，解决 Windows 绫端中文乱码
+ * 新增：初始化完成后自动启动HTTP服务并打开门户页面
  */
 
 const { chromium } = require('playwright');
@@ -97,6 +98,7 @@ function createDefaultOrgConfigFile(loginState) {
 | 完整域名 | ${baseUrl} |
 | corpId | ${corpId} |
 | corp名称 | ${corpName} |
+| 本地门户 | [http://127.0.0.1:8080/本地操作页面/index.html](http://127.0.0.1:8080/本地操作页面/index.html) |
 
 ---
 
@@ -645,6 +647,169 @@ async function fetchAppsViaBrowser(loginState) {
   }
 }
 
+/**
+ * 确保门户页面文件存在
+ * 使用固定的本地操作页面(index.html)作为组织主页
+ */
+function ensurePortalPage() {
+  const rootIndex = path.join(PROJECT_ROOT, 'index.html');
+  const localPageDir = path.join(PROJECT_ROOT, '本地操作页面');
+  const localPageIndex = path.join(localPageDir, 'index.html');
+
+  // 检查根目录 index.html 是否已存在
+  if (fs.existsSync(rootIndex)) {
+    console.log('  ✅ 组织门户首页已存在');
+    return;
+  }
+
+  // 检查本地操作页面是否存在
+  if (!fs.existsSync(localPageIndex)) {
+    console.log('  ⚠️ 本地操作页面目录不存在，将创建简易首页');
+  }
+
+  // 创建根目录 index.html（门户首页 -> 指向本地操作页面）
+  console.log('  📁 创建组织门户首页...');
+  const indexHtml = `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="refresh" content="0; url=本地操作页面/index.html">
+  <title>宜搭AI助手 - 组织管理门户</title>
+  <link rel="stylesheet" href="本地操作页面/css/style.css">
+</head>
+<body>
+  <div style="display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:#f5f7fa;">
+    <div style="text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+      <h2 style="color:#1677ff;margin-bottom:12px;">&#127970; 宜搭组织管理门户</h2>
+      <p style="color:#666;font-size:14px;">正在跳转至组织门户页面...</p>
+      <p style="color:#666;font-size:14px;">如果未自动跳转，请<a href="本地操作页面/index.html" style="color:#1677ff;">点击此处</a></p>
+    </div>
+  </div>
+</body>
+</html>`;
+  fs.writeFileSync(rootIndex, indexHtml, 'utf-8');
+  console.log('  ✅ 组织门户首页已创建（指向本地操作页面）');
+}
+
+/**
+ * 确保门户页面资源文件存在（CSS/JS）
+ * 门户页面已废弃，使用固定的本地操作页面代替
+ */
+function ensurePortalResources(portalDir) {
+  // 门户页面已废弃，不再生成
+  // 请使用固定的 本地操作页面 目录
+  console.log('  ℹ️ 门户页面已废弃，使用本地操作页面代替');
+}
+
+/**
+ * 递归复制目录（已废弃，保持兼容）
+ */
+function copyDirRecursive(src, dest) {
+  // 已废弃，不再使用
+}
+
+/**
+ * 启动HTTP服务并打开门户页面
+ */
+async function startServicesAndOpenPortal() {
+  const { spawn } = require('child_process');
+
+  const serverManagerScript = path.join(
+    PROJECT_ROOT, '.agents', 'skills', 'yida-server-manager', 'scripts', 'server_manager.js'
+  );
+
+  if (!fs.existsSync(serverManagerScript)) {
+    console.log('  ⚠️ 服务管理器脚本不存在，跳过自动启动');
+    console.log('  💡 请手动运行: node .agents/skills/yida-server-manager/scripts/server_manager.js start');
+    return;
+  }
+
+  // 检查服务是否已经在运行
+  const httpRunning = await checkHttpServiceRunning();
+  if (httpRunning) {
+    console.log('  ✅ HTTP 服务已在运行中');
+    openPortalInBrowser();
+    return;
+  }
+
+  console.log('  🔄 正在启动 HTTP 服务和同步服务...');
+
+  // 启动服务管理器
+  const child = spawn(process.execPath, [serverManagerScript, 'start'], {
+    cwd: PROJECT_ROOT,
+    detached: true,
+    stdio: ['ignore', 'ignore', 'ignore'],
+    windowsHide: true
+  });
+  child.unref();
+
+  // 等待服务就绪
+  console.log('  ⏳ 等待服务启动...');
+  let retries = 0;
+  const maxRetries = 15;
+  while (retries < maxRetries) {
+    await new Promise(r => setTimeout(r, 1000));
+    retries++;
+    const running = await checkHttpServiceRunning();
+    if (running) {
+      console.log(`  ✅ 服务已就绪 (第 ${retries} 秒)`);
+      openPortalInBrowser();
+      return;
+    }
+    if (retries % 3 === 0) {
+      console.log(`  ⏳ 等待中... (${retries}/${maxRetries})`);
+    }
+  }
+
+  console.log('  ⚠️ 服务启动超时，请手动启动');
+  console.log('  💡 运行: node .agents/skills/yida-server-manager/scripts/server_manager.js start');
+}
+
+/**
+ * 检查 HTTP 服务是否在运行
+ */
+function checkHttpServiceRunning() {
+  return new Promise((resolve) => {
+    const req = http.get('http://127.0.0.1:8080/', { timeout: 2000 }, (res) => {
+      resolve(true);
+      req.destroy();
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
+/**
+ * 在浏览器中打开门户页面
+ */
+function openPortalInBrowser() {
+  const portalUrl = 'http://127.0.0.1:8080/';
+  console.log('\n' + '='.repeat(60));
+  console.log('🎉 门户页面已就绪！');
+  console.log('  📍 访问地址: ' + portalUrl);
+  console.log('='.repeat(60));
+
+  // 尝试在浏览器中打开
+  try {
+    const { exec } = require('child_process');
+    const command = process.platform === 'win32'
+      ? `start "" "${portalUrl}"`
+      : process.platform === 'darwin'
+        ? `open "${portalUrl}"`
+        : `xdg-open "${portalUrl}"`;
+    exec(command, (error) => {
+      if (error) {
+        console.log('  💡 请手动在浏览器中打开上述地址');
+      } else {
+        console.log('  ✅ 已在浏览器中打开门户页面');
+      }
+    });
+  } catch (_) {
+    console.log('  💡 请手动在浏览器中打开上述地址');
+  }
+}
+
 async function main() {
   console.log('='.repeat(60));
   console.log('宜搭组织初始化工具');
@@ -725,7 +890,59 @@ async function main() {
   console.log('  - 成功更新:', updated, '个');
   console.log('  - 未匹配:', notFound, '个');
   console.log('  - 配置文件:', CONFIG.orgConfigFile);
-  console.log('='.repeat(60));
+
+  // 第四步：确保门户页面存在
+  console.log('\n🌐 第四步：检查门户页面...');
+  ensurePortalPage();
+
+  // 第五步：启动HTTP服务并打开门户页面
+  console.log('\n🚀 第五步：启动HTTP服务...');
+  await startServicesAndOpenPortal();
+
+  // 第六步：注册开机自启
+  console.log('\n🔌 第六步：注册开机自启...');
+  registerAutoStart();
+}
+
+/**
+ * 注册开机自启（仅在未注册时执行）
+ */
+function registerAutoStart() {
+  const startupFolder = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup');
+  const shortcutPath = path.join(startupFolder, '宜搭AI助手-启动服务.bat');
+
+  if (fs.existsSync(shortcutPath)) {
+    console.log('  ✅ 开机自启已注册，跳过');
+    return;
+  }
+
+  const batPath = path.join(PROJECT_ROOT, '启动宜搭服务.bat');
+  if (!fs.existsSync(batPath)) {
+    console.log('  ⚠️ 未找到 启动宜搭服务.bat，跳过注册');
+    return;
+  }
+
+  const startupScript = `@echo off
+chcp 65001 >nul 2>&1
+cd /d "${PROJECT_ROOT}"
+start /min "" node ".agents\\skills\\yida-server-manager\\scripts\\server_manager.js" start
+`;
+
+  try {
+    // 使用 GBK 编码写入 bat 文件（Windows cmd 默认使用 GBK）
+    try {
+      const iconv = require('iconv-lite');
+      fs.writeFileSync(shortcutPath, iconv.encode(startupScript, 'gbk'));
+    } catch (_) {
+      fs.writeFileSync(shortcutPath, startupScript, 'utf-8');
+    }
+    console.log('  ✅ 已注册开机自启');
+    console.log('     下次开机将自动启动宜搭服务');
+    console.log('     取消自启: 在对话框输入 "取消宜搭服务开机自启"');
+  } catch (error) {
+    console.log('  ⚠️ 注册开机自启失败:', error.message);
+    console.log('     您可以稍后手动注册: 在对话框输入 "注册宜搭服务开机自启"');
+  }
 }
 
 main().catch((error) => {

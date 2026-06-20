@@ -339,13 +339,109 @@ function generateFieldData(fieldName, context = {}) {
   }
 
   // 默认返回随机文本（避免明显假数据）
+  // 确保即使行业数据为空也能返回有效值
+  const services = industryData.services || ['业务咨询', '项目服务', '客户服务'];
+  const projectTypes = industryData.projectTypes || ['项目', '业务', '服务'];
   const fallbackTexts = [
-    `${city}${randomPick(industryData.services)}`,
-    `${randomPick(industryData.projectTypes)}`,
+    `${city}${randomPick(services)}`,
+    `${randomPick(projectTypes)}`,
     `${randomPick(COMMON_DATA.documentStatuses)}`,
-    `${randomPick(['待确认', '已核实', '需补充', '已完成'])}`
+    `${randomPick(['待确认', '已核实', '需补充', '已完成'])}`,
+    `${city}${randomPick(['业务数据', '项目信息', '客户资料'])}${randomNumber(1, 999)}`
   ];
   return randomPick(fallbackTexts);
+}
+
+/**
+ * 根据字段类型生成数据
+ * @param {string} componentName - 组件类型
+ * @param {string} label - 字段标签
+ * @param {Object} fieldInfo - 字段完整信息
+ * @param {Object} context - 上下文
+ * @returns {*} 生成的数据
+ */
+function generateDataByType(componentName, label, fieldInfo, context = {}) {
+  const city = context.city || '南昌';
+  const cityData = CITY_DATA[city] || CITY_DATA['南昌'];
+  
+  switch (componentName) {
+    case 'RadioField':
+      // 单选框 - 从数据源中随机选择一个
+      if (fieldInfo.dataSource && Array.isArray(fieldInfo.dataSource) && fieldInfo.dataSource.length > 0) {
+        const option = randomPick(fieldInfo.dataSource);
+        return option.value || option.text || option.label;
+      }
+      // 根据字段名生成
+      return generateFieldData(label, context);
+      
+    case 'CheckboxField':
+      // 多选框 - 随机选择1-3个选项
+      if (fieldInfo.dataSource && Array.isArray(fieldInfo.dataSource) && fieldInfo.dataSource.length > 0) {
+        const count = randomNumber(1, Math.min(3, fieldInfo.dataSource.length));
+        const shuffled = [...fieldInfo.dataSource].sort(() => 0.5 - Math.random());
+        return shuffled.slice(0, count).map(opt => opt.value || opt.text || opt.label);
+      }
+      return [generateFieldData(label, context)];
+      
+    case 'SelectField':
+      // 下拉选择 - 从数据源中随机选择一个
+      if (fieldInfo.dataSource && Array.isArray(fieldInfo.dataSource) && fieldInfo.dataSource.length > 0) {
+        const option = randomPick(fieldInfo.dataSource);
+        return option.value || option.text || option.label;
+      }
+      return generateFieldData(label, context);
+      
+    case 'CascadeSelectField':
+      // 级联选择 - 返回一个层级路径
+      return [cityData.province, city, randomPick(cityData.districts)];
+      
+    case 'AddressField':
+      // 地址选择 - 返回完整地址数组
+      return [cityData.province, city, randomPick(cityData.districts), randomPick(cityData.addresses)];
+      
+    case 'DateField':
+      // 日期字段
+      if (label.includes('预计') || label.includes('计划')) {
+        return futureDate(randomNumber(30, 180));
+      }
+      if (label.includes('完成') || label.includes('结束')) {
+        return recentDate(randomNumber(30, 365));
+      }
+      return recentDate(randomNumber(1, 90));
+      
+    case 'NumberField':
+      // 数字字段
+      if (label.includes('金额') || label.includes('费用') || label.includes('价格') || label.includes('预算')) {
+        return randomNumber(100, 100000);
+      }
+      if (label.includes('数量') || label.includes('库存') || label.includes('个数')) {
+        return randomNumber(1, 1000);
+      }
+      // 默认返回1-1000的随机数，确保数值字段一定有值
+      return randomNumber(1, 1000);
+      
+    case 'TextareaField':
+      // 多行文本
+      const remarks = [
+        `${city}${randomPick(['业务咨询', '项目跟进', '客户服务'])}，需尽快处理`,
+        `客户要求加急，请安排人员跟进`,
+        `该项目周期约${randomNumber(1, 6)}个月`,
+        `资料已收齐，待安排后续工作`,
+        `委托方要求加急，预计${randomNumber(3, 15)}个工作日内完成`,
+        `需协调相关部门配合，请提前沟通`
+      ];
+      return randomPick(remarks);
+      
+    case 'TextField':
+    default:
+      // 默认使用字段名匹配生成
+      const result = generateFieldData(label, context);
+      // 确保返回有效值，不为空
+      if (result === '' || result === null || result === undefined) {
+        return `${city}${randomPick(['业务数据', '项目信息', '客户资料'])}${randomNumber(1, 999)}`;
+      }
+      return result;
+  }
 }
 
 /**
@@ -392,7 +488,7 @@ function generateFormData(fieldMapping, context = {}) {
         for (const [colLabel, colFieldInfo] of Object.entries(fieldMapping)) {
           if (colFieldInfo.isSubformColumn && colFieldInfo.parentFieldId === fieldInfo.fieldId) {
             const colName = colFieldInfo.label;
-            row[colName] = generateFieldData(colName, context);
+            row[colName] = generateDataByType(colFieldInfo.componentName, colName, colFieldInfo, context);
           }
         }
         
@@ -412,7 +508,8 @@ function generateFormData(fieldMapping, context = {}) {
       continue;
     }
     
-    data[label] = generateFieldData(label, context);
+    // 根据字段类型生成数据
+    data[label] = generateDataByType(fieldInfo.componentName, label, fieldInfo, context);
   }
   
   return data;
@@ -472,6 +569,7 @@ function generateSubformData(rowCount = 3, context = {}) {
 
 module.exports = {
   generateFieldData,
+  generateDataByType,
   generateFormData,
   generateMultipleData,
   generateSubformData,

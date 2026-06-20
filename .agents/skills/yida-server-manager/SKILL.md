@@ -1,4 +1,4 @@
-﻿---
+---
 name: yida-server-manager
 description: 宜搭服务管理器，一键启动和管理宜搭开发所需的本地服务。当用户需要启动宜搭原型页面访问服务、启动同步配置服务、检查服务状态、或遇到"同步服务未启动"、"同步配置按钮不能用"、"无法访问原型页面"等问题时触发此skill。适用于所有宜搭应用的原型页面预览和配置同步场景。关键词：启动宜搭服务、启动同步服务、启动HTTP服务、服务没启动、同步配置失败、启动原型页面服务
 ---
@@ -59,7 +59,21 @@ node .agents/skills/yida-server-manager/scripts/server_manager.js restart
 - 服务是否已在运行
 - 是否有错误发生
 
-### 第4步：向用户报告结果
+### 第4步：打开首页
+
+服务启动成功后，**必须执行以下操作**：
+
+1. **调用 OpenPreview 工具打开首页**：
+   - 使用 OpenPreview 工具，preview_url 设为 `http://127.0.0.1:8080/本地操作页面/index.html`
+   - command_id 设为启动服务命令的 ID
+2. **处理 OpenPreview 可能的报错**：
+   - OpenPreview 可能返回 `net::ERR_ABORTED` 错误——这是 Trae IDE 内置浏览器预览机制的限制，不代表服务未启动
+   - 如果遇到此错误，**忽略错误**，直接告知用户访问地址即可
+3. **告知用户访问地址**：
+   - 如果 OpenPreview 成功 → 告知用户页面已打开
+   - 如果 OpenPreview 报错 → 告知用户直接在浏览器中访问 `http://127.0.0.1:8080/本地操作页面/index.html`
+
+### 第5步：向用户报告结果
 
 使用结构化格式展示结果：
 
@@ -75,7 +89,7 @@ node .agents/skills/yida-server-manager/scripts/server_manager.js restart
 
 ## 访问地址
 
-- **应用首页**: http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/index.html
+- **本地操作页面**: http://127.0.0.1:8080/本地操作页面/index.html
 
 ## 使用说明
 
@@ -87,7 +101,7 @@ node .agents/skills/yida-server-manager/scripts/server_manager.js restart
 ## 三、输出规范
 
 1. **必须展示服务状态表格**：包含服务名称、端口、运行状态
-2. **必须提供访问地址**：给出可点击的 http://127.0.0.1:8080 链接
+2. **必须提供访问地址**：给出可点击的 `http://127.0.0.1:8080/本地操作页面/index.html` 链接
 3. **必须说明使用方式**：提醒用户不要使用 file:// 打开页面
 4. **错误时必须说明原因**：如果启动失败，说明具体原因和解决方法
 
@@ -167,15 +181,14 @@ node .agents/skills/yida-server-manager/scripts/server_manager.js restart
 
 ## 七、版本更新记录
 
+### v2.3.0 (2026-06-11)
+- **新增第4步**：服务启动后必须调用OpenPreview打开首页
+- **处理OpenPreview报错**：明确`net::ERR_ABORTED`的处理方式，忽略错误
+- **修复**：避免启动后忘记打开首页的问题
+
 ### v2.2.0 (2026-05-09)
 - HTTP服务器添加缓存禁用：http-server启动命令添加`-c-1`标志
 - 内置备用服务器添加`Cache-Control: no-cache, no-store, must-revalidate`响应头
-
-### v2.1.0 (2026-05-05)
-- **新增步骤0**：启动前自动清理端口占用，先关闭旧服务再启动新服务
-- 确保每次启动的都是当前项目的服务，避免残留旧进程
-- 二次确认机制：第一次终止后再次检测，若仍占用则强制终止
-- 简化`startHttpService`和`startSyncService`，移除"已在运行"的跳过逻辑
 
 ## 八、快速参考
 
@@ -198,6 +211,7 @@ node .agents/skills/yida-server-manager/scripts/server_manager.js restart
 ### 访问路径示例
 
 ```
+http://127.0.0.1:8080/本地操作页面/index.html
 http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/index.html
 http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/templates/list.html?form={表单名}
 ```
