@@ -1,6 +1,6 @@
-﻿---
-name: "yida-report"
-description: "宜搭报表制作技能。通过自包含的报表引擎直接调用宜搭API创建原生报表页面，支持指标卡、柱状图、折线图、饼图、表格、透视表、仪表盘、漏斗图、组合图等16种图表组件，支持筛选器联动配置。当用户说'创建报表'、'制作报表'、'数据报表'、'统计报表'、'数据看板'、'报表设计'时触发此skill。关键词：报表、统计图表、数据报表、报表创建、报表制作、报表设计"
+---
+name: "report"
+description: "宜搭报表制作技能。通过自包含的报表引擎直接调用宜搭API创建原生报表页面，支持指标卡、柱状图、折线图、饼图、表格、透视表、仪表盘、漏斗图、组合图等16种图表组件，支持筛选器联动配置。支持使用表单formUuid转换的cubeCode或数据集（视图表/数据准备）的cubeCode作为数据源。当用户说'创建报表'、'制作报表'、'数据报表'、'统计报表'、'数据看板'、'报表设计'时触发此skill。关键词：报表、统计图表、数据报表、报表创建、报表制作、报表设计、数据集"
 ---
 
 ## 🔴 硬规则（绝对不可违反）
@@ -14,10 +14,16 @@ description: "宜搭报表制作技能。通过自包含的报表引擎直接调
 
 ### 专属硬规则
 1. **报表公式与表单公式完全不同不能混用** — 报表使用聚合函数，表单使用字段函数
-2. **cubeCode从formUuid转换** — cubeCode = formUuid.replace(/-/g, '')
-3. **图表类型必须丰富多样** — 每张报表至少包含3种不同类型的图表（指标卡+可视化图表+明细表格），禁止只使用表格和指标卡
-4. **同一数据源的指标卡必须合并** — 同一cubeCode的多个指标合并到1个指标卡的kpi数组中，不同数据源才分多个指标卡
-5. **报表配置文件必须保存到应用目录** — 保存到 `{应用名}/06数据报表/{报表名称}.json`，严禁保存到 temp-file，后期需要复用
+2. **cubeCode来源有两种** — ① 从formUuid转换：cubeCode = formUuid.replace(/-/g, '')；② 从数据集获取：视图表(VIEW_xxx)或数据准备(PREP_xxx)，必须从创建成功的数据集中获取，严禁编造
+3. **🔴 视图表报表必须使用 measureCode** — 视图表（`vm_`/`VIEW_` cubeCode）在报表中必须使用 `measureCode`（如 `field_cfc8ba4d3f`）作为 fieldCode，而不是原始表单字段名 `columnName`（如 `textField_4c11h67t`）。报表引擎已自动处理此转换（Step 2.5），配置文件中可继续使用原始字段名
+4. **🔴 报表创建后必须验证数据查询** — 报表创建成功后，必须立即用 Playwright 验证所有图表的 getDataAsync 是否成功。如果验证失败，不允许返回"创建成功"，必须报错并提示用户检查配置
+5. **图表类型必须丰富多样** — 每张报表至少包含3种不同类型的图表（指标卡+可视化图表+明细表格），禁止只使用表格和指标卡
+6. **同一数据源的指标卡必须合并** — 同一cubeCode的多个指标合并到1个指标卡的kpi数组中，不同数据源才分多个指标卡
+7. **报表配置文件必须保存到应用目录** — 保存到 `{应用名}/06数据报表/{报表名称}.json`，严禁保存到 temp-file，后期需要复用
+8. **🔴 多表需求必须先创建数据集** — 当用户需求涉及2个及以上表单时，**必须先**调用 `dataset` skill 创建视图表，禁止先用单表 cubeCode 尝试。判断标准：用户提到"多表"、"关联"、"联合"、"三个表"、"按XX关联"、"合并"、"跨表"等关键词。违反此规则会导致创建出错误的单表报表，后续不得不返工
+9. **🔴 创建报表前必须检查已有数据集** — 多表场景下，必须先读取 `数据集配置.md`，检查是否已有可用的 cubeCode。如果已有且状态为"✅"，直接复用，**禁止重复创建数据集**。只有当已有 cubeCode 状态为"⚠️ 已失效"或不存在时，才调用 `dataset` skill
+10. **🔴 禁止重复创建同名报表配置** — 创建报表前，必须检查 `06数据报表` 目录是否已有同名配置文件。如果已有，**在原文件基础上修改**（规则3），不创建新文件。如果需求不同，使用不同的报表名称
+11. **🔴 报表验证失败后禁止创建新版本** — 当 Playwright 验证失败时，修改原配置文件并重新创建（会生成新 reportId），**禁止创建"v2/v3/v4"等新版本文件**。旧的失败报表应通知用户在宜搭平台删除
 
 ---
 
@@ -43,12 +49,53 @@ description: "宜搭报表制作技能。通过自包含的报表引擎直接调
 
 ## 三、执行流程
 
+### 第0步：前置检查（⚠️ 极其重要·强制，违反硬规则8-11）
+
+#### 0.1 判断单表/多表场景
+
+| 多表关键词（出现任一即为多表） | 单表特征 |
+|-------------------------------|---------|
+| "多表"、"关联"、"联合"、"三个表"、"按XX关联"、"合并"、"跨表" | 只提到一个表单名称 |
+
+- **多表场景** → 必须执行第0.2步检查已有数据集，然后通过 `dataset` skill 创建视图表
+- **单表场景** → 直接使用 formUuid 转换的 cubeCode，跳到第1步
+
+#### 0.2 检查已有数据集（仅多表场景）
+
+1. 读取项目根目录下的 `数据集配置.md`
+2. 在「视图表列表」中查找：主表+关联表+关联字段是否与当前需求匹配
+3. 根据状态决定操作：
+
+| 状态 | 操作 |
+|------|------|
+| `✅ 验证通过` 或 `✅ 报表验证通过` | **直接复用** cubeCode，跳到第1步，禁止调用 dataset skill |
+| `⚠️ 已失效` 或 `⚠️ 待验证` | 调用 `dataset` skill 重新创建视图表 |
+| 不存在匹配记录 | 调用 `dataset` skill 创建新视图表 |
+
+#### 0.3 检查已有报表配置
+
+1. 用 Glob 扫描 `{应用名}/06数据报表/*.json`
+2. 如果已有同名配置文件：
+   - 需求相同 → **在原文件基础上修改**（规则3），不创建新文件
+   - 需求不同 → 使用不同的报表名称（如"XX明细报表"、"XX分析报表"）
+3. 如果没有同名文件 → 正常创建新配置文件
+
+#### 0.4 前置检查清单
+
+- [ ] 已判断单表/多表场景
+- [ ] 多表场景：已检查 `数据集配置.md`，确认是否需要创建新数据集
+- [ ] 已检查 `06数据报表` 目录，确认不重复创建同名配置
+- [ ] 如有同名配置文件，已确认是修改原文件而非新建
+
+---
+
 ### 第1步：需求分析
 
-1. 确认数据源表单（formUuid）
+1. 确认数据源：可以是表单（formUuid转换cubeCode）或数据集（视图表/数据准备的cubeCode）
 2. 确认需要展示的图表类型和数量
 3. 确认筛选需求
 4. 如用户未提供formUuid，先调用 `yida-get-schema` 或 `yida-config-sync` 获取
+5. 如需要使用多表联合数据，先调用 `dataset`（视图表）或 `data-prep`（数据准备）创建数据集
 
 ### 第2步：数据源分析与表单Schema获取
 
@@ -300,10 +347,46 @@ node .agents/skills/yida-report/scripts/create-report.js <appType> "<报表名�
 
 ### 第5步：验证与交付
 
+#### 5.1 检查报表创建结果
 1. 检查报表引擎输出，确认报表创建成功
 2. 记录报表ID（REPORT-xxx）和访问链接
-3. **保留配置文件**（在 `06数据报表/` 目录下，不删除，后期可复用）
-4. 将报表信息更新到项目配置中
+
+#### 5.2 Playwright验证数据查询（⚠️ 极其重要·强制）
+**为什么必须验证**：
+- 历史问题：报表创建成功 ≠ 数据查询成功
+- 根因：视图表必须使用 measureCode 而非 columnName，缺少自动转换时会导致数据查询失败
+- 预防：必须验证 getDataAsync API 是否成功，确保数据能正常显示
+
+**验证步骤**：
+1. 编写 Playwright 验证脚本（参考 `temp-file/verify-report-v2.js`）
+2. 打开报表页面，监听所有 `getDataAsync.json` 响应
+3. 统计成功/失败数量，记录失败详情
+4. 如果有失败，输出错误信息并提示用户检查配置
+
+**验证结果处理**：
+- ✅ 所有图表成功：继续下一步，返回"创建成功"
+- ❌ 有图表失败：立即报错，提示用户检查配置，不允许返回"创建成功"
+
+**验证脚本示例**：
+```javascript
+// 打开报表页面，监听 getDataAsync.json
+page.on('response', async (res) => {
+  if (res.url().includes('getDataAsync.json')) {
+    const result = await res.json();
+    if (result.success) {
+      successCount++;
+    } else {
+      failCount++;
+      console.log(`❌ 失败: ${result.errorMsg}`);
+    }
+  }
+});
+```
+
+#### 5.3 清理与交付
+1. **保留配置文件**（在 `06数据报表/` 目录下，不删除，后期可复用）
+2. 将报表信息更新到项目配置中
+3. 删除临时验证脚本（temp-file 目录）
 
 ---
 
@@ -496,6 +579,8 @@ var url = '/dingtalk/web/' + appType + '/query/formnav/getFormNavigationListByOr
 |-------|---------|
 | `yida-config-sync` | 获取应用ID、表单UUID、字段ID |
 | `yida-get-schema` | 获取表单Schema，提取字段信息 |
+| `dataset` | 创建视图表数据集，获取多表关联的cubeCode |
+| `data-prep` | 创建数据准备数据集，获取ETL处理后的cubeCode |
 | `formula-generator` | 生成报表公式（应用场景：报表公式） |
 | `code-expert` | 生成自定义页面JS代码（ECharts报表） |
 | `yida-data-tester` | 测试报表数据是否正确 |
@@ -504,16 +589,20 @@ var url = '/dingtalk/web/' + appType + '/query/formnav/getFormNavigationListByOr
 
 ## 十、绝对禁止
 
-- ❌ **禁止编造 cubeCode**：必须从 formUuid 转换，不能从组件ID或其他地方编造
+- ❌ **禁止在报表配置中手动填写 measureCode**：报表引擎会自动查询视图表的 measureMapping 并将 columnName 转换为 measureCode（Step 2.5），配置文件中继续使用原始表单字段名即可
+- ❌ **禁止编造 cubeCode**：cubeCode来源有两种——①从formUuid转换（连字符→下划线）；②从数据集获取（VIEW_xxx/PREP_xxx），必须从创建成功的数据集中获取，严禁编造
 - ❌ **禁止前端聚合**：所有聚合统计必须通过报表API由服务端完成
 - ❌ **禁止混用表单公式和报表公式**：两套函数体系完全不同
 - ❌ **禁止忘记 _value 后缀**：SelectField/RadioField/MultiSelectField/CheckboxField 必须加
 - ❌ **禁止拆分DateField**：日期字段直接使用原始fieldCode
 - ❌ **禁止硬编码 prdId**：必须通过 getFormNavigationListByOrder 动态获取
-- ❌ **禁止编造字段ID**：必须从表单Schema中获取真实字段ID
+- ❌ **禁止编造字段ID**：必须从表单Schema或数据集配置中获取真实字段ID
 - ❌ **禁止只使用指标卡+表格**：每张报表至少3种不同图表类型，必须包含可视化图表
 - ❌ **禁止同数据源拆分指标卡**：同一cubeCode的指标必须合并到1个指标卡
 - ❌ **禁止配置文件存到temp-file**：必须保存到 `{应用名}/06数据报表/` 目录
+- ❌ **禁止多表需求先用单表尝试**：涉及2个及以上表单时，必须先创建视图表，禁止先用 FORM_ cubeCode 创建单表报表再返工
+- ❌ **禁止重复创建数据集**：多表场景必须先检查 `数据集配置.md`，复用已有可用 cubeCode
+- ❌ **禁止创建v2/v3/v4等新版本配置文件**：验证失败时修改原配置文件重新创建，不创建新版本文件
 
 ---
 
@@ -521,6 +610,9 @@ var url = '/dingtalk/web/' + appType + '/query/formnav/getFormNavigationListByOr
 
 ### 创建报表前
 
+- [ ] **🔴 已执行第0步前置检查：判断单表/多表场景**
+- [ ] **🔴 多表场景：已检查 `数据集配置.md`，复用已有 cubeCode 或确认需要新建**
+- [ ] **🔴 已检查 `06数据报表` 目录，确认不重复创建同名配置文件**
 - [ ] 已确认数据源表单的 formUuid（从表单JSON或 yida-config-sync 获取）
 - [ ] **已确认数据源是主表/业务表，非关联表/子表（通过get-schema检查字段formula属性）**
 - [ ] 已确认 cubeCode 是从 formUuid 转换而来（连字符→下划线），**非编造**
@@ -536,12 +628,41 @@ var url = '/dingtalk/web/' + appType + '/query/formnav/getFormNavigationListByOr
 - [ ] CLI命令执行成功
 - [ ] 报表ID（REPORT-xxx）已记录
 - [ ] 访问链接已提供
+- [ ] **🔴 Playwright验证通过：所有图表 getDataAsync 成功（如有失败，立即报错）**
 - [ ] **配置文件已保存到 `{应用名}/06数据报表/` 目录（非temp-file）**
 - [ ] 报表信息已更新到项目配置
 
 ---
 
-## 十二、快速参考
+## 十二、问题总结与正确方法（全量复盘）
+
+### 12.1 历次踩过的坑与最终正确方法
+
+| # | 问题描述 | 错误表现 | 根因 | 正确方法 |
+|---|---------|---------|------|--------|
+| 1 | 报表使用FORM_ cubeCode正常，vm_/VIEW_ cubeCode全部失败 | "数据查询异常，请检查报表配置" | 视图表在报表中必须使用`measureCode`而非`columnName` | 报表引擎Step 2.5自动查询measureMapping并转换 |
+| 2 | 误判为报表不支持视图表 | 用FORM_替代vm_创建了报表 | 缺少对measureMapping机制的理解 | ❌ 此结论已推翻，报表完全支持视图表 |
+| 3 | 手动操作UI可以修复报表 | “更改数据集→切换→切回→拖入字段”后生效 | UI拖入字段时自动使用measureCode | 引擎自动化此转换过程 |
+| 4 | selectField等字段需要_value后缀 | 报表数据异常 | selectField/radioField等在FORM_格式中需要_value后缀 | normalizeFieldCode函数自动处理 |
+| 5 | 两个入口文件未同步更新 | create-report.js调用的report-lib没有转换逻辑 | yida-report-engine.js和report-lib/index.js是两个入口 | 两个文件都要同步修改 |
+| 6 | 筛选器字段未转换为measureCode | 筛选器getDataAsync失败 "数据查询异常" | Step 2.5只检查filter.fieldCode，但筛选器配置用valueField.fieldCode | 修复为检查filter.fieldCode \u2016 filter.valueField?.fieldCode \u2016 filter.filterFieldCode |
+
+### 12.2 视图表报表的完整正确流程
+
+```
+1. 使用dataset skill创建视图表 → 获得cubeCode（vm_格式）
+2. 编写报表配置JSON → fieldCode使用原始columnName（如表单字段名）
+3. 调用create-report.js创建报表
+4. 引擎Step 2.5自动检测vm_/VIEW_前缀 → 查询measureMapping → 转换fieldCode
+5. 创建空白报表 → 构建Schema（使用measureCode） → 保存
+6. Playwright验证：打开报表页面，检查所有getDataAsync是否成功
+```
+
+⚠️ **关键点**：配置文件中写原始字段名即可，引擎自动转换。不要手动查measureCode填入配置。
+
+---
+
+## 十三、快速参考
 
 ### 完整配置示例
 
@@ -615,19 +736,12 @@ API详细文档请参考【references/report-api-guide.md】
 
 ---
 
-v1.4.0 (2026-06-02):
-- 新增「图表类型组合规范」：每张报表至少3种图表类型，必须包含可视化图表（饼图/柱状图/折线图等）
-- 新增「指标卡样式配置」：支持侧边条(showSideStyle/sideBarColor)、背景填充(bgColorType/singleBgColor)、列数(columnCount)等样式参数
-- 新增「配置文件保存路径」：报表配置JSON保存到 `{应用名}/06数据报表/` 目录，不再使用temp-file
-- 新增5种业务场景的标准报表模板（库存/采购/销售/财务/通用）
-- 新增图表选择决策树
-- 新增推荐配色方案
-- 更新专属硬规则3条（图表类型丰富、指标卡合并、配置文件路径）
-- 更新绝对禁止3条
-- 更新检查清单
-- 更新完整配置示例（体现指标卡合并+样式配置）
+v1.9.0 (2026-07-10):
+- 🔴 **新增4条硬规则(8-11)**：多表必须先创建数据集、创建前检查已有数据集、禁止重复创建同名报表配置、验证失败后禁止创建新版本
+- 🔴 **新增第0步前置检查**：强制判断单表/多表→检查已有数据集→检查已有报表配置，防止重复创建
+- ✅ **根因修复**：解决历史中创建6个报表+8个配置文件+6个视图表版本的重复堆积问题
 
-v1.3.0 (2026-05-22):
-- 重构报表引擎为完全自包含实现，直接调用宜搭 HTTP API
-- 新增 yida-report-engine.js，不依赖任何外部工具
-- 更新 SKILL.md，统一为自包含引擎调用方式
+v1.8.1 (2026-07-09):
+- 🔴 **筛选器转换Bug修复**：Step 2.5中筛选器字段转换只检查`filter.fieldCode`，但筛选器配置实际使用`valueField.fieldCode`
+- ✅ **修复方案**：改为检查`filter.fieldCode || filter.valueField?.fieldCode || filter.filterFieldCode`，同时转换valueField和labelField
+- ✅ **验证结果**：V4报表 5/5 图表 + 2/2 筛选器 全部成功

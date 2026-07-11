@@ -23,6 +23,117 @@ const { genNodeId, genFieldId } = require('./constants');
 const { warn } = require('../core-lib/chalk');
 const { createBlankReport, saveReportSchema } = require('./http');
 const { parseOpenOption, withBrowserHandoff } = require('../core-lib/browser-handoff');
+const querystring = require('querystring');
+
+// ── 视图表 measureCode 转换 ─────────────────────────
+// 视图表在报表中必须使用 measureCode（如 field_cfc8ba4d3f）而非 columnName（如 textField_4c11h67t）
+
+function isViewTableCubeCode(cubeCode) {
+  return cubeCode && (cubeCode.startsWith('vm_') || cubeCode.startsWith('VIEW_'));
+}
+
+async function fetchViewTableMeasureMapping(authRef, appType, cubeCode) {
+  const { httpPost } = require('../core-lib/utils');
+  const postData = querystring.stringify({
+    _csrf_token: authRef.csrfToken,
+    cubeCode: cubeCode,
+  });
+  const result = await httpPost(
+    authRef.baseUrl,
+    `/alibaba/web/${appType}/visual/model-table/queryModelTableSchema.json?_api=YiDaModelTable.queryModelTableConfig&_mock=false&_csrf_token=${authRef.csrfToken}`,
+    postData,
+    authRef.cookies,
+  );
+  if (result.success && result.content && Array.isArray(result.content.measureMapping)) {
+    const mapping = {};
+    result.content.measureMapping.forEach(m => {
+      mapping[m.columnName] = m.measureCode;
+      // 如果 columnName 以 _value 结尾，也存储不带 _value 的版本
+      if (m.columnName.endsWith('_value')) {
+        mapping[m.columnName.slice(0, -6)] = m.measureCode;
+      }
+      // 如果 columnName 是 selectField 但不以 _value 结尾，也存储带 _value 的版本
+      if (!m.columnName.endsWith('_value') && m.columnName.startsWith('selectField_')) {
+        mapping[m.columnName + '_value'] = m.measureCode;
+      }
+    });
+    return mapping;
+  }
+  return null;
+}
+
+async function convertViewTableFields(charts, filters, authRef, appType) {
+  const measureMappingCache = {};
+  let hasViewTable = false;
+
+  for (const chart of charts) {
+    if (!isViewTableCubeCode(chart.cubeCode)) continue;
+    hasViewTable = true;
+
+    if (!measureMappingCache[chart.cubeCode]) {
+      warn(`  [视图表转换] 获取 ${chart.cubeCode} 的 measureMapping...`);
+      const mapping = await fetchViewTableMeasureMapping(authRef, appType, chart.cubeCode);
+      if (mapping) {
+        measureMappingCache[chart.cubeCode] = mapping;
+        warn(`  [视图表转换] 获取到 ${Object.keys(mapping).length} 个字段映射`);
+      } else {
+        warn(`  [视图表转换] ⚠️ 未获取到 measureMapping，跳过转换`);
+        continue;
+      }
+    }
+
+    const mapping = measureMappingCache[chart.cubeCode];
+
+    const convertField = (field) => {
+      if (!field || !field.fieldCode) return field;
+      const measureCode = mapping[field.fieldCode];
+      if (measureCode) {
+        warn(`  [视图表转换] ${field.fieldCode} -> ${measureCode}`);
+        return { ...field, fieldCode: measureCode };
+      }
+      return field;
+    };
+
+    if (chart.kpi) chart.kpi = chart.kpi.map(convertField);
+    if (chart.xField) chart.xField = convertField(chart.xField);
+    if (chart.yField) chart.yField = chart.yField.map(convertField);
+    if (chart.columnFields) chart.columnFields = chart.columnFields.map(convertField);
+  }
+
+  for (const filter of filters) {
+    if (!isViewTableCubeCode(filter.cubeCode)) continue;
+
+    if (!measureMappingCache[filter.cubeCode]) {
+      const mapping = await fetchViewTableMeasureMapping(authRef, appType, filter.cubeCode);
+      if (mapping) {
+        measureMappingCache[filter.cubeCode] = mapping;
+      } else {
+        continue;
+      }
+    }
+
+    const mapping = measureMappingCache[filter.cubeCode];
+
+    // 获取要转换的 fieldCode（支持多种配置格式）
+    const rawFieldCode = filter.fieldCode || filter.valueField?.fieldCode || filter.filterFieldCode;
+    if (rawFieldCode) {
+      const measureCode = mapping[rawFieldCode];
+      if (measureCode) {
+        warn(`  [视图表转换] 筛选器 ${rawFieldCode} -> ${measureCode}`);
+        if (filter.fieldCode) filter.fieldCode = measureCode;
+        if (filter.filterFieldCode) filter.filterFieldCode = measureCode;
+        if (filter.valueField) filter.valueField.fieldCode = measureCode;
+        if (filter.labelField) filter.labelField.fieldCode = measureCode;
+      } else {
+        warn(`  [视图表转换] 筛选器字段 ${rawFieldCode} 未在 measureMapping 中找到，跳过`);
+      }
+    }
+  }
+
+  if (hasViewTable) {
+    warn('  [视图表转换] 转换完成');
+  }
+}
 
 // ── 参数解析 ──────────────────────────────────────────
 
@@ -232,6 +343,13 @@ async function main(args) {
   const { charts, filters } = readReportConfig(chartsJsonOrFile);
   warn('图表数量:', charts.length);
   warn('筛选器数量:', filters.length);
+
+  // Step 2.5: 视图表字段转换（columnName -> measureCode）
+  const hasViewTable = charts.some(c => isViewTableCubeCode(c.cubeCode)) || filters.some(f => isViewTableCubeCode(f.cubeCode));
+  if (hasViewTable) {
+    warn('\n[Step 2.5] 视图表字段转换...');
+    await convertViewTableFields(charts, filters, authRef, appType);
+  }
 
   // 预校验所有图表配置
   let hasConfigError = false;
