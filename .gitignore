@@ -6,6 +6,8 @@ debug-*.html
 debug-*.png
 login-step-*.png
 storageState.json
+storageState*.json
+*auth*.json
 .cache/
 temp-file/
 
@@ -27,5 +29,19 @@ temp-file/
 deploy-*.json
 .temp_*/
 
-# 具体应用案例/场景（不需要同步到 GitHub）
-AI宜搭场景/
+# 应用案例/场景/参考文档（不需要同步到 GitHub）
+# 白名单模式：忽略根目录所有文件夹，只放行系统目录
+/*/
+!/.agents/
+!/.cursor/
+!/.cursor/rules/
+!/.figma/
+!/.idea/
+!/.trae/
+!/.vscode/
+!/lib/
+!/scripts/
+!/tests/
+!/本地操作页面/
+!/★宜搭场景案例库/
+!/★宜搭开发参考文档/

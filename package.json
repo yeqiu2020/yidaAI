@@ -1,17 +1,30 @@
 {
-  "name": "yida-ai-assistant",
-  "version": "1.7.1",
+  "name": "ai-assistant",
+  "version": "2.0.2",
   "description": "宜搭AI助手 - 统一依赖管理",
   "scripts": {
-    "install:playwright": "npx playwright install chromium"
+    "prepare": "node scripts/install-git-hooks.js",
+    "hooks:install": "node scripts/install-git-hooks.js",
+    "validate:write": "node scripts/precommit-validate.js --all",
+    "validate:staged": "node scripts/precommit-validate.js --staged",
+    "install:playwright": "npx playwright install chromium",
+    "validate:skills": "node scripts/validate-skill-config.js",
+    "test": "jest --coverage --coverageReporters=text-summary && node .agents/skills/integration/scripts/integration-builder.test.js",
+    "test:integration-builder": "node .agents/skills/integration/scripts/integration-builder.test.js",
+    "test:core": "jest tests/core/ --coverage --coverageReporters=text-summary",
+    "test:features": "jest tests/features/"
   },
   "dependencies": {
+    "@babel/standalone": "^8.0.4",
     "axios": "^1.14.0",
     "http-server": "^14.1.1",
-    "playwright": "^1.60.0",
+    "uglify-js": "^3.19.3",
     "xlsx": "^0.18.5"
   },
+  "optionalDependencies": {
+    "playwright": "^1.61.1"
+  },
   "devDependencies": {
-    "@playwright/test": "^1.59.1"
+    "jest": "^29.7.0"
   }
 }

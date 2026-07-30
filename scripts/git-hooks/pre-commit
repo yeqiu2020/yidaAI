@@ -1,0 +1,7 @@
+#!/bin/sh
+# yida-hard-rules pre-commit hook (由 scripts/install-git-hooks.js 安装，源文件: scripts/git-hooks/pre-commit)
+# 硬规则3-4确定性触发点：提交时自动对暂存区业务产出物执行 ai-validator 校验，
+# 违规则拦截提交。暂存变更命中 .agents/**/*.js、lib/**、scripts/**、tests/** 时，
+# 追加执行 npm test 与 node scripts/validate-skill-config.js（代码门禁）。
+# 逃生口: SKIP_YIDA_VALIDATE=1 git commit ...（仅限用户明确批准，同时跳过两类校验）
+exec node scripts/precommit-validate.js --staged
