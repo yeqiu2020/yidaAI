@@ -25,6 +25,9 @@ const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
+// Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
+const coreUtils = require('../../../../lib/core/utils');
+
 // ==================== 配置 ====================
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
@@ -380,27 +383,11 @@ function extractDomainPrefix(baseUrl) {
 
 /**
  * 加载 Cookie 文件
+ * Phase 6: 委托给 lib/core/utils.loadCookieData（统一实现）
  * @returns {Object|null} {cookies, base_url, csrf_token, corp_id, login_user} 或 null
  */
 function loadCookieData() {
-  if (!fs.existsSync(COOKIE_FILE)) {
-    return null;
-  }
-  
-  try {
-    const data = fs.readFileSync(COOKIE_FILE, 'utf-8');
-    const parsed = JSON.parse(data);
-    
-    // 支持两种格式：{cookies: [...]} 或直接是数组
-    if (Array.isArray(parsed)) {
-      return { cookies: parsed };
-    }
-    
-    return parsed;
-  } catch (e) {
-    console.log('  ⚠️  读取 Cookie 文件失败:', e.message);
-    return null;
-  }
+  return coreUtils.loadCookieData(PROJECT_ROOT, DEFAULT_BASE_URL);
 }
 
 /**

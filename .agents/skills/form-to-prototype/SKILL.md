@@ -6,11 +6,8 @@ description: 根据字段清单自动生成HTML原型页面，模拟宜搭表单
 ## 🔴 硬规则（绝对不可违反）
 
 ### 通用硬规则
-1. **禁止通过API修改已有应用的表单字段内容** — 公式、代码、字段增删改只能复制粘贴（规则25）
-2. **应用ID和表单UUID必须填真实值** — 从系统配置清单.md读取，严禁占位符（规则24）
-3. **写入文件前必须校验** — 运行 `node scripts/ai-validator.js check-before-write <文件路径>` 确认不覆盖已有文件
-4. **写入文件后必须校验** — 运行 `node scripts/ai-validator.js check-after-write <文件路径>` 确认内容合规
-5. **Cookie必须使用根目录** — 严禁 process.cwd()，必须用 PROJECT_ROOT（规则26）
+
+> 本区块 1-5 条通用硬规则统一维护于 [../通用硬规则.md](../通用硬规则.md)（单一来源，避免多点复制导致规则漂移），执行前必须阅读并严格遵守。
 
 ### 专属硬规则
 1. **必须使用HTTP方式访问严禁file://** — 原型页面必须通过HTTP服务器访问
@@ -19,6 +16,17 @@ description: 根据字段清单自动生成HTML原型页面，模拟宜搭表单
 ---
 
 # 表单原型生成 Skill
+
+## 版本
+
+**v2.17.0** (2026/07/17) — 完整版本记录见 [references/版本记录.md](references/版本记录.md)
+
+## 📚 参考文件索引（按需加载）
+
+| 参考文件 | 内容 | 何时加载 |
+|---------|------|---------|
+| [references/页面设计与模板.md](references/页面设计与模板.md) | 页面设计规范（配色/布局/组件样式）、表单配置加载器（form-config.js）详情、交互功能实现、HTML模板参考、生成器内部工作流程、新旧方案对比 | 需要理解/调整生成的页面样式、模板结构、form-config.js 行为时 |
+| [references/版本记录.md](references/版本记录.md) | v2.14.0~v2.17.0 版本更新记录 | 需要了解历史变更、排查同步/菜单/路径相关回归问题时 |
 
 ## 功能说明
 
@@ -39,6 +47,8 @@ description: 根据字段清单自动生成HTML原型页面，模拟宜搭表单
 5. **理解业务规则**：通过文字说明和简单交互理解公式、关联等规则
 6. **提前发现问题**：在正式开发前调整字段和规则，减少返工成本
 
+> 旧方案（v1.x，每表单单独HTML）已被通用模板方案取代，对比详情见 [references/页面设计与模板.md](references/页面设计与模板.md)。
+
 ---
 
 ## 何时使用
@@ -55,7 +65,7 @@ description: 根据字段清单自动生成HTML原型页面，模拟宜搭表单
 
 ## 使用方法（推荐：程序自动生成）
 
-### 方式一：使用生成器脚本（推荐）
+### 生成器脚本（推荐）
 
 ```bash
 node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清单md文件路径> [输出目录]
@@ -109,110 +119,7 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js "出入库�
 │       └── form.html            # 通用新增/详情页（所有表单共用）
 ```
 
-### 与旧方案的区别
-
-| 特性 | 旧方案（v1.x） | 新方案（v2.0） |
-|------|---------------|---------------|
-| 页面生成 | 每个表单生成单独的 HTML | 所有表单共用通用模板 |
-| 文件数量 | 2N+ 个页面（N为表单数） | 固定 2 个模板页面 |
-| 表单切换 | 跳转不同 HTML 文件 | URL 参数 `?form=名称` |
-| 字段配置 | 硬编码在 HTML 中 | 从 `组件ID清单.md` 动态加载 |
-| 字段更新 | 需重新生成页面 | 刷新页面即可重新加载 |
-| 组件ID显示 | 不支持 | 支持，点击可复制 |
-
----
-
-## 页面设计规范
-
-### 1. 整体风格
-
-参考宜搭低代码平台界面风格：
-
-- **配色方案**：
-  - 主色调：#1677FF（宜搭蓝）
-  - 背景色：#F5F5F5（浅灰）
-  - 文字色：#333333（主文字）、#666666（次要文字）
-  - 边框色：#D9D9D9
-  
-- **布局结构**：
-  - 顶部导航栏：系统名称 + 用户信息
-  - 左侧菜单栏：表单分组导航
-  - 右侧内容区：数据列表或表单详情
-
-- **组件样式**：
-  - 按钮：圆角 4px，主按钮蓝色，次按钮白色
-  - 输入框：高度 32px，边框 1px solid #D9D9D9
-  - 表格：表头灰色背景，行高 48px
-  - 卡片：白色背景，阴影 0 2px 8px rgba(0,0,0,0.08)
-
-### 2. 列表页设计（通用模板）
-
-所有表单共用一个列表页模板 `templates/list.html`，通过 URL 参数加载不同表单：
-
-- **页面标题**：动态显示当前表单名称
-- **操作按钮**：新增、同步配置、导入、导出
-- **搜索区域**：支持按关键字段筛选
-- **数据表格**：
-  - 表头：动态读取表单字段前6个
-  - 数据行：模拟示例数据
-  - 操作列：查看按钮
-- **分页组件**：页码导航
-- **同步配置按钮**：清除缓存并重新加载表单配置
-
-### 3. 表单页设计（通用模板）
-
-所有表单共用一个表单页模板 `templates/form.html`，通过 URL 参数区分新增/详情模式：
-
-- **表单标题**：动态显示"新建{表单名}"或"{表单名}详情"
-- **字段区域**：
-  - 动态读取表单字段配置
-  - 根据字段类型渲染不同组件
-  - 每个字段后面显示组件ID（点击可复制）
-  - 流水号、成员字段自动设为只读
-- **规则说明区域**：
-  - 在表单底部显示业务规则说明
-- **操作按钮**：
-  - 新增模式：提交、保存草稿、取消
-  - 详情模式：返回
-
----
-
-## 表单配置加载器（form-config.js）
-
-### 核心功能
-
-1. **表单路径映射**：建立表单名称到目录的映射
-2. **动态加载配置**：通过 fetch 读取 `组件ID清单.md`
-3. **字段解析**：解析 Markdown 表格，提取字段信息
-4. **字段渲染**：根据组件类型生成对应的 HTML 输入控件
-5. **子表识别**：自动识别子表组件（`子表单`/`TableField`），分离主表字段和子表字段
-6. **布局组件过滤**：自动过滤列布局、按钮等非表单字段
-7. **子表渲染**：将子表以表格形式展示，支持新增/删除行操作
-8. **复制功能**：字段ID点击复制到剪贴板
-
-### 配置示例
-
-```javascript
-const FormConfig = {
-  // 表单路径映射
-  formPaths: {
-    '产品信息': '/产品信息「普通表单」',
-    '采购订单': '/采购订单「流程表单」'
-  },
-  
-  // 获取URL参数
-  getUrlParam(name) { ... },
-  
-  // 获取当前表单名称
-  getCurrentFormName() { ... },
-  
-  // 加载表单配置
-  async loadFormConfig(formName) { ... },
-  
-  // 渲染表单
-  async renderForm(containerId, formName) { ... }
-};
-```
+页面设计规范（配色、布局、列表页/表单页设计）、form-config.js 核心功能、交互功能（字段ID复制/同步配置/公式计算/子表行操作）、HTML模板参考见 [references/页面设计与模板.md](references/页面设计与模板.md)。
 
 ---
 
@@ -232,214 +139,6 @@ const FormConfig = {
 | RateField | `<input type="number">` | 评分 |
 | RadioField | `<input type="text">` | 单选 |
 | CheckboxField | `<input type="text">` | 多选 |
-
----
-
-## 交互功能实现
-
-### 1. 字段ID显示与复制
-
-每个表单字段的标签后面显示组件ID：
-
-```html
-<label class="form-label">
-  产品名称 
-  <span class="field-id" title="点击复制组件ID">textField_xxx</span>
-</label>
-```
-
-点击组件ID时：
-1. 复制ID到剪贴板
-2. 显示"已复制"提示
-3. ID标签变为绿色
-
-### 2. 同步配置
-
-列表页右上角提供"同步配置"按钮：
-
-```javascript
-function syncForm() {
-  // 清除缓存
-  delete FormConfig.configCache[formName];
-  
-  // 重新加载配置
-  const config = await FormConfig.loadFormConfig(formName);
-  
-  // 重新渲染表格
-  renderTable(config);
-}
-```
-
-### 3. 公式实时计算
-
-使用 JavaScript 实现简单公式的实时计算：
-
-```javascript
-// 示例：小计金额计算
-function calculateSubtotal() {
-  const price = parseFloat(document.getElementById('price').value) || 0;
-  const quantity = parseFloat(document.getElementById('quantity').value) || 0;
-  const subtotal = price * quantity;
-  document.getElementById('subtotal').value = subtotal.toFixed(2);
-}
-```
-
-### 4. 子表行操作
-
-- 添加行：点击"添加"按钮，插入新行
-- 删除行：点击行末删除按钮
-- 自动计算：子表数值变更时，自动更新合计
-
----
-
-## 执行步骤
-
-当用户请求生成原型页面时，按以下步骤执行：
-
-### 步骤 1：解析字段清单
-
-1. 读取字段清单.md 文件
-2. 提取所有表单及其字段信息
-3. 识别表单类型（普通表单/流程表单）
-4. 识别主表字段和子表字段
-5. 解析字段类型和属性
-
-### 步骤 2：生成静态资源
-
-1. 生成 `css/style.css` - 宜搭风格样式（含字段ID样式、复制提示样式）
-2. 生成 `js/app.js` - 交互逻辑
-
-### 步骤 3：生成通用模板
-
-1. **生成列表页模板** `templates/list.html`：
-   - 内联导航菜单（按模块分组）
-   - 动态表格渲染（根据表单配置）
-   - 同步配置按钮
-   - 分页组件
-
-2. **生成表单页模板** `templates/form.html`：
-   - 内联导航菜单
-   - 动态表单渲染（调用 FormConfig.renderForm）
-   - 新增/详情模式切换
-   - 规则说明区域
-
-### 步骤 4：生成配置加载器
-
-生成 `js/form-config.js`：
-- 表单路径映射
-- 配置缓存机制
-- Markdown 解析器
-- 字段 HTML 生成器
-- 复制功能初始化
-
-### 步骤 5：生成首页
-
-生成 `index.html`：
-- 系统名称和 Logo
-- 左侧导航菜单（按分组组织）
-- 右侧欢迎页面
-- 快速访问链接
-- 系统统计信息
-
-### 步骤 6：最终检查
-
-1. 检查所有文件是否生成
-2. 检查链接是否正确
-3. 在文件末尾添加文件链接
-
----
-
-## HTML 模板参考
-
-### 基础页面结构
-
-```html
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{表单名称} - {系统名称}</title>
-  <link rel="stylesheet" href="../css/style.css">
-</head>
-<body>
-  <!-- 顶部导航 -->
-  <header class="header">
-    <div class="logo">{系统名称}</div>
-    <div class="user-info">👤 管理员</div>
-  </header>
-  
-  <div class="container">
-    <!-- 左侧菜单 -->
-    <aside class="sidebar">
-      <nav class="menu">
-        <!-- 菜单项（内联） -->
-      </nav>
-    </aside>
-    
-    <!-- 主内容区 -->
-    <main class="main-content">
-      <!-- 页面内容（动态生成） -->
-    </main>
-  </div>
-  
-  <script src="../js/app.js"></script>
-  <script src="../js/form-config.js"></script>
-  <script>
-    // 页面初始化逻辑
-  </script>
-</body>
-</html>
-```
-
-### 表单字段渲染示例
-
-```html
-<!-- 带组件ID的字段 -->
-<div class="form-item">
-  <label class="form-label">
-    产品名称
-    <span class="field-id" title="点击复制组件ID">textField_xxx</span>
-  </label>
-  <div class="form-control">
-    <input type="text" class="input" placeholder="请输入产品名称">
-  </div>
-</div>
-
-<!-- 只读字段（流水号） -->
-<div class="form-item">
-  <label class="form-label">
-    单据编号
-    <span class="field-id" title="点击复制组件ID">serialNumberField_xxx</span>
-  </label>
-  <div class="form-control">
-    <input type="text" class="input disabled" readonly placeholder="系统自动生成">
-  </div>
-</div>
-```
-
----
-
-## 注意事项
-
-1. **原型性质说明**
-   - 在页面顶部添加提示："本页面为原型预览，仅供界面体验使用"
-   - 数据为模拟数据，不涉及真实业务逻辑
-
-2. **访问方式（重要）**
-   - **必须使用 HTTP 方式访问**，严禁使用 `file://` 协议打开
-   - 启动 HTTP 服务器：`npx http-server . -p 8080`
-   - 访问地址：`http://127.0.0.1:8080/{路径}/index.html`
-   - 点击“同步配置”后会把最新字段持久化到浏览器本地存储，跨页面可用
-   - ⚠️ 使用 `file://` 打开会导致同步配置功能失效，且无法正确加载表单配置
-
-3. **组件ID清单位置**
-   - 表单配置从 `{表单目录}/组件ID清单.md` 加载
-   - 确保该文件存在且格式正确
-
-4. **缓存机制**
-   - 表单配置会被缓存以提高性能
-   - 点击"同步配置"按钮可清除缓存并重新加载
 
 ---
 
@@ -472,35 +171,11 @@ node prototype_generator.js "字段清单.md" "01需求梳理/原型页面"
 
 ### 步骤 2：运行生成器
 
-使用 Node.js 运行生成器脚本：
-
 ```bash
 node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清单路径> [输出目录]
 ```
 
-**生成器工作流程：**
-
-1. **解析字段清单**（AI逻辑）
-   - 提取系统名称、版本
-   - 识别所有表单及其模块分组
-   - 解析主表字段和子表字段
-   - 提取字段标注信息
-
-2. **生成静态资源**（程序逻辑）
-   - 生成 CSS 样式文件（含字段ID样式）
-   - 生成 JS 交互文件
-
-3. **生成通用模板**（程序逻辑）
-   - 生成 `templates/list.html` - 通用列表页
-   - 生成 `templates/form.html` - 通用新增/详情页
-
-4. **生成配置加载器**（程序逻辑）
-   - 生成 `js/form-config.js`
-   - 包含表单路径映射和字段渲染逻辑
-
-5. **生成首页**（程序逻辑）
-   - 生成 `index.html`
-   - 包含导航菜单和快速访问链接
+生成器内部流程：解析字段清单（提取系统名称/表单/主表与子表字段/字段标注）→ 生成静态资源（css/style.css、js/app.js）→ 生成通用模板（templates/list.html、templates/form.html）→ 生成配置加载器（js/form-config.js）→ 生成首页（index.html）。详细说明见 [references/页面设计与模板.md](references/页面设计与模板.md)。
 
 ### 步骤 3：验证输出
 
@@ -572,8 +247,8 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
        └── 📄 form.html
 
 ✅ 使用方式：
-   1. **启动HTTP服务**（使用 yida-server-manager）：
-      node .agents/skills/yida-server-manager/scripts/server_manager.js start
+   1. **启动HTTP服务**（使用 server-manager）：
+      node .agents/skills/server-manager/scripts/server_manager.js start
    2. **严禁手动启动**：不要使用 `npx http-server` 命令
    3. 访问上方地址
    4. 所有表单共用模板，通过 ?form=表单名 切换
@@ -583,27 +258,45 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
 
 ---
 
+## 注意事项
+
+1. **原型性质说明**
+   - 在页面顶部添加提示："本页面为原型预览，仅供界面体验使用"
+   - 数据为模拟数据，不涉及真实业务逻辑
+
+2. **访问方式（重要）**
+   - **必须使用 HTTP 方式访问**，严禁使用 `file://` 协议打开
+   - 访问地址：`http://127.0.0.1:8080/{路径}/index.html`
+   - 点击“同步配置”后会把最新字段持久化到浏览器本地存储，跨页面可用
+   - ⚠️ 使用 `file://` 打开会导致同步配置功能失效，且无法正确加载表单配置
+
+3. **组件ID清单位置**
+   - 表单配置从 `{表单目录}/组件ID清单.md` 加载
+   - 确保该文件存在且格式正确
+
+4. **缓存机制**
+   - 表单配置会被缓存以提高性能
+   - 点击"同步配置"按钮可清除缓存并重新加载
+
+---
+
 ## 常见问题与解决方案
 
 ### 问题1：页面空白或字段不显示
 
 **现象**：打开表单页面后，字段区域空白或显示"加载表单配置失败"
 
-**原因**：
-- 未通过 HTTP 服务器访问，而是直接通过 file:// 打开
-- `组件ID清单.md` 文件不存在或路径错误
+**原因**：未通过 HTTP 服务器访问（直接 file:// 打开）；或 `组件ID清单.md` 文件不存在/路径错误
 
 **解决方案**：
-1. 使用 HTTP 服务器访问：`npx http-server . -p 8080`
+1. 使用 HTTP 服务器访问：`npx http-server . -p 8080`（仅调试排查用；正式启动必须走 server-manager）
 2. 检查 `组件ID清单.md` 是否存在于对应表单目录下
 
 ### 问题2：输出目录错误
 
 **现象**：用户要求将原型页面生成到与字段清单同目录，但AI生成到了其他目录
 
-**原因**：
-- AI未询问用户输出目录
-- 使用了生成器默认的输出路径
+**原因**：AI未询问用户输出目录，使用了生成器默认的输出路径
 
 **解决方案**：
 1. 生成前必须询问用户："请问原型页面需要生成到哪个目录？"
@@ -614,9 +307,7 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
 
 **现象**：点击"同步配置"按钮后显示同步失败
 
-**原因**：
-- 缓存清除后重新加载仍然失败
-- `组件ID清单.md` 文件被删除或移动
+**原因**：缓存清除后重新加载仍然失败；`组件ID清单.md` 文件被删除或移动
 
 **解决方案**：
 1. 检查 `组件ID清单.md` 文件是否存在
@@ -642,15 +333,3 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
 - [ ] 确认原型页面通过HTTP方式访问（严禁file://协议）
 - [ ] 确认已更新组织及应用信息.md追加原型页面访问地址
 - [ ] 确认所有表单共用通用模板，通过URL参数切换
-
----
-
-## 版本记录
-
-| 版本 | 日期 | 更新内容 |
-|-----|------|---------|
-| 2.11.0 | 2026/06/08 | **首页布局调整**：将系统统计卡片（welcome-stats）移到页面最上方，调整margin样式（margin-top: 0; margin-bottom: 32px），确保以后生成的原型页面统计卡片都在最上面显示 |
-| 2.10.0 | 2026/06/03 | **删除表单后原型页面仍显示的修复**：1) `loadFormListFromConfig()`新增清理逻辑——从系统配置清单解析有效表单名称集合，移除`formPaths`、`staticConfigData`、`FormConfigData`中已不存在的表单；2) `app.js`的`DOMContentLoaded`中自动调用`loadFormListFromConfig()`并重新渲染菜单；3) `prototype_generator.js`新增`--form-config-only`参数，支持仅重新生成`form-config.js`而不重新生成整个原型页面；4) 按钮名称优化："同步应用"→"同步应用表单"，"同步配置"→"同步表单字段" |
-| 2.9.0 | 2026/06/03 | **模板字符串正则转义修复**：1) 修复prototype_generator.js模板字符串中`/^\d+$/`转义问题——模板字符串中`\d`会被JS解释器消耗变成`d`，导致生成的form-config.js中正则变成`/^d+$/`（匹配字母d而非数字），使loadFormListFromConfig()永远无法解析系统配置清单；2) 已将模板中`/^\d+$/`改为`/^\\d+$/`确保生成正确；3) 全面审查模板字符串中所有正则（\d、\s、\_(、\)等），确认均已正确使用双反斜杠 |
-| 2.8.0 | 2026/05/09 | **动态加载修复**：1) form-config.js的loadFormConfig()添加fetch缓存控制(cache:no-cache)；2) fetch失败时回退到staticConfigData而非返回空配置 |
-| 2.7.0 | 2026/05/04 | **规范更新**：1) 新增"步骤4：更新组织及应用信息.md"，要求生成原型页面后必须追加访问地址到组织及应用信息.md；2) 统一访问方式，明确必须使用HTTP访问，严禁使用file://协议；3) 更新注意事项和常见问题，移除file://方式说明 |

@@ -10,7 +10,16 @@
 
 **所有 API 调用必须使用此函数判断结果，不能直接判断 `res.success`！**
 
+**⚠️ 重要：checkApiSuccess 不适用于 getFormDataById！该API返回扁平对象（无success/data/result字段），需单独判断 `res.serialNo` 是否存在！**
+
 ```javascript
+/**
+ * 检查宜搭API调用是否成功
+ * 适用于: searchFormDatas / saveFormData / updateFormData / deleteFormData
+ * ⚠️ 不适用于 getFormDataById！
+ *   getFormDataById 返回 {serialNo, instValue, creator...}，没有success字段
+ *   需单独判断: if (!res || !res.serialNo) throw new Error('查询失败');
+ */
 function checkApiSuccess(res) {
   if (res === null || res === undefined) return true; // 编辑/删除成功返回 null
   if (typeof res === 'string' && res.indexOf('FINST-') === 0) return true; // 新增返回实例 ID
@@ -910,11 +919,143 @@ console.log('当前状态:', behavior);  // NORMAL / READONLY / DISABLED / HIDDE
 
 ---
 
-*文档版本：v1.8.0*
+## 案例 20：getFormDataById 用 checkApiSuccess 判断导致误判失败（直播翻车实录！）
+
+### 错误现象
+```
+查询采购订单主表失败
+查询采购订单异常: Error: 查询采购订单主表失败
+```
+
+### 错误原因
+`getFormDataById` API 返回的是扁平对象 `{serialNo, instValue, creator, originator, title, modelUuid, version}`，**没有 `success` / `data` / `result` 字段**。`checkApiSuccess` 遍历所有判断条件都不满足，返回 `false`，导致明明成功的查询被判定为失败。
+
+### ❌ 错误代码
+```javascript
+that.dataSourceMap['getPurchaseOrderDetail'].load({
+  formInstId: formInstId,
+  formUuid: CONFIG.TARGET_FORM.FORM_UUID
+}).then(function(res) {
+  if (!checkApiSuccess(res)) {
+    // res 是 {serialNo: "CG20260724004", ...}，checkApiSuccess 返回 false！
+    throw new Error('查询采购订单主表失败');  // 明明查询成功了却报错！
+  }
+  var formData = res.formData || res.data || res || {};
+  var orderNo = formData[CONFIG.SOURCE_FIELD_IDS.ORDER_NO] || '';  // res 没有 formData！
+});
+```
+
+### ✅ 正确代码
+```javascript
+that.dataSourceMap['getPurchaseOrderDetail'].load({
+  formInstId: formInstId,
+  formUuid: CONFIG.TARGET_FORM.FORM_UUID
+}).then(function(res) {
+  // getFormDataById 返回扁平对象，用 serialNo 判断成功
+  if (!res || !res.serialNo) {
+    throw new Error('查询采购订单主表失败');
+  }
+  var orderNo = res.serialNo;  // 订单号/流水号在 serialNo 字段
+  // 注意：子表数据不在返回值中，需单独调用 listTableData 接口
+});
+```
+
+### 关键要点
+1. **getFormDataById 不适用 checkApiSuccess** — 返回结构完全不同
+2. **订单号在 `res.serialNo`** — 不是 `res.formData[serialNumberField_xxx]`
+3. **子表数据不在返回值中** — 必须单独调用 `listTableDataByFormInstIdAndTableId`
+4. **`instValueMap[fieldId]` 不一定是字符串** — 可能是 `{zh_CN, en_US}` 等对象，直接 `setValue` 给文本字段会显示 `[object Object]`；订单号优先用 `res.serialNo`
+5. **参考版本**：采购订单填充入库明细 v1.0.0 → v1.4.0（直播翻车修复）
+
+---
+
+## 案例 21：listTableData 子表API关联字段带 _id 后缀（直播翻车实录！）
+
+### 错误现象
+跨表查询子表后，关联表单字段显示为空（undefined）
+
+### 错误原因
+`listTableDataByFormInstIdAndTableId` API 返回的子表行数据中，关联表单字段的 key 带 `_id` 后缀（如 `associationFormField_xxx_id`），**标准字段名（不带 `_id`）的值为空**。代码使用前端 `getValue()` 的字段名来读取，导致读到 undefined。
+
+### ❌ 错误代码
+```javascript
+// 子表API返回的行数据：
+// { associationFormField_xxx_id: "\"[{\\\"instanceId\\\":\\\"FINST-xxx\\\"...}]\"", associationFormField_xxx: undefined }
+
+var productAssoc = formatAssociationField(sourceRow['associationFormField_xxx']);  // undefined → []
+```
+
+### ✅ 正确代码
+```javascript
+// 使用 getAssociationValue 工具函数，优先尝试 _id 后缀
+function getAssociationValue(row, fieldId) {
+  var value = row[fieldId + '_id'];  // 优先尝试 _id 后缀
+  if (value !== undefined && value !== null) {
+    return formatAssociationField(value);
+  }
+  return formatAssociationField(row[fieldId]);  // 兼容前端格式
+}
+
+var productAssoc = getAssociationValue(sourceRow, 'associationFormField_xxx');
+if (productAssoc.length > 0) {
+  rowData['associationFormField_yyy'] = [{
+    appType: productAssoc[0].appType || CONFIG.APP_ID,
+    formType: 'receipt',
+    formUuid: productAssoc[0].formUuid || '',
+    instanceId: productAssoc[0].instanceId || '',
+    title: productAssoc[0].title || ''
+  }];
+}
+```
+
+### 关键要点
+1. **子表API关联字段只有 `_id` 后缀版本有数据** — 标准字段名为空
+2. **必须使用 `getAssociationValue` 函数** — 优先尝试 `_id` 后缀
+3. **下拉字段同理** — `selectField_xxx` 有 `_id` 后缀版本 `selectField_xxx_id`
+4. **参考版本**：采购订单填充入库明细 v1.0.0 → v1.0.3（直播翻车修复）
+
+---
+
+## 案例 22：listTableData 返回数据在顶层，通用兼容逻辑导致解析失败（直播翻车实录！）
+
+### 错误现象
+子表查询返回有数据，但代码解析后 `dataList` 为空
+
+### 错误原因
+`listTableDataByFormInstIdAndTableId` 返回 `{data: [...], totalCount, currentPage}`，`data` 在顶层。通用兼容逻辑 `var result = res.result || res || {}; var list = result.data || [];` 中，`res.result` 为 undefined，`res` 本身就是含 `data` 的对象，`res || {}` 取 `res`，但 `res.data` 是数组而非对象，没有 `.data` 属性，导致 `result.data` 为 undefined。
+
+### ❌ 错误代码
+```javascript
+var result = res.result || res || {};  // res.result 是 undefined, res 是 {data:[...], totalCount:2}
+var list = result.data || [];  // res.data 是数组，数组没有 data 属性 → undefined → []
+
+// 或者更隐蔽的错误：
+var result = res.result || res.data || res || {};
+var list = result.data || [];  // res.result = undefined, res.data = [行1, 行2],
+                               // result = [行1, 行2]，数组没有 .data → []
+```
+
+### ✅ 正确代码
+```javascript
+// listTableData 的 data 在顶层，不能用通用兼容逻辑
+var list = [];
+if (res && res.data && Array.isArray(res.data)) {
+  list = res.data;
+} else if (res && res.result && res.result.data && Array.isArray(res.result.data)) {
+  list = res.result.data;
+}
+var totalCount = res.totalCount || 0;
+```
+
+### 关键要点
+1. **不同API的返回结构完全不同** — 不要用同一套兼容逻辑处理所有API
+2. **`listTableData` 的 `data` 在顶层** — 不是 `res.result.data`
+3. **数组没有 `.data` 属性** — `res.result || res` 当 `res.result` 为 undefined 时，`result` 变成含 `data` 的对象，看起来没问题；但如果先用了 `res.data`，`result` 就变成数组了
+4. **参考版本**：采购订单填充入库明细 v1.0.0 → v1.4.0（直播翻车修复）
+
+---
+
+*文档版本：v1.10.0*
 *更新内容：
-- 补充案例 16：didMount 初始化时组件未加载
-- 补充案例 17：setValue 触发字段校验规则报错
-- 补充案例 18：组件存在性检查缺失
-- 补充案例 19：错误使用 hide()/show() 方法
-- 参考字段顺序填写联动功能开发经验（v1.0.0 → v1.0.4）
-- 参考条件显示图片组件功能开发经验（v1.0.0 → v1.0.1）*
+- 案例 20 增加要点：instValueMap[fieldId] 可能是对象格式，订单号优先用 res.serialNo，避免 setValue 后显示 [object Object]
+- 参考采购订单填充入库明细开发经验（v1.0.0 → v1.4.0，直播翻车实录）*

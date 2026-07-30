@@ -1,43 +1,43 @@
 /**
- * ×éÖ¯³õÊ¼»¯½Å±¾ - V1.0.0
- * ×Ô¶¯´ÓÒË´îÆ½Ì¨»ñÈ¡Ó¦ÓÃÁÐ±í²¢¸üÐÂµ½ÅäÖÃÎÄ¼þ
+ * ï¿½ï¿½Ö¯ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½Å±ï¿½ - V1.0.0
+ * ï¿½Ô¶ï¿½ï¿½ï¿½ï¿½Ë´ï¿½Æ½Ì¨ï¿½ï¿½È¡Ó¦ï¿½ï¿½ï¿½Ð±ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Âµï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½
  */
 
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
 
-// ÅäÖÃ
+// ï¿½ï¿½ï¿½ï¿½
 const CONFIG = {
-  cookiesFile: 'D:/ÒË´îAI±à³Ì/ÒË´îAIÖúÊÖV1.4/.cookies.json',
-  orgConfigFile: 'D:/ÒË´îAI±à³Ì/ÒË´îAIÖúÊÖV1.4/×éÖ¯¼°Ó¦ÓÃÐÅÏ¢.md',
+  cookiesFile: 'D:/ï¿½Ë´ï¿½AIï¿½ï¿½ï¿½/ï¿½Ë´ï¿½AIï¿½ï¿½ï¿½ï¿½V1.4/.cookies.json',
+  orgConfigFile: 'D:/ï¿½Ë´ï¿½AIï¿½ï¿½ï¿½/ï¿½Ë´ï¿½AIï¿½ï¿½ï¿½ï¿½V1.4/ï¿½ï¿½Ö¯ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½Ï¢.md',
   baseUrl: 'https://qfhefh.aliwork.com'
 };
 
 /**
- * ¼ÓÔØ Cookie
+ * ï¿½ï¿½ï¿½ï¿½ Cookie
  */
 function loadCookies() {
   try {
     if (!fs.existsSync(CONFIG.cookiesFile)) {
-      console.log('Cookie ÎÄ¼þ²»´æÔÚ:', CONFIG.cookiesFile);
+      console.log('Cookie ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½:', CONFIG.cookiesFile);
       return null;
     }
     const data = JSON.parse(fs.readFileSync(CONFIG.cookiesFile, 'utf-8'));
     return data.cookies || data;
   } catch (e) {
-    console.error('¼ÓÔØ Cookie Ê§°Ü:', e.message);
+    console.error('ï¿½ï¿½ï¿½ï¿½ Cookie Ê§ï¿½ï¿½:', e.message);
     return null;
   }
 }
 
 /**
- * ¸üÐÂ Markdown ÖÐµÄÓ¦ÓÃ ID
+ * ï¿½ï¿½ï¿½ï¿½ Markdown ï¿½Ðµï¿½Ó¦ï¿½ï¿½ ID
  */
 function updateAppIdInMarkdown(appName, appId) {
   try {
     if (!fs.existsSync(CONFIG.orgConfigFile)) {
-      console.log('ÅäÖÃÎÄ¼þ²»´æÔÚ');
+      console.log('ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½');
       return false;
     }
     
@@ -46,30 +46,30 @@ function updateAppIdInMarkdown(appName, appId) {
     const regex = new RegExp('(\\|\\s*\\d+\\s*\\|\\s*' + escaped + '\\s*\\|\\s*)[^|]*(\\s*\\|)', 'g');
     
     if (content.match(regex)) {
-      content = content.replace(regex, '$1' + (appId || 'ÇëÊÖ¶¯²¹³ä') + '$2');
+      content = content.replace(regex, '$1' + (appId || 'ï¿½ï¿½ï¿½Ö¶ï¿½ï¿½ï¿½ï¿½ï¿½') + '$2');
       fs.writeFileSync(CONFIG.orgConfigFile, content);
-      console.log('  [OK]', appName, '->', appId || 'ÇëÊÖ¶¯²¹³ä');
+      console.log('  [OK]', appName, '->', appId || 'ï¿½ï¿½ï¿½Ö¶ï¿½ï¿½ï¿½ï¿½ï¿½');
       return true;
     }
-    console.log('  [Î´ÕÒµ½]', appName);
+    console.log('  [Î´ï¿½Òµï¿½]', appName);
     return false;
   } catch (e) {
-    console.error('  [Ê§°Ü]', e.message);
+    console.error('  [Ê§ï¿½ï¿½]', e.message);
     return false;
   }
 }
 
 /**
- * ´ÓÒË´î»ñÈ¡Ó¦ÓÃÁÐ±í
+ * ï¿½ï¿½ï¿½Ë´ï¿½ï¿½È¡Ó¦ï¿½ï¿½ï¿½Ð±ï¿½
  */
 async function fetchApps() {
-  console.log('Æô¶¯ä¯ÀÀÆ÷...');
+  console.log('ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½...');
   const browser = await chromium.launch({ headless: false });
   
   try {
     const cookies = loadCookies();
     if (!cookies) {
-      console.log('ÇëÏÈÊ¹ÓÃ simulated-login skill µÇÂ¼');
+      console.log('ï¿½ï¿½ï¿½ï¿½Ê¹ï¿½ï¿½ simulated-login skill ï¿½ï¿½Â¼');
       return [];
     }
     
@@ -77,12 +77,12 @@ async function fetchApps() {
     await context.addCookies(cookies);
     const page = await context.newPage();
     
-    console.log('·ÃÎÊÎÒµÄÓ¦ÓÃÒ³Ãæ...');
+    console.log('ï¿½ï¿½ï¿½ï¿½ï¿½Òµï¿½Ó¦ï¿½ï¿½Ò³ï¿½ï¿½...');
     await page.goto(CONFIG.baseUrl + '/myApp', { waitUntil: 'networkidle' });
     await page.waitForTimeout(5000);
     
     if (page.url().includes('login')) {
-      console.log('Î´µÇÂ¼£¬ÇëÏÈµÇÂ¼');
+      console.log('Î´ï¿½ï¿½Â¼ï¿½ï¿½ï¿½ï¿½ï¿½Èµï¿½Â¼');
       return [];
     }
     
@@ -116,32 +116,34 @@ async function fetchApps() {
 }
 
 /**
- * Ö÷º¯Êý
+ * ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½
  */
 async function main() {
   console.log('='.repeat(60));
-  console.log('ÒË´î×éÖ¯³õÊ¼»¯¹¤¾ß');
+  console.log('ï¿½Ë´ï¿½ï¿½ï¿½Ö¯ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½');
   console.log('='.repeat(60));
   
   const apps = await fetchApps();
   if (apps.length === 0) {
-    console.log('Î´»ñÈ¡µ½Ó¦ÓÃ');
+    console.log('Î´ï¿½ï¿½È¡ï¿½ï¿½Ó¦ï¿½ï¿½');
     return;
   }
   
-  console.log('\nÕÒµ½', apps.length, '¸öÓ¦ÓÃ:');
+  console.log('\nï¿½Òµï¿½', apps.length, 'ï¿½ï¿½Ó¦ï¿½ï¿½:');
   apps.forEach((app, i) => {
-    console.log('  ' + (i + 1) + '. ' + app.name + (app.appId ? ' (' + app.appId + ')' : ' (ÎÞID)'));
+    console.log('  ' + (i + 1) + '. ' + app.name + (app.appId ? ' (' + app.appId + ')' : ' (ï¿½ï¿½ID)'));
   });
   
-  console.log('\n¸üÐÂÅäÖÃÎÄ¼þ...');
+  console.log('\nï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½...');
   let updated = 0;
   for (const app of apps) {
     if (updateAppIdInMarkdown(app.name, app.appId)) updated++;
   }
   
-  console.log('\nÍê³É! ¸üÐÂÁË', updated, '¸öÓ¦ÓÃ');
+  console.log('\nï¿½ï¿½ï¿½! ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½', updated, 'ï¿½ï¿½Ó¦ï¿½ï¿½');
   console.log('='.repeat(60));
 }
 
-main().catch(console.error);
+if (require.main === module) {
+  main().catch(console.error);
+}

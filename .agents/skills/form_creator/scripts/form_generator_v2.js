@@ -9,7 +9,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { FieldTemplates, generateFieldId, i18n } = require('./yida_field_templates');
+const { FieldTemplates, generateFieldId, i18n } = require('./field_templates');
 
 // ==================== 工具函数 ====================
 

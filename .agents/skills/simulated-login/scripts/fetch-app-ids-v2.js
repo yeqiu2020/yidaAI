@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
- * 获取应用ID工具 V2
+ * [已废弃] 获取应用ID工具 V2
  * 通过点击应用，从 URL 或页面中提取应用编码（appId）
+ *
+ * ⚠️ 废弃说明：此文件未被任何脚本或 SKILL.md 引用，保留但不再维护。
+ *    Phase 0 安全修复时补全了被截断的 main() 函数使其通过语法检查。
  *
  * 版本: v2.0.0
  * 创建日期: 2026-03-23
@@ -213,4 +216,49 @@ async function main() {
   console.log(`   域名: ${orgConfig.base_url}`);
 
   // 2. 加载应用列表
-  const apps =
+  const apps = loadAppsFromMarkdown();
+
+  if (apps.length === 0) {
+    console.log('\n⚠️ 未找到应用列表，请检查组织及应用信息.md');
+    process.exit(0);
+  }
+
+  console.log(`\n📋 共找到 ${apps.length} 个应用`);
+
+  // 3. 启动浏览器并逐个获取应用ID
+  const browser = await chromium.launch({ headless: false });
+  const context = await browser.newContext();
+
+  // 加载已保存的 cookies
+  const cookies = loadCookies();
+  if (cookies && cookies.length > 0) {
+    await context.addCookies(cookies);
+  }
+
+  const page = await context.newPage();
+
+  for (const app of apps) {
+    if (app.appId && app.appId !== '-') {
+      console.log(`\n  ⏭️  "${app.name}" 已有应用ID: ${app.appId}，跳过`);
+      continue;
+    }
+
+    const appId = await getAppIdFromPage(page, app.name, orgConfig.base_url);
+    if (appId) {
+      updateAppIdInMarkdown(app.name, appId);
+    }
+  }
+
+  await browser.close();
+  console.log('\n' + '='.repeat(80));
+  console.log('  完成！');
+  console.log('='.repeat(80) + '\n');
+}
+
+// 启动
+if (require.main === module) {
+  main().catch(err => {
+    console.error('\n❌ 执行失败:', err.message);
+    process.exit(1);
+  });
+}

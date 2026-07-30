@@ -1,13 +1,363 @@
 const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
+let iconv = null;
+try {
+  iconv = require('iconv-lite');
+} catch (error) {
+  iconv = null;
+}
+
+// ==================== AI 字段类型覆盖配置 ====================
+// 由 AI 语义预推断生成的字段类型覆盖表，优先级高于脚本兜底规则
+let fieldTypeOverrides = {};
+
+function loadFieldTypeOverrides(overridePath, outputDir) {
+  if (!overridePath && outputDir) {
+    const autoPath = path.join(outputDir, 'field-types-override.json');
+    if (fs.existsSync(autoPath)) {
+      overridePath = autoPath;
+    }
+  }
+  if (!overridePath || !fs.existsSync(overridePath)) {
+    return;
+  }
+  try {
+    const content = fs.readFileSync(overridePath, 'utf8');
+    fieldTypeOverrides = JSON.parse(content);
+    console.log(`\n📋 已加载字段类型覆盖配置: ${overridePath}`);
+  } catch (error) {
+    console.error(`[警告] 加载字段类型覆盖配置失败: ${error.message}，将使用脚本兜底规则`);
+    fieldTypeOverrides = {};
+  }
+}
+
+function getFieldTypeOverride(formName, fieldName) {
+  if (!fieldTypeOverrides || typeof fieldTypeOverrides !== 'object') return null;
+  const formOverrides = fieldTypeOverrides[formName];
+  if (!formOverrides || typeof formOverrides !== 'object') return null;
+  let override = formOverrides[fieldName];
+  // v1.31.0: 如果纯净字段名找不到，尝试遍历查找带括号的原始全名
+  // 例如 fieldName="优惠类型" 但 override 键是 "优惠类型（复选）"
+  if (!override) {
+    for (const key of Object.keys(formOverrides)) {
+      if (key.startsWith(fieldName + '（') && key.endsWith('）')) {
+        override = formOverrides[key];
+        break;
+      }
+    }
+  }
+  if (!override) return null;
+  // 未经 AI 确认的关联候选（--draft 草稿中仍带 _candidate 标记）不生效
+  if (typeof override === 'object' && override._candidate) return null;
+  if (typeof override === 'string') {
+    return { type: override, options: null };
+  }
+  return { type: override.type || null, options: override.options || null };
+}
+
+// ==================== AI Override 完整应用（v1.27.0 新增） ====================
+// applyOverrides 在 parseExcelForms 之后、generateFieldListMarkdown 之前执行
+// 将 override 文件中的所有配置（字段重命名、关联表单完整配置、被填充字段插入、
+// 数据标题覆盖、字段状态自定义、选项值修正）一次性应用到表单数据上
+// 这样脚本只需运行一次即可生成包含完整关联信息的字段清单，无需 AI 后续手动 Edit
+
+function applyOverrides(forms) {
+  if (!fieldTypeOverrides || typeof fieldTypeOverrides !== 'object') return forms;
+
+  // v1.28.0 新增：构建表单字段映射表，用于自动推导关联表单的 fillRules 和 filledFields
+  // 当 override 中只写了 { "type": "关联表单", "target": "仓库信息" } 而未提供 fillRules/filledFields 时，
+  // 脚本自动从目标表单的字段列表推导填充规则和被填充字段，AI 无需手动写几十行重复配置
+  // v1.30.0 修复：只使用主表字段，严禁混入子表字段。
+  // 通用规则：当表单A关联表单B时，从表单B推导的填充字段只能来自表单B的主表字段。
+  // 子表字段代表多行数据，无法映射到当前表单主表的单一字段；
+  // 若需引用目标表单子表数据，应通过当前表单自己的子表来处理。
+  // 原BUG：formFieldMap 把主表+子表字段合并，导致采购入库主表错误出现
+  // 采购订单子表的"选择产品/采购数量/采购单价/采购金额"等字段（自相矛盾）。
+  const formFieldMap = {};
+  forms.forEach(form => {
+    formFieldMap[form.name] = [...form.mainFields];
+  });
+
+  forms.forEach(form => {
+    const formOverrides = fieldTypeOverrides[form.name];
+    if (!formOverrides || typeof formOverrides !== 'object') return;
+
+    // 处理表单元信息
+    if (formOverrides._meta && formOverrides._meta.dataTitle) {
+      form._dataTitleOverride = formOverrides._meta.dataTitle;
+    }
+
+    // 处理主表字段
+    form.mainFields = applyFieldOverrides(form.mainFields, formOverrides, form.name, formFieldMap);
+
+    // 处理子表字段
+    if (form.subTables && form.subTables.length > 0) {
+      form.subTables.forEach(subTable => {
+        subTable.fields = applyFieldOverrides(subTable.fields, formOverrides, form.name, formFieldMap);
+      });
+    }
+  });
+
+  return forms;
+}
+
+// v1.28.0 新增：自动生成填充规则（同名字段匹配，排除系统字段和流水号）
+function autoGenerateFillRules(targetFields, targetFormName, systemKeywords) {
+  return targetFields
+    .filter(f => !systemKeywords.some(kw => f.name.includes(kw)))
+    .filter(f => {
+      const fieldType = mapFieldType(f.name, f.typeHint, f.isOptions, f._forceType, targetFormName);
+      return fieldType !== '流水号';
+    })
+    .map(f => `${f.name}=${f.name}`);
+}
+
+// v1.28.0 新增：自动生成被填充字段（全部设为只读，类型与目标表单一致）
+function autoGenerateFilledFields(targetFields, targetFormName, systemKeywords) {
+  return targetFields
+    .filter(f => !systemKeywords.some(kw => f.name.includes(kw)))
+    .filter(f => {
+      const fieldType = mapFieldType(f.name, f.typeHint, f.isOptions, f._forceType, targetFormName);
+      return fieldType !== '流水号';
+    })
+    .map(f => {
+      const fieldType = mapFieldType(f.name, f.typeHint, f.isOptions, f._forceType, targetFormName);
+      // 复选类型在关联填充场景下改为单行文本（复选不适合只读填充）
+      const mappedType = fieldType === '复选' ? '单行文本' : fieldType;
+      const result = { name: f.name, type: mappedType, status: '只读' };
+
+      // v1.31.0: 从目标表单字段获取选项和说明，确保被填充字段能正确显示选项和小数单位
+      // 优先从 AI override 获取（如产品分类的选项是 override 配置的，不在 parseField 解析结果中）
+      const aiOverride = getFieldTypeOverride(targetFormName, f.name);
+      const overrideOptions = aiOverride && aiOverride.options && Array.isArray(aiOverride.options) && aiOverride.options.length > 0
+        ? aiOverride.options : null;
+
+      if (overrideOptions) {
+        result.isOptions = true;
+        result.options = overrideOptions;
+      } else if (f.isOptions && f.options && f.options.length > 0) {
+        result.isOptions = true;
+        result.options = f.options;
+      }
+
+      // v1.31.0: 从目标表单字段的 override 或 generateFieldDescription 获取说明
+      // 这样被填充的数值字段（如参考采购价）能正确显示"2位小数，单位：元"
+      // 下拉单选字段（如产品分类）能正确显示选项
+      if (aiOverride && aiOverride.description) {
+        result.description = aiOverride.description;
+      }
+
+      return result;
+    });
+}
+
+// v1.29.2 新增：从关联字段名提取前缀，用于多关联同源场景自动加前缀
+// "选择调出仓库" → "调出"，"选择调入仓库" → "调入"，"选择仓库" → "仓库"
+function extractPrefix(associationFieldName) {
+  let prefix = associationFieldName.replace(/^选择/, '');
+  // 如果前缀以"仓库"结尾且去掉后不为空，去掉"仓库"（如"调出仓库"→"调出"）
+  if (prefix.length > 2 && prefix.endsWith('仓库')) {
+    prefix = prefix.slice(0, -2);
+  }
+  if (!prefix) prefix = associationFieldName;
+  return prefix;
+}
+
+// v1.31.0 新增：查找字段 override 时，同时匹配纯净字段名和带括号的原始全名
+// parseField 会将 "优惠类型（复选）" 解析为 {name: "优惠类型", typeHint: "复选"}
+// 如果 AI 在 override 中写了 "优惠类型（复选）" 作为键，用 field.name="优惠类型" 找不到
+// 此函数同时尝试两种键名，确保 override 生效
+function findFieldOverride(formOverrides, field) {
+  if (!formOverrides || typeof formOverrides !== 'object') return null;
+  // 优先用纯净字段名匹配
+  let override = formOverrides[field.name];
+  if (override) return override;
+  // 回退：用原始全名（name + typeHint 括号）匹配
+  if (field.typeHint) {
+    const fullName = `${field.name}（${field.typeHint}）`;
+    override = formOverrides[fullName];
+    if (override) return override;
+  }
+  return null;
+}
+
+function applyFieldOverrides(fields, formOverrides, formName, formFieldMap) {
+  const result = [];
+
+  // v1.28.0: 自动推导填充字段时排除的系统字段关键词
+  const SYSTEM_FIELD_KEYWORDS = ['创建人', '创建时间', '修改人', '修改时间', '状态', '备注', '说明'];
+
+  // v1.29.0: 收集主表原始字段名集合，用于自动去重
+  // v1.29.1: 预收集所有 rename 后的最终字段名
+  // v1.29.2: 拆分为 originalNames（主表原始字段）和 insertedFilledNames（已插入填充字段）
+  // 区分两种重名情况：与主表字段重名（保留fillRules）vs 与已插入填充字段重名（加前缀）
+  const originalNames = new Set();
+  fields.forEach(f => {
+    let override = findFieldOverride(formOverrides, f);
+    // 未经 AI 确认的关联候选不生效
+    if (override && override._candidate) override = null;
+    if (override && override.rename) {
+      originalNames.add(override.rename);
+    } else {
+      originalNames.add(f.name);
+    }
+  });
+
+  // 已插入的填充字段名（动态更新，用于多关联同源场景的前缀去重）
+  const insertedFilledNames = new Set();
+
+  fields.forEach(field => {
+    let override = findFieldOverride(formOverrides, field);
+
+    // 未经 AI 确认的关联候选（--draft 草稿中仍带 _candidate 标记）不生效，
+    // 程序绝不替 AI 拍板，按普通字段处理并明确提示
+    if (override && override._candidate) {
+      console.log(`  [候选未确认] ${formName}.${field.name} 的关联候选（${override.target || '未知目标'}）仍带 _candidate 标记，已按普通字段处理。确认后请删除该标记。`);
+      override = null;
+    }
+
+    // v1.28.0: 自动推导的 filledFields（局部变量，不修改 override 对象）
+    let autoFilledFields = null;
+
+    // v1.29.0: 去重后的 fillRules 和 filledFields
+    let finalFillRules = null;
+    let finalFilledFields = null;
+
+    if (override) {
+      // 重命名
+      if (override.rename) {
+        field.name = override.rename;
+      }
+
+      // 设置关联表单配置（生成 typeHint 字符串供 mapFieldType 和 generateFieldDescription 使用）
+      if (override.target) {
+        // v1.28.0: 当 AI 未手动提供 fillRules 时，从目标表单自动推导
+        let fillRules = override.fillRules;
+        if (!fillRules && formFieldMap && formFieldMap[override.target]) {
+          fillRules = autoGenerateFillRules(formFieldMap[override.target], override.target, SYSTEM_FIELD_KEYWORDS);
+          if (fillRules.length > 0) {
+            console.log(`  [自动推导填充规则] ${formName}.${field.name} → ${override.target}: ${fillRules.length} 个字段`);
+          }
+        }
+
+        // v1.28.0: 当 AI 未手动提供 filledFields 时，从目标表单自动推导
+        if (!override.filledFields && formFieldMap && formFieldMap[override.target]) {
+          autoFilledFields = autoGenerateFilledFields(formFieldMap[override.target], override.target, SYSTEM_FIELD_KEYWORDS);
+          if (autoFilledFields.length > 0) {
+            console.log(`  [自动推导被填充字段] ${formName}.${field.name} → ${override.target}: ${autoFilledFields.length} 个字段`);
+          }
+        }
+
+        // v1.29.2: 智能去重，区分两种重名情况，避免降低质量
+        // 情况A：与主表原始字段重名 → 保留fillRules（让关联填充更新主表已有字段），不插入新字段
+        // 情况B：与已插入填充字段重名（多关联同源）→ 自动加前缀（如"调入仓库名称"），防止信息丢失
+        const filledFields = override.filledFields || autoFilledFields;
+        if (filledFields && Array.isArray(filledFields) && filledFields.length > 0) {
+          const dedupedFilled = [];
+          const dedupedRules = [];
+          const prefix = extractPrefix(field.name);
+
+          filledFields.forEach((ff, idx) => {
+            const fillRule = fillRules && fillRules[idx] ? fillRules[idx] : `${ff.name}=${ff.name}`;
+
+            if (originalNames.has(ff.name)) {
+              // 情况A：与主表原始字段重名
+              // 保留fillRules（让关联填充更新主表已有字段），不插入新字段
+              dedupedRules.push(fillRule);
+              console.log(`  [保留填充规则] ${formName} - "${ff.name}" 为主表已有字段，保留填充规则`);
+            } else if (insertedFilledNames.has(ff.name) || result.some(r => r.name === ff.name)) {
+              // 情况B：与已插入的填充字段重名（多关联同源）
+              // 自动加前缀（如"调入仓库名称"），防止信息丢失
+              const prefixedName = `${prefix}${ff.name}`;
+              if (originalNames.has(prefixedName) || insertedFilledNames.has(prefixedName) || result.some(r => r.name === prefixedName)) {
+                console.log(`  [跳过重复] ${formName} - "${ff.name}" 加前缀"${prefix}"后仍重复，跳过`);
+              } else {
+                dedupedFilled.push({ ...ff, name: prefixedName });
+                dedupedRules.push(`${prefixedName}=${ff.name}`);
+                console.log(`  [自动加前缀] ${formName} - "${ff.name}" → "${prefixedName}"`);
+              }
+            } else {
+              // 不重复，正常插入
+              dedupedFilled.push(ff);
+              dedupedRules.push(fillRule);
+            }
+          });
+          finalFilledFields = dedupedFilled;
+          finalFillRules = dedupedRules;
+        } else if (fillRules) {
+          finalFillRules = fillRules;
+        }
+
+        // 生成 typeHint（包含去重后的 fillRules）
+        let typeHint = `关联-->${override.target}`;
+        if (finalFillRules && Array.isArray(finalFillRules) && finalFillRules.length > 0) {
+          typeHint += `；填充：${finalFillRules.join('、')}`;
+        }
+        field.typeHint = typeHint;
+        field._forceType = '关联表单';
+      } else if (override.type) {
+        field._forceType = validateFieldType(override.type);
+      }
+
+      // 设置选项
+      if (override.options && Array.isArray(override.options) && override.options.length > 0) {
+        field.options = override.options;
+        field.isOptions = true;
+      }
+
+      // 设置字段状态
+      if (override.status) {
+        field._forceStatus = override.status;
+      }
+
+      // 设置字段说明
+      if (override.description) {
+        field._forceDescription = override.description;
+      }
+    }
+
+    result.push(field);
+
+    // 在该字段后面插入去重后的被填充字段
+    if (finalFilledFields && Array.isArray(finalFilledFields) && finalFilledFields.length > 0) {
+      finalFilledFields.forEach(ff => {
+        // v1.29.2: 再次检查是否与 result 中已插入的填充字段重复
+        if (result.some(r => r.name === ff.name)) {
+          console.log(`  [跳过重复] ${formName} - "${ff.name}" 与已插入的填充字段重复，跳过`);
+        } else {
+          insertedFilledNames.add(ff.name);
+          // v1.31.0: 不设 _forceDescription（或仅当有显式 description 时才设），
+          // 让 generateFieldDescription 根据字段名和类型自然推断说明（下拉选项、数值小数单位等）
+          const filledField = {
+            name: ff.name,
+            typeHint: ff.type || '单行文本',
+            options: ff.options || null,
+            isOptions: !!(ff.options && ff.options.length > 0),
+            _forceType: ff.type ? validateFieldType(ff.type) : '单行文本',
+            _forceStatus: ff.status || '只读',
+            _auto: true,
+            _isFilled: true
+          };
+          // 仅当 override 显式提供了 description 时才强制说明
+          if (ff.description) {
+            filledField._forceDescription = ff.description;
+          }
+          result.push(filledField);
+        }
+      });
+    }
+  });
+
+  return result;
+}
 
 // ==================== 合法字段类型白名单 ====================
 // 所有字段类型必须严格来自此列表，禁止输出任何不在列表中的类型
 const VALID_FIELD_TYPES = [
   '单行文本', '多行文本', '数值', '日期',
   '单选', '复选', '下拉单选', '下拉复选',
-  '关联表单', '关联带出', '成员', '部门', '附件', '图片', '地址', '流水号'
+  '关联表单', '成员', '部门', '附件', '图片', '地址', '流水号'
 ];
 
 function validateFieldType(type) {
@@ -18,166 +368,12 @@ function validateFieldType(type) {
   return type;
 }
 
-// ==================== 评估咨询行业字段知识库 ====================
-// 用途：当Excel中缺少某个表单的字段定义时，从此知识库补充系统字段和通用字段
-// 注意：此知识库只包含通用系统字段，不包含具体业务字段。业务字段必须由Excel提供。
-const industryFieldLibrary = {
-  // 基础信息类
-  '机构信息': {
-    type: '普通表单',
-    fields: ['机构编号（流水号）', '机构名称', '机构简称', '统一社会信用代码', '机构类型（总公司/分公司/子公司）', '所属行业', '注册资本（金额）', '成立日期（日期）', '注册地址', '办公地址', '联系电话', '传真', '邮箱', '网站', '法人姓名', '法人电话', '机构状态（启用/停用）', '备注（多行）']
-  },
-  '客户信息': {
-    type: '普通表单',
-    fields: ['客户编号（流水号）', '客户名称', '客户简称', '客户类型（企业/个人/政府/事业单位）', '统一社会信用代码/身份证号', '所属行业', '客户等级（A/B/C/D）', '客户来源（自主开发/转介绍/招投标/其他）', '联系人姓名', '联系人电话', '联系人邮箱', '联系人职务', '客户地址', '开户银行', '银行账号', '合作状态（潜在/合作中/暂停/终止）', '首次合作日期（日期）', '备注（多行）']
-  },
-  '估价师信息': {
-    type: '普通表单',
-    fields: ['估价师编号（流水号）', '姓名', '性别（男/女）', '身份证号', '联系电话', '邮箱', '所属机构', '部门', '职位', '执业资格类型（房地产估价师/土地估价师/资产评估师）', '资格证书号', '注册有效期（日期）', '从业年限（数值）', '专业领域（住宅/商业/工业/土地/资产）', '在职状态（在职/离职/退休）', '入职日期（日期）', '离职日期（日期）', '备注（多行）']
-  },
-  
-  // 项目管理类
-  '主项目信息': {
-    type: '普通表单',
-    fields: ['项目编号（流水号）', '项目名称', '项目类型（房地产评估/土地评估/资产评估/咨询顾问）', '委托方（关联-->客户信息）', '委托方名称（关联带出）', '项目负责人（成员）', '项目成员（成员）', '项目状态（待立项/进行中/已完结/已终止）', '立项日期（日期）', '预计完成日期（日期）', '实际完成日期（日期）', '项目金额（金额）', '项目地点', '项目简介（多行）', '备注（多行）']
-  },
-  '项目立项': {
-    type: '流程表单',
-    fields: ['立项编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '委托方（关联带出）', '项目类型（关联带出）', '项目金额（关联带出）', '立项申请人（成员）', '立项日期（日期）', '立项事由（多行）', '预计工期（数值）', '项目预算（金额）', '附件（附件）']
-  },
-  '项目终止': {
-    type: '流程表单',
-    fields: ['终止编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '委托方（关联带出）', '项目负责人（关联带出）', '终止申请人（成员）', '终止日期（日期）', '终止原因（多行）', '已完工作量（数值）', '已收费用（金额）', '需退费用（金额）', '终止审批意见（多行）', '附件（附件）']
-  },
-  '评定估算': {
-    type: '流程表单',
-    fields: ['估算编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '委托方（关联带出）', '估价师（成员）', '评估目的（抵押/转让/课税/清算/司法鉴定）', '评估方法（市场法/收益法/成本法/假设开发法）', '评估基准日（日期）', '评估价值（金额）', '价值类型（市场价值/投资价值/现状价值/残余价值）', '估算说明（多行）', '附件（附件）']
-  },
-  
-  // 合同管理类
-  '合同申请': {
-    type: '流程表单',
-    fields: ['合同编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '委托方（关联-->客户信息）', '委托方名称（关联带出）', '合同类型（委托评估/咨询顾问/技术服务）', '合同金额（金额）', '付款方式（一次性/分期/按进度）', '合同签订日期（日期）', '合同有效期（日期）', '主要条款（多行）', '附件（附件）'],
-    subTables: [
-      {
-        name: '付款计划',
-        fields: ['付款期次（数值）', '付款比例（数值）', '付款金额（金额）', '付款条件（多行）', '计划付款日期（日期）']
-      }
-    ]
-  },
-  '合同修改': {
-    type: '流程表单',
-    fields: ['修改编号（流水号）', '关联合同（关联-->合同申请）', '合同编号（关联带出）', '项目名称（关联带出）', '委托方（关联带出）', '原合同金额（关联带出）', '修改后金额（金额）', '修改内容（多行）', '修改原因（多行）', '申请人（成员）', '申请日期（日期）', '附件（附件）']
-  },
-  '合同作废': {
-    type: '流程表单',
-    fields: ['作废编号（流水号）', '关联合同（关联-->合同申请）', '合同编号（关联带出）', '项目名称（关联带出）', '委托方（关联带出）', '合同金额（关联带出）', '已收金额（金额）', '作废原因（多行）', '申请人（成员）', '申请日期（日期）', '附件（附件）']
-  },
-  
-  // 报告管理类
-  '报告审核': {
-    type: '流程表单',
-    fields: ['审核编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '报告编号', '报告类型（正式报告/预评估报告/咨询报告）', '估价师（成员）', '审核人（成员）', '审核日期（日期）', '审核意见（多行）', '审核结论（通过/退回修改）', '附件（附件）']
-  },
-  '报告盖章': {
-    type: '流程表单',
-    fields: ['盖章编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '报告编号', '报告类型（关联带出）', '盖章类型（公章/执业章/签字章）', '盖章份数（数值）', '申请人（成员）', '申请日期（日期）', '盖章人（成员）', '盖章日期（日期）', '附件（附件）']
-  },
-  '报告修改': {
-    type: '流程表单',
-    fields: ['修改编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '原报告编号', '修改后报告编号', '修改原因（多行）', '修改内容（多行）', '申请人（成员）', '申请日期（日期）', '附件（附件）']
-  },
-  '报告加出': {
-    type: '流程表单',
-    fields: ['加出编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '原报告编号', '加出份数（数值）', '加出原因（多行）', '申请人（成员）', '申请日期（日期）', '附件（附件）']
-  },
-  '报告相关盖章': {
-    type: '流程表单',
-    fields: ['盖章编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '相关文件名称', '盖章类型（公章/执业章/签字章）', '盖章份数（数值）', '申请人（成员）', '申请日期（日期）', '盖章人（成员）', '盖章日期（日期）', '附件（附件）']
-  },
-  '报告归档': {
-    type: '流程表单',
-    fields: ['归档编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '报告编号', '归档日期（日期）', '归档人（成员）', '档案位置', '档案状态（已归档/借阅中/已销毁）', '保管期限（数值）', '备注（多行）', '附件（附件）']
-  },
-  
-  // 案例库
-  '案例库': {
-    type: '流程表单',
-    fields: ['案例编号（流水号）', '案例名称', '案例类型（住宅/商业/工业/土地/资产）', '项目地点', '评估目的', '评估方法', '评估价值（金额）', '估价师（成员）', '案例日期（日期）', '案例描述（多行）', '附件（附件）']
-  },
-  
-  // 考勤&绩效
-  '考勤同步': {
-    type: '普通表单',
-    fields: ['同步编号（流水号）', '同步日期（日期）', '同步月份', '同步人员（成员）', '应出勤天数（数值）', '实际出勤天数（数值）', '迟到次数（数值）', '早退次数（数值）', '请假天数（数值）', '旷工天数（数值）', '同步状态（成功/失败）', '备注（多行）']
-  },
-  '绩效核算': {
-    type: '流程表单',
-    fields: ['核算编号（流水号）', '核算月份', '核算人（成员）', '被核算人（成员）', '项目数量（数值）', '项目金额合计（金额）', '绩效系数（数值）', '绩效金额（金额）', '核算日期（日期）', '核算状态（待审核/已通过/已驳回）', '备注（多行）']
-  },
-  
-  // 财务管理
-  '费用报销': {
-    type: '流程表单',
-    fields: ['报销编号（流水号）', '报销人（成员）', '报销日期（日期）', '报销类型（差旅费/办公费/业务招待费/交通费/其他）', '报销总金额（金额）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '发票张数（数值）', '附件（附件）'],
-    subTables: [
-      {
-        name: '报销明细',
-        fields: ['费用日期（日期）', '费用类型（交通费/住宿费/餐饮费/办公用品/其他）', '费用说明（多行）', '金额（金额）', '发票类型（增值税专用发票/增值税普通发票/无发票）', '发票号码']
-      }
-    ]
-  },
-  '项目结算': {
-    type: '流程表单',
-    fields: ['结算编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '委托方（关联带出）', '合同金额（关联带出）', '已收金额（金额）', '本次结算金额（金额）', '结算比例（数值）', '结算日期（日期）', '结算状态（待结算/已结算/部分结算）', '备注（多行）'],
-    subTables: [
-      {
-        name: '结算明细',
-        fields: ['结算期次（数值）', '结算内容（多行）', '结算金额（金额）', '结算比例（数值）', '计划结算日期（日期）', '实际结算日期（日期）', '结算状态（待结算/已结算）']
-      }
-    ]
-  },
-  '收款登记': {
-    type: '流程表单',
-    fields: ['收款编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '委托方（关联-->客户信息）', '委托方名称（关联带出）', '收款总金额（金额）', '收款方式（银行转账/现金/支票/其他）', '收款日期（日期）', '收款账户', '发票状态（已开票/未开票/部分开票）', '备注（多行）'],
-    subTables: [
-      {
-        name: '收款明细',
-        fields: ['款项类型（预付款/进度款/尾款/质保金）', '收款金额（金额）', '收款比例（数值）', '对应合同条款（多行）', '计划收款日期（日期）', '实际收款日期（日期）']
-      }
-    ]
-  },
-  '退款登记': {
-    type: '流程表单',
-    fields: ['退款编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '委托方（关联带出）', '原收款金额（金额）', '退款总金额（金额）', '退款原因（多行）', '退款方式（银行转账/现金/支票）', '退款日期（日期）', '退款账户', '备注（多行）'],
-    subTables: [
-      {
-        name: '退款明细',
-        fields: ['原收款编号（关联-->收款登记）', '原收款金额（关联带出）', '本次退款金额（金额）', '退款原因（多行）']
-      }
-    ]
-  },
-  '开票登记': {
-    type: '流程表单',
-    fields: ['开票编号（流水号）', '关联项目（关联-->主项目信息）', '项目名称（关联带出）', '委托方（关联带出）', '发票类型（增值税专用发票/增值税普通发票）', '开票总金额（金额）', '税率（数值）', '税额（金额）', '价税合计（金额）', '开票日期（日期）', '附件（附件）'],
-    subTables: [
-      {
-        name: '发票明细',
-        fields: ['发票号码', '发票金额（金额）', '税率（数值）', '税额（金额）', '价税合计（金额）', '发票内容（多行）']
-      }
-    ]
-  },
-  '退票登记': {
-    type: '流程表单',
-    fields: ['退票编号（流水号）', '关联开票（关联-->开票登记）', '发票号码（关联带出）', '发票金额（关联带出）', '退票总金额（金额）', '退票原因（多行）', '退票日期（日期）', '新发票号码', '备注（多行）'],
-    subTables: [
-      {
-        name: '退票明细',
-        fields: ['原发票号码（关联-->开票登记）', '原发票金额（关联带出）', '本次退票金额（金额）', '退票原因（多行）']
-      }
-    ]
-  }
-};
+// ==================== 行业字段知识库 ====================
+// v1.24.0: 已删除硬编码行业知识库
+// 当Excel中缺少某个表单的字段定义时，由AI根据用户提供的行业场景动态推导
+// 脚本不再内置任何特定行业的字段定义
+
+const industryFieldLibrary = {};
 
 // ==================== 流水号唯一性校验 ====================
 
@@ -199,11 +395,11 @@ function ensureSingleSerialNumber(fields, formName) {
         // 如果字段名包含"原"、"旧"、"修改后"等，说明是引用其他表单的编号，转为单行文本
         if (field.name.includes('原') || field.name.includes('旧') || field.name.includes('修改后') || field.name.includes('新')) {
           console.log(`  [流水号去重] ${formName} - "${field.name}" 是引用编号，转为单行文本`);
-          return { ...field, typeHint: '单行文本', _convertedFromSerial: true };
+          return { ...field, typeHint: '单行文本', _convertedFromSerial: true, _forceType: '单行文本' };
         }
         // 其他情况，如"报告编号"在"报告审核"中，是业务编号而非表单编号，转为单行文本
         console.log(`  [流水号去重] ${formName} - "${field.name}" 是业务编号，转为单行文本`);
-        return { ...field, typeHint: '单行文本', _convertedFromSerial: true };
+        return { ...field, typeHint: '单行文本', _convertedFromSerial: true, _forceType: '单行文本' };
       }
     }
     return field;
@@ -214,7 +410,7 @@ function ensureSingleSerialNumber(fields, formName) {
 // ==================== 辅助函数：获取字段类型（用于校验） ====================
 
 function getFieldTypeForCheck(field) {
-  return mapFieldType(field.name, field.typeHint, field.isOptions);
+  return mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType);
 }
 
 // ==================== 字段解析函数 ====================
@@ -243,8 +439,13 @@ function parseFields(fieldsStr) {
 // ==================== 字段类型映射 ====================
 // 所有返回的字段类型必须通过 validateFieldType 校验，确保严格来自白名单
 
-function mapFieldType(fieldName, typeHint, isOptions) {
+function mapFieldType(fieldName, typeHint, isOptions, forceType, formName = '') {
   let result = '单行文本'; // 默认回退值
+
+  // 如果被强制指定类型（如 ensureSingleSerialNumber 的类型转换），直接使用
+  if (forceType) {
+    return validateFieldType(forceType);
+  }
 
   // 如果明确指定了typeHint，优先使用
   if (typeHint) {
@@ -259,7 +460,8 @@ function mapFieldType(fieldName, typeHint, isOptions) {
     else if (hint === '下拉单选') result = '下拉单选';
     else if (hint === '下拉复选') result = '下拉复选';
     else if (hint === '关联表单') result = '关联表单';
-    else if (hint === '关联带出') result = '关联带出';
+    // "填充"（原"关联带出"）是字段属性而非字段类型，不在此处返回类型
+    // 由后续字段名推断逻辑（mapFieldType 的 fieldName 推断部分）确定实际类型
     else if (hint === '成员') result = '成员';
     else if (hint === '部门') result = '部门';
     else if (hint === '附件') result = '附件';
@@ -267,6 +469,8 @@ function mapFieldType(fieldName, typeHint, isOptions) {
     else if (hint === '地址') result = '地址';
     else if (hint === '流水号') result = '流水号';
     // hint中的关键词推断
+    // 必须先检查"填充"，避免"填充-->目标表单.源字段"被 hint.includes('关联') 错误匹配为"关联表单"
+    else if (hint.includes('填充')) { /* 填充是属性，跳过类型推断，由字段名推断 */ }
     else if (hint.includes('流水号')) result = '流水号';
     else if (hint.includes('编号') && !hint.includes('单行文本') && !hint.includes('多行文本')) result = '流水号';
     else if (hint.includes('关联')) result = '关联表单';
@@ -279,27 +483,50 @@ function mapFieldType(fieldName, typeHint, isOptions) {
     else if (hint.includes('附件')) result = '附件';
     else if (hint.includes('图片') || hint.includes('照片')) result = '图片';
     else if (hint.includes('地址')) result = '地址';
-    else if (hint.includes('关联带出')) result = '关联带出';
+    // "填充"（原"关联带出"）是字段属性，不作为类型返回
+    // 含"填充"的typeHint（如"填充-->源表单.源字段"）跳过类型推断，由字段名推断实际类型
+  }
+
+  // 用户显式 typeHint 已命中具体类型时，不再使用 AI 覆盖或兜底规则
+  const hasExplicitTypeHint = result !== '单行文本';
+
+  // AI 语义覆盖：当用户没有显式写 typeHint 时，优先采用 AI 预推断结果
+  if (!hasExplicitTypeHint && formName) {
+    const aiOverride = getFieldTypeOverride(formName, fieldName);
+    if (aiOverride && aiOverride.type) {
+      const validatedType = validateFieldType(aiOverride.type);
+      if (aiOverride.type !== validatedType && validatedType === '单行文本') {
+        // AI 指定的类型非法，回退为单行文本并跳过兜底规则
+        console.warn(`  [AI类型覆盖警告] ${formName}.${fieldName} 指定的类型 "${aiOverride.type}" 不合法，已回退为"单行文本"`);
+        return validatedType;
+      }
+      console.log(`  [AI类型覆盖] ${formName}.${fieldName} → ${validatedType}`);
+      return validatedType;
+    }
   }
 
   // 如果typeHint没有匹配到，根据字段名称推断
   if (result === '单行文本') {
     if (fieldName.includes('编号') || fieldName.includes('单号') || fieldName.includes('编码')) result = '流水号';
     else if (fieldName.includes('日期') || fieldName.includes('时间')) result = '日期';
-    else if (fieldName.includes('金额') || fieldName.includes('费用') || fieldName.includes('价格') || fieldName.includes('成本')) result = '数值';
+    else if (fieldName.includes('金额') || fieldName.includes('费用') || fieldName.includes('价') || fieldName.includes('成本') || fieldName.includes('余额') || fieldName.includes('额度') || fieldName.includes('上限') || fieldName.includes('下限') || fieldName.includes('税额') || fieldName.includes('预算')) result = '数值';
     else if (fieldName.includes('数量') || fieldName.includes('个数') || fieldName.includes('人数') || fieldName.includes('次数') || fieldName.includes('天数') || fieldName.includes('份数') || fieldName.includes('张数')) result = '数值';
     else if (fieldName.includes('比例') || fieldName.includes('比率') || fieldName.includes('系数') || fieldName.includes('折扣') || fieldName.includes('税率')) result = '数值';
     else if (fieldName.includes('备注') || fieldName.includes('说明') || fieldName.includes('描述') || fieldName.includes('内容') || fieldName.includes('简介') || fieldName.includes('事由') || fieldName.includes('原因') || fieldName.includes('意见') || fieldName.includes('条款') || fieldName.includes('明细')) result = '多行文本';
     else if (fieldName.includes('附件') || fieldName.includes('文件')) result = '附件';
     else if (fieldName.includes('照片') || fieldName.includes('图片')) result = '图片';
     else if (fieldName.includes('地址') || fieldName.includes('位置') || fieldName.includes('地点')) result = '地址';
-    else if (fieldName.includes('人员') || fieldName.includes('负责人') || fieldName.includes('创建人') || fieldName.includes('估价师') || fieldName.includes('成员') || fieldName.includes('员工') || fieldName.includes('申请人') || fieldName.includes('经办人') || fieldName.includes('审批人') || fieldName.includes('签字人') || fieldName.includes('复核人') || fieldName.includes('领取人') || fieldName.includes('归档人') || fieldName.includes('开票人') || fieldName.includes('盖章人') || fieldName.includes('收款人') || fieldName.includes('报销人') || fieldName.includes('核算人') || fieldName.includes('同步人') || fieldName.includes('结算人') || fieldName.includes('审核人') || fieldName.includes('被核算人') || fieldName.includes('借用人') || fieldName.includes('归还人') || fieldName.includes('入库人') || fieldName.includes('出库人')) result = '成员';
+    else if (fieldName.includes('人员') || fieldName.includes('负责人') || fieldName.includes('创建人') || fieldName.includes('成员') || fieldName.includes('员工') || fieldName.includes('申请人') || fieldName.includes('经办人') || fieldName.includes('审批人') || fieldName.includes('审核人')) result = '成员';
     else if (fieldName.includes('部门')) result = '部门';
     else if (fieldName.includes('状态') || fieldName.includes('类型') || fieldName.includes('等级') || fieldName.includes('方式')) result = '下拉单选';
+    // v1.21.0 新增：分类/类别/品类/组别/单位/计量单位 语义上属于下拉单选
+    else if (fieldName.includes('分类') || fieldName.includes('类别') || fieldName.includes('品类') || fieldName.includes('组别')) result = '下拉单选';
+    else if (fieldName.includes('单位') || fieldName.includes('计量单位')) result = '下拉单选';
   }
 
   // 选项字段：如果字段名包含选项特征，推断为下拉单选
-  if (isOptions) {
+  // v1.31.0: 但如果 forceType 已指定（如 override 指定了下拉复选），不覆盖
+  if (isOptions && !forceType) {
     result = '下拉单选';
   }
 
@@ -308,32 +535,154 @@ function mapFieldType(fieldName, typeHint, isOptions) {
 
 // ==================== 字段说明生成 ====================
 
-function generateFieldDescription(field, formType) {
+// v1.32.0 新增：从所有表单的 override 中查找字段配置（用于子表字段继承源表单选项）
+function getFieldOverrideFromAllForms(fieldName) {
+  if (!fieldTypeOverrides || typeof fieldTypeOverrides !== 'object') return null;
+  for (const formName of Object.keys(fieldTypeOverrides)) {
+    const formOverrides = fieldTypeOverrides[formName];
+    if (!formOverrides || typeof formOverrides !== 'object') continue;
+    const override = formOverrides[fieldName];
+    if (override && override.options && Array.isArray(override.options) && override.options.length > 0) {
+      return override;
+    }
+  }
+  return null;
+}
+
+function generateFieldDescription(field, formType, formName) {
+  // 强制说明（由 applyOverrides 设置）
+  if (field._forceDescription) return field._forceDescription;
+
+  // 优先使用当前表单 AI 覆盖配置中的选项
+  const aiOverride = formName ? getFieldTypeOverride(formName, field.name) : null;
+  if (aiOverride && aiOverride.type && VALID_FIELD_TYPES.includes(aiOverride.type) &&
+      aiOverride.options && Array.isArray(aiOverride.options) && aiOverride.options.length > 0) {
+    return aiOverride.options.join('/');
+  }
+
+  // v1.32.0：如果当前表单找不到，从所有表单的 override 中查找（子表字段继承源表单选项）
+  if (!aiOverride || !aiOverride.options || !Array.isArray(aiOverride.options) || aiOverride.options.length === 0) {
+    const allFormsOverride = getFieldOverrideFromAllForms(field.name);
+    if (allFormsOverride && allFormsOverride.options && Array.isArray(allFormsOverride.options) && allFormsOverride.options.length > 0) {
+      return allFormsOverride.options.join('/');
+    }
+  }
+
   if (field.typeHint) {
     if (field.typeHint.includes('关联-->')) return field.typeHint;
-    if (field.typeHint.includes('关联带出')) return '关联带出';
+    // 旧格式兼容：typeHint 包含"填充-->"时保留原值
+    if (field.typeHint.includes('填充-->')) return field.typeHint;
     if (field.typeHint.includes('公式')) return field.typeHint;
     if (field.typeHint.includes('位小数')) return field.typeHint;
     if (field.typeHint.includes('单位')) return field.typeHint;
   }
   if (field.isOptions) return field.options.join('/');
   
-  const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions);
-  if (fieldType === '流水号') return '自动生成';
+  const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType, formName);
+  if (fieldType === '流水号') {
+    const prefix = formName ? inferSerialPrefix(formName) : 'SN';
+    const today = new Date();
+    const dateStr = `${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}${String(today.getDate()).padStart(2, '0')}`;
+    const example = `${prefix}${dateStr}001`;
+    return `前缀：${prefix}，示例：${example}`;
+  }
   if (fieldType === '数值') {
-    if (field.name.includes('金额') || field.name.includes('费用') || field.name.includes('价格') || field.name.includes('成本') || field.name.includes('收款') || field.name.includes('退款') || field.name.includes('报销') || field.name.includes('绩效') || field.name.includes('结算') || field.name.includes('税额') || field.name.includes('价税') || field.name.includes('合同金额') || field.name.includes('预算') || field.name.includes('注册资本')) return '2位小数，单位：元';
-    if (field.name.includes('数量') || field.name.includes('个数') || field.name.includes('人数') || field.name.includes('次数') || field.name.includes('天数') || field.name.includes('份数') || field.name.includes('张数') || field.name.includes('年限')) return '0位小数';
+    // 上下限通常是数量阈值，不按金额处理，除非字段名明确包含金额类词
+    if ((field.name.includes('上限') || field.name.includes('下限')) && !field.name.includes('价') && !field.name.includes('金额') && !field.name.includes('余额') && !field.name.includes('额度')) return '0位小数，单位：个';
+    // 金额类
+    if (field.name.includes('金额') || field.name.includes('费用') || field.name.includes('价') || field.name.includes('成本') || field.name.includes('税额') || field.name.includes('价税') || field.name.includes('预算') || field.name.includes('余额') || field.name.includes('额度')) return '2位小数，单位：元';
+    // 数量类
+    if (field.name.includes('数量') || field.name.includes('个数') || field.name.includes('人数') || field.name.includes('次数') || field.name.includes('天数') || field.name.includes('份数') || field.name.includes('张数') || field.name.includes('年限')) return '0位小数，单位：个';
+    // 比例类
     if (field.name.includes('比例') || field.name.includes('比率') || field.name.includes('系数') || field.name.includes('折扣') || field.name.includes('税率')) return '2位小数，单位：%';
     if (field.name.includes('小时')) return '1位小数，单位：小时';
+  }
+  // 下拉单选/下拉复选/复选字段：如果没有选项，推断默认选项
+  if (fieldType === '下拉单选' || fieldType === '下拉复选' || fieldType === '复选') {
+    const defaultOptions = inferDefaultOptions(field.name);
+    if (defaultOptions) return defaultOptions.join('/');
   }
   return '-';
 }
 
+// ==================== 流水号前缀推断 ====================
+
+function inferSerialPrefix(formName) {
+  // 不按行业硬编码前缀。英文取单词首字母，中文取拼音首字母。
+  const sourceName = String(formName || '').trim();
+  const asciiWords = sourceName.match(/[A-Za-z0-9]+/g) || [];
+  if (asciiWords.length > 0) {
+    const prefix = asciiWords.map(word => word[0]).join('').toUpperCase().slice(0, 6);
+    if (prefix) return prefix;
+  }
+
+  const rawName = sourceName.replace(/[《》【】()\[\]\s]/g, '');
+  const prefix = rawName
+    .replace(/^选择/, '')
+    .split('')
+    .map(getPinyinInitial)
+    .join('')
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 2);
+  return prefix || 'SN';
+}
+
+function getPinyinInitial(char) {
+  if (/^[A-Za-z0-9]$/.test(char)) return char.toUpperCase();
+  if (!iconv || !/[\u4e00-\u9fa5]/.test(char)) return '';
+
+  const boundaryCodes = [
+    -20319, -20283, -19775, -19218, -18710, -18526, -18239, -17922, -17417,
+    -16474, -16212, -15640, -15165, -14922, -14914, -14630, -14149, -14090,
+    -13318, -12838, -12556, -11847, -11055, -10247
+  ];
+  const initials = 'ABCDEFGHJKLMNOPQRSTWXYZ';
+  const buffer = iconv.encode(char, 'gbk');
+  if (buffer.length < 2) return '';
+
+  const code = buffer[0] * 256 + buffer[1] - 65536;
+  for (let i = 0; i < boundaryCodes.length - 1; i++) {
+    if (code >= boundaryCodes[i] && code < boundaryCodes[i + 1]) {
+      return initials[i];
+    }
+  }
+  return '';
+}
+
+// ==================== 下拉单选默认选项推断 ====================
+
+function inferDefaultOptions(fieldName) {
+  // 状态类字段
+  if (fieldName.includes('状态')) {
+    return ['启用', '停用'];
+  }
+  // 类型类字段
+  if (fieldName.includes('类型')) {
+    return null;
+  }
+  // 方式类字段
+  if (fieldName.includes('方式')) {
+    return null;
+  }
+  // v1.32.0 修改：禁止返回占位数据，分类字段返回 null（由 AI 在 override 中配置真实选项）
+  if (fieldName.includes('分类') || fieldName.includes('类别') || fieldName.includes('品类') || fieldName.includes('组别')) {
+    return null;
+  }
+  // v1.21.0 新增：单位/计量单位 默认选项
+  if (fieldName.includes('单位') || fieldName.includes('计量单位')) {
+    return ['个', '件', '箱', '套', '千克', '克', '升', '米', '台', '只', '支', '张', '本', '瓶', '袋'];
+  }
+  return null;
+}
+
 // ==================== 字段状态判断 ====================
 
-function getFieldStatus(fieldName, fieldType, typeHint) {
+function getFieldStatus(field) {
+  if (field._forceStatus) return field._forceStatus;
+  const { name: fieldName, type: fieldType, typeHint, _filling } = field;
   if (fieldName === '创建人' || fieldName === '创建时间') return '只读';
-  if (typeHint && typeHint.includes('关联带出')) return '只读';
+  if (_filling) return '只读';
+  if (typeHint && typeHint.includes('填充-->')) return '只读';
   if (typeHint && typeHint.includes('自动生成')) return '只读';
   if (typeHint && typeHint.includes('公式')) return '只读';
   if (fieldType === '流水号') return '只读';
@@ -341,6 +690,198 @@ function getFieldStatus(fieldName, fieldType, typeHint) {
 }
 
 // ==================== 智能补充字段 ====================
+
+// 数据标题仅支持以下字段类型（宜搭平台限制）
+const VALID_DATA_TITLE_TYPES = ['单行文本', '数值', '单选', '下拉单选', '成员', '流水号'];
+
+/**
+ * 校验数据标题字段的类型是否合法
+ * @param {string} fieldName - 数据标题字段名称
+ * @param {Array} mainFields - 主表字段列表
+ * @param {string} formName - 表单名称（用于 mapFieldType）
+ * @returns {boolean} 类型是否合法
+ */
+function validateDataTitleType(fieldName, mainFields, formName) {
+  if (!fieldName || !mainFields) return false;
+  const field = mainFields.find(f => f.name === fieldName);
+  if (!field) return false;
+  const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType, formName);
+  return VALID_DATA_TITLE_TYPES.includes(fieldType);
+}
+
+/**
+ * 推断数据标题字段
+ * 流程表单优先级：流水号字段 > 名称类字段 > 第一个单行文本字段 > 第一个合法类型字段
+ * 普通表单优先级：名称类字段 > 第一个单行文本字段 > 流水号字段 > 第一个合法类型字段
+ * 数据标题仅支持：单行文本, 数值, 单选, 下拉单选, 成员, 流水号
+ * @param {Array} mainFields - 主表字段列表
+ * @param {string} formType - 表单类型（'普通表单' 或 '流程表单'）
+ * @returns {string|null} 数据标题字段名称
+ */
+function inferDataTitle(mainFields, formType) {
+  if (!mainFields || mainFields.length === 0) return null;
+
+  const NAME_KEYWORDS = ['名称', '名字', '标题', '主题', '姓名'];
+  const EXCLUDE_KEYWORDS = ['创建人', '创建时间', '修改人', '修改时间', '备注', '说明', '描述', '电话', '手机', '地址', '编号', '编码', '代码'];
+
+  function findSerialNumber() {
+    for (const field of mainFields) {
+      const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType);
+      if (fieldType === '流水号') return field.name;
+    }
+    return null;
+  }
+
+  function findNameField() {
+    for (const field of mainFields) {
+      const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType);
+      if (fieldType === '单行文本' && !EXCLUDE_KEYWORDS.some(kw => field.name.includes(kw))) {
+        if (NAME_KEYWORDS.some(kw => field.name.includes(kw))) return field.name;
+      }
+    }
+    return null;
+  }
+
+  function findFirstTextField() {
+    for (const field of mainFields) {
+      const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType);
+      if (fieldType === '单行文本' && !EXCLUDE_KEYWORDS.some(kw => field.name.includes(kw))) return field.name;
+    }
+    return null;
+  }
+
+  // 兜底：在所有合法数据标题类型中找第一个（排除系统字段）
+  function findFirstValidTitleField() {
+    for (const field of mainFields) {
+      const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType);
+      if (VALID_DATA_TITLE_TYPES.includes(fieldType) && !EXCLUDE_KEYWORDS.some(kw => field.name.includes(kw))) {
+        return field.name;
+      }
+    }
+    return null;
+  }
+
+  // 流程表单：流水号 > 名称类 > 第一个单行文本 > 第一个合法类型字段
+  // 普通表单：名称类 > 第一个单行文本 > 流水号 > 第一个合法类型字段
+  if (formType === '流程表单') {
+    return findSerialNumber() || findNameField() || findFirstTextField() || findFirstValidTitleField();
+  } else {
+    return findNameField() || findFirstTextField() || findSerialNumber() || findFirstValidTitleField();
+  }
+}
+
+// ==================== 关联候选推断（preview / --draft 共用） ====================
+// 纯通用相似度匹配，不含任何行业硬编码。
+// 职责边界：程序只负责"发现候选并给出依据"，是否确认为关联表单始终由 AI 判断。
+function findAssociationCandidates(fieldName, allFormNames, currentFormName) {
+  const candidates = [];
+  const rawName = String(fieldName || '').trim();
+  if (!rawName) return candidates;
+  const cleaned = rawName.replace(/^(选择|关联|引用)/, '');
+
+  for (const formName of allFormNames) {
+    if (!formName || formName === currentFormName || formName.length < 2) continue;
+    let reason = null;
+    if (rawName === formName) {
+      reason = '字段名与表单名相同';
+    } else if (cleaned === formName) {
+      reason = '去掉"选择/关联/引用"前缀后与表单名相同';
+    } else if (cleaned.length >= 2 && formName.includes(cleaned)) {
+      reason = `字段名"${cleaned}"是表单名的一部分`;
+    } else if (cleaned.includes(formName)) {
+      reason = '字段名包含表单名';
+    }
+    if (reason) candidates.push({ formName, reason });
+  }
+  return candidates.slice(0, 3); // 最多3个候选，避免干扰
+}
+
+// 推断数据标题时排除关联候选字段：
+// 关联候选被 AI 确认后会变成"关联表单"类型（且通常被 rename 为"选择X"），
+// 而数据标题仅支持 单行文本/数值/单选/下拉单选/成员/流水号，关联候选字段不适合作为标题建议
+function inferSuggestedDataTitle(mainFields, formType, allFormNames, currentFormName) {
+  const fieldsForTitle = (mainFields || []).filter(
+    f => findAssociationCandidates(f.name, allFormNames, currentFormName).length === 0
+  );
+  return inferDataTitle(fieldsForTitle, formType);
+}
+
+// ==================== 草稿 override 生成（--draft 模式） ====================
+// 分工原则：程序预填确定性内容（关联候选、数值说明建议、数据标题建议），
+// AI 负责确认候选（删除 _candidate 标记）、创造真实选项（options）、修正建议。
+function generateDraftOverrides(forms) {
+  const allFormNames = forms.map(f => f.name);
+  const draft = {
+    _readme: [
+      '本文件是脚本自动生成的草稿，须经 AI 审核后才能用于正式生成：',
+      '1. 带 "_candidate": true 的条目是程序发现的关联候选，必须由 AI 结合业务语义确认：确认则删除 _candidate/_reason/_candidates 三个标记（target 可改为 _candidates 中的其他表单）；否定则删除整个条目。未确认的候选在正式生成时会被脚本忽略。',
+      '2. 带 "_needOptions": true 的条目必须由 AI 填入真实业务选项（禁止使用"选项1/类别1"等占位数据），填好后删除 _needOptions/_reason 标记。',
+      '3. 数值字段的 description 是程序建议值，可直接保留或按业务修正（如单位改为"万元"）。',
+      '4. _meta.dataTitle 是程序建议的数据标题，可修改或删除（删除后由脚本自动推断）。',
+      '5. 脚本已能稳定推断的字段（流水号、日期、成员、状态、单位等）未列入本草稿，无需添加。'
+    ]
+  };
+
+  for (const form of forms) {
+    const formDraft = {};
+
+    const suggestedTitle = inferSuggestedDataTitle(form.mainFields, form.type, allFormNames, form.name);
+    if (suggestedTitle) {
+      formDraft._meta = { dataTitle: suggestedTitle };
+    }
+
+    const processFields = (fields) => {
+      for (const field of fields) {
+        // 用户已在 Excel 中显式标注类型或选项的字段，不打扰
+        if (field.typeHint || field.isOptions) continue;
+
+        const candidates = findAssociationCandidates(field.name, allFormNames, form.name);
+        if (candidates.length > 0) {
+          formDraft[field.name] = {
+            _candidate: true,
+            _reason: candidates.map(c => `${c.formName}（${c.reason}）`).join('；'),
+            _candidates: candidates.map(c => c.formName),
+            type: '关联表单',
+            target: candidates[0].formName
+          };
+          continue;
+        }
+
+        const suggestedType = mapFieldType(field.name, field.typeHint, field.isOptions, null, form.name);
+
+        if (suggestedType === '数值') {
+          const desc = generateFieldDescription(field, form.type, form.name);
+          formDraft[field.name] = { description: desc === '-' ? '0位小数' : desc };
+          continue;
+        }
+
+        if (suggestedType === '下拉单选') {
+          // 脚本能稳定推断选项的（状态、单位），不列入草稿
+          if (inferDefaultOptions(field.name)) continue;
+          formDraft[field.name] = {
+            type: '下拉单选',
+            options: null,
+            _needOptions: true,
+            _reason: '脚本无法推断该字段的选项，请基于业务场景填写真实选项'
+          };
+        }
+      }
+    };
+
+    processFields(form.mainFields);
+    if (form.subTables) {
+      for (const st of form.subTables) {
+        processFields(st.fields);
+      }
+    }
+
+    if (Object.keys(formDraft).length > 0) {
+      draft[form.name] = formDraft;
+    }
+  }
+
+  return draft;
+}
 
 function autoCompleteFields(formName, formType, existingFields) {
   const completedFields = [...existingFields];
@@ -357,45 +898,12 @@ function autoCompleteFields(formName, formType, existingFields) {
     completedFields.push({ name: '状态', typeHint: null, options: ['启用', '停用'], isOptions: true, _auto: true });
   }
 
-  existingFields.forEach(field => {
-    if (field.typeHint && field.typeHint.includes('关联-->')) {
-      const targetForm = field.typeHint.replace('关联-->', '').trim();
-      const targetFields = inferTargetFields(targetForm);
-      targetFields.forEach(targetField => {
-        const targetFieldName = field.name + targetField.suffix;
-        if (!fieldNames.includes(targetFieldName) && !completedFields.some(f => f.name === targetFieldName)) {
-          completedFields.push({ name: targetFieldName, typeHint: '关联带出', options: null, isOptions: false, _auto: true });
-        }
-      });
-    }
-  });
-
   return completedFields;
 }
 
 function inferTargetFields(formName) {
-  if (formName.includes('客户')) {
-    return [{ suffix: '名称', type: '单行文本' }, { suffix: '联系人', type: '单行文本' }, { suffix: '电话', type: '单行文本' }];
-  }
-  if (formName.includes('产品')) {
-    return [{ suffix: '名称', type: '单行文本' }, { suffix: '编码', type: '单行文本' }, { suffix: '规格', type: '单行文本' }];
-  }
-  if (formName.includes('项目')) {
-    return [{ suffix: '名称', type: '单行文本' }, { suffix: '编号', type: '单行文本' }, { suffix: '类型', type: '单行文本' }];
-  }
-  if (formName.includes('合同')) {
-    return [{ suffix: '编号', type: '单行文本' }, { suffix: '金额', type: '单行文本' }];
-  }
-  if (formName.includes('报告')) {
-    return [{ suffix: '编号', type: '单行文本' }, { suffix: '名称', type: '单行文本' }];
-  }
-  if (formName.includes('估价师') || formName.includes('员工')) {
-    return [{ suffix: '姓名', type: '单行文本' }, { suffix: '部门', type: '单行文本' }];
-  }
-  if (formName.includes('发票') || formName.includes('开票')) {
-    return [{ suffix: '号码', type: '单行文本' }, { suffix: '金额', type: '单行文本' }];
-  }
-  return [{ suffix: '名称', type: '单行文本' }, { suffix: '编号', type: '单行文本' }];
+  // 保留空实现兼容旧调用/测试。脚本不得基于表单名自动推断业务填充字段。
+  return [];
 }
 
 // ==================== 数字转中文 ====================
@@ -426,22 +934,22 @@ function generateFieldListMarkdown(forms, systemName, version) {
   md += `### 一、可用字段类型\n\n`;
   md += `单行文本、多行文本、数值、日期、单选、复选、下拉单选、下拉复选、关联表单、成员、部门、附件、图片、地址、流水号\n\n`;
   md += `### 二、字段说明格式规范\n\n`;
-  md += `**只有以下5类字段需要填写字段说明，其他字段留空或填"-"**\n\n`;
+  md += `**只有以下4类字段需要填写字段说明，其他字段留空或填"-"**\n\n`;
   md += `| 字段类型 | 字段说明格式 | 示例 |\n`;
   md += `|---------|-------------|------|\n`;
-  md += `| **流水号** | \`自动生成\` | 自动生成 |\n`;
-  md += `| **关联表单** | \`关联-->目标表单名称\` | 关联-->产品信息 |\n`;
-  md += `| **关联带出** | \`关联-->目标表单名称，关联带出\` | 关联-->产品信息，关联带出 |\n`;
+  md += `| **流水号** | \`前缀：XXX，示例：XXXyyyyMMdd001\` | 前缀：SN，示例：SN20260702001 |\n`;
+  md += `| **关联表单** | \`关联-->目标表单名称\`（如有填充规则，用 \`；填充：当前字段=源字段\` 追加，多个填充对用顿号\`、\`分隔） | 关联-->供应商信息；填充：供应商名称=供应商名称、联系人=联系人、联系电话=联系电话 |\n`;
   md += `| **数值** | \`X位小数，单位：XXX\` | 2位小数，单位：元 |\n`;
   md += `| **下拉单选/多选** | \`选项值1/选项值2/选项值3\` | 启用/停用 |\n\n`;
+  md += `> **重要**：填充规则是关联表单字段的配置之一，统一写在关联表单字段的说明列中。被填充字段的说明列恢复自由，可以正常填写自身属性（如选项、小数位数等），不再写"填充-->XXX.XXX"。\n\n`;
   md += `### 三、字段状态\n\n`;
   md += `| 状态值 | 说明 | 默认值 |\n`;
   md += `|-------|------|--------|\n`;
   md += `| **普通** | 字段可编辑输入（对应宜搭NORMAL） | 大部分字段默认为普通状态 |\n`;
-  md += `| **只读** | 字段不可编辑，仅用于展示（对应宜搭READONLY） | 关联带出字段、系统自动生成字段默认为只读状态 |\n`;
+  md += `| **只读** | 字段不可编辑，仅用于展示（对应宜搭READONLY） | 被填充字段、系统自动生成字段默认为只读状态 |\n`;
   md += `| **隐藏** | 字段在表单中不显示（对应宜搭HIDDEN） | 默认无隐藏字段，用户可根据需要设置 |\n\n`;
   md += `**字段状态自动判定规则**：\n`;
-  md += `- **只读**：流水号、创建人、创建时间、关联带出字段、公式计算字段\n`;
+  md += `- **只读**：流水号、创建人、创建时间、被填充字段、公式计算字段\n`;
   md += `- **普通**：其他所有字段\n\n`;
   md += `**⚠️ 重要说明**：宜搭流程表单会自动记录审批相关信息（审批人、审批时间、审批意见等），**不需要在表单字段中添加审批相关字段**\n\n`;
   md += `### 四、是否必填\n\n`;
@@ -454,6 +962,13 @@ function generateFieldListMarkdown(forms, systemName, version) {
   md += `### 五、表单类型标识\n\n`;
   md += `- 「普通表单」：基础数据维护，无审批流程\n`;
   md += `- 「流程表单」：需要审批流程的业务单据\n\n`;
+  md += `### 六、数据标题\n\n`;
+  md += `每个表单名称下方会自动推断一个数据标题字段，格式为 \`**数据标题：字段名称**\`\n\n`;
+  md += `**推断规则：**\n`;
+  md += `1. 优先选择流水号字段（适合流程表单或业务单据）\n`;
+  md += `2. 其次选择名称类字段（适合基础资料或主数据表）\n`;
+  md += `3. 最后选择第一个单行文本字段\n\n`;
+  md += `**用户可自行修改**：将 \`**数据标题：XXX**\` 中的字段名称改为目标字段即可\n\n`;
   md += `---\n\n`;
 
   const modules = {};
@@ -469,14 +984,25 @@ function generateFieldListMarkdown(forms, systemName, version) {
     moduleForms.forEach((form, formIndex) => {
       md += `### (${numberToChinese(formIndex + 1)}) ${form.name}「${form.type}」\n\n`;
       
-      md += `**主表字段：**\n\n`;
+      // 推断数据标题字段（优先使用 AI override 指定的数据标题）
+      let dataTitleField = form._dataTitleOverride || inferDataTitle(form.mainFields, form.type);
+      // 校验数据标题字段类型是否合法（仅支持：单行文本, 数值, 单选, 下拉单选, 成员, 流水号）
+      if (dataTitleField && !validateDataTitleType(dataTitleField, form.mainFields, form.name)) {
+        const field = form.mainFields.find(f => f.name === dataTitleField);
+        const actualType = field ? mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType, form.name) : '未知';
+        console.warn(`  [数据标题类型校验] ${form.name} - "${dataTitleField}" 的类型"${actualType}"不在合法范围内（仅支持：单行文本, 数值, 单选, 下拉单选, 成员, 流水号），已自动回退`);
+        dataTitleField = inferDataTitle(form.mainFields, form.type);
+      }
+      md += `**数据标题：${dataTitleField || '（需手动指定）'}**（仅支持：单行文本, 数值, 单选, 下拉单选, 成员, 流水号）\n\n`;
+      
+      md += `**主表：${form.name}**\n\n`;
       md += `| 字段名称 | 字段类型 | 字段说明 | 字段状态 | 是否必填 |\n`;
       md += `|---------|---------|---------|---------|---------|\n`;
       
       form.mainFields.forEach(field => {
-        const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions);
-        const description = generateFieldDescription(field, form.type);
-        const status = getFieldStatus(field.name, fieldType, field.typeHint);
+        const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType, form.name);
+        const description = generateFieldDescription(field, form.type, form.name);
+        const status = getFieldStatus(field);
         md += `| ${field.name} | ${fieldType} | ${description} | ${status} | 否 |\n`;
       });
       
@@ -490,9 +1016,9 @@ function generateFieldListMarkdown(forms, systemName, version) {
             md += `|---------|---------|---------|---------|---------|\n`;
             
             subTable.fields.forEach(field => {
-              const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions);
-              const description = generateFieldDescription(field, form.type);
-              const status = getFieldStatus(field.name, fieldType, field.typeHint);
+              const fieldType = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType, form.name);
+              const description = generateFieldDescription(field, form.type, form.name);
+              const status = getFieldStatus(field);
               md += `| ${field.name} | ${fieldType} | ${description} | ${status} | 否 |\n`;
             });
             
@@ -540,7 +1066,7 @@ function generateRuleListMarkdown(forms, systemName, version) {
   md += `2. ❌ 下拉选项的定义\n`;
   md += `3. ❌ 关联表单的基础配置\n`;
   md += `4. ❌ 审批流程配置\n`;
-  md += `5. ❌ 简单的关联带出字段\n\n`;
+  md += `5. ❌ 简单的填充字段\n\n`;
   md += `---\n\n`;
 
   const modules = {};
@@ -612,38 +1138,8 @@ function generateRuleListMarkdown(forms, systemName, version) {
     moduleIndex++;
   }
 
-  // 附录：全局规则
+  // 附录：全局规则（v1.24.0: 仅保留审批流程规则，聚合表/报表规则留给AI根据行业动态推导）
   md += `## 附录：全局规则\n\n`;
-  
-  md += `### 聚合表规则\n\n`;
-  md += `#### 1. 项目统计聚合\n\n`;
-  md += `- **数据源**: 主项目信息、项目立项、项目终止\n`;
-  md += `- **聚合方式**: 计数、求和\n`;
-  md += `- **聚合字段**: 项目数量、项目金额\n`;
-  md += `- **分组字段**: 项目类型、项目状态、委托方、项目负责人\n`;
-  md += `- **过滤条件**: 无\n\n`;
-  
-  md += `#### 2. 财务统计聚合\n\n`;
-  md += `- **数据源**: 收款登记、退款登记、开票登记、退票登记\n`;
-  md += `- **聚合方式**: 求和\n`;
-  md += `- **聚合字段**: 收款金额、退款金额、开票金额\n`;
-  md += `- **分组字段**: 委托方、项目名称、月份\n`;
-  md += `- **过滤条件**: 无\n\n`;
-  
-  md += `### 报表规则\n\n`;
-  md += `#### 1. 项目明细报表\n\n`;
-  md += `- **报表类型**: 明细表\n`;
-  md += `- **数据来源**: 主项目信息\n`;
-  md += `- **展示字段**: 项目编号、项目名称、委托方、项目负责人、项目金额、项目状态\n`;
-  md += `- **筛选条件**: 可按项目类型、项目状态、委托方、日期范围筛选\n`;
-  md += `- **排序规则**: 立项日期 降序\n\n`;
-  
-  md += `#### 2. 财务报表\n\n`;
-  md += `- **报表类型**: 汇总表\n`;
-  md += `- **数据来源**: 收款登记、开票登记\n`;
-  md += `- **展示字段**: 委托方、项目名称、合同金额、已收款金额、已开票金额\n`;
-  md += `- **筛选条件**: 可按委托方、项目名称、日期范围筛选\n`;
-  md += `- **排序规则**: 收款日期 降序\n\n`;
   
   const flowForms = forms.filter(f => f.type === '流程表单');
   if (flowForms.length > 0) {
@@ -651,16 +1147,78 @@ function generateRuleListMarkdown(forms, systemName, version) {
     flowForms.forEach((form, idx) => {
       md += `#### ${idx + 1}. ${form.name}审批流程\n\n`;
       md += `- **发起条件**: 提交${form.name}申请\n`;
-      md += `- **审批节点**: \n`;
-      md += `  - 节点1: 部门负责人审批\n`;
-      md += `  - 节点2: 总经理审批（金额≥10万）\n`;
-      md += `- **流转条件**: 金额分支\n`;
-      md += `- **抄送规则**: 抄送相关人员\n\n`;
+      md += `- **审批节点**: 待配置\n`;
+      md += `- **流转条件**: 待配置\n`;
+      md += `- **抄送规则**: 待配置\n\n`;
     });
   }
 
   md += `---\n\n`;
   md += `**文件链接**: [字段清单.md](./字段清单.md)\n`;
+
+  return md;
+}
+
+function generateRuleListPlaceholderMarkdown(systemName, version) {
+  const now = new Date().toISOString().split('T')[0];
+  return `# ${systemName} - 规则清单
+
+> 版本：${version}
+> 生成日期：${now}
+> 状态：占位文件
+
+## 说明
+
+字段清单已优先生成。本文件用于保持字段清单中的规则清单链接有效。
+
+如需完整规则清单，请在确认字段清单后再生成，规则范围包括：
+
+1. 公式规则
+2. 业务规则
+3. 审批流程规则（仅流程表单）
+
+**文件链接**: [字段清单.md](./字段清单.md)
+`;
+}
+
+// ==================== 生成应用分组 Markdown ====================
+// v1.19.0新增：从字段清单的模块信息推断分组，生成独立的应用分组.md文件
+// 目的：让用户在创建宜搭应用前就能看到分组结构，可修改后再创建应用
+function generateGroupListMarkdown(forms, systemName, version) {
+  // 按form.group分组，保持出现顺序
+  const modules = {};
+  forms.forEach(form => {
+    if (!modules[form.group]) modules[form.group] = [];
+    modules[form.group].push(form.name);
+  });
+
+  let md = `# ${systemName} - 应用分组\n\n`;
+  md += `> 版本: ${version}\n`;
+  md += `> 生成日期: ${new Date().toISOString().split('T')[0]}\n`;
+  md += `> 说明: 此文件定义宜搭应用中的导航分组结构，创建应用前请确认此文件内容，可直接修改下表\n\n`;
+  md += `---\n\n`;
+
+  md += `| 序号 | 分组名称 | 包含表单 |\n`;
+  md += `|:---:|---------|---------|\n`;
+  let idx = 1;
+  for (const [moduleName, formNames] of Object.entries(modules)) {
+    md += `| ${idx} | ${stripModuleNumberPrefix(moduleName)} | ${formNames.join(', ')} |\n`;
+    idx++;
+  }
+  md += `\n---\n\n`;
+
+  md += `## 使用说明\n\n`;
+  md += `1. 此文件由 Excel 转字段清单时自动生成，基于字段清单中的模块信息推断\n`;
+  md += `2. **创建宜搭应用前，请确认此文件内容**，可直接修改上表的分组名称和包含表单\n`;
+  md += `3. 创建应用时会读取此文件进行导航分组，本地文件目录也会按此分组组织\n`;
+  md += `4. 如果修改了分组，请确保"包含表单"中的表单名称与字段清单中的表单名称完全一致\n`;
+  md += `5. 每个表单只能属于一个分组，不能在多个分组中重复出现\n\n`;
+  md += `## 修改示例\n\n`;
+  md += `如需调整分组，直接修改上表即可。例如：\n\n`;
+  md += `- **合并分组**：将"分组A"的表单合并到"分组B"中，删除"分组A"行\n`;
+  md += `- **拆分分组**：将"分组A"拆分为"分组A-1"和"分组A-2"\n`;
+  md += `- **调整顺序**：调整行的顺序，宜搭平台的导航分组会按此顺序创建\n`;
+  md += `- **重命名分组**：直接修改"分组名称"列的值\n`;
 
   return md;
 }
@@ -746,7 +1304,6 @@ function parseExcelForms(excelPath) {
 
       // 流水号唯一性校验：每个表单只能有一个流水号
       form.mainFields = ensureSingleSerialNumber(form.mainFields, form.name);
-
       form.mainFields = autoCompleteFields(form.name, form.type, form.mainFields);
       return form;
     }).map(form => {
@@ -849,23 +1406,209 @@ function parseExcelForms(excelPath) {
 }
 
 function inferModuleGroup(formName) {
-  if(formName.includes('机构') || formName.includes('客户') || formName.includes('估价师') || formName.includes('案例')) return '基础信息';
-  if(formName.includes('项目') || formName.includes('立项') || formName.includes('终止') || formName.includes('评定')) return '项目管理';
-  if(formName.includes('合同')) return '合同管理';
-  if(formName.includes('报告')) return '报告管理';
-  if(formName.includes('考勤') || formName.includes('绩效')) return '考勤&绩效';
-  if(formName.includes('报销') || formName.includes('结算') || formName.includes('收款') || formName.includes('退款') || formName.includes('开票') || formName.includes('退票')) return '财务管理';
-  return '其他';
+  return '未分组';
 }
 
 // ==================== 主函数 ====================
 
 function main() {
   const args = process.argv.slice(2);
-  
+
+  // --summary 模式：紧凑文本格式输出，保留全部文字信息但去掉 JSON 冗余
+  // 同样的信息量从 2000+ 行 JSON 压缩到几百行文本，AI 读取效率提升数倍
+  if (args[0] === '--summary') {
+    const excelPath = args[1];
+    if (!excelPath) {
+      console.error('用法: node excel_to_form.js --summary <Excel文件路径>');
+      process.exit(1);
+    }
+    if (!fs.existsSync(excelPath)) {
+      console.error('错误: Excel 文件不存在:', excelPath);
+      process.exit(1);
+    }
+    console.log('正在读取 Excel 文件:', excelPath);
+    try {
+      const forms = parseExcelForms(excelPath);
+      const allFormNames = forms.map(f => f.name);
+
+      // 收集关联候选和待填选项
+      const associationCandidates = [];
+      const needOptionsFields = [];
+
+      let output = '';
+      output += `\n========== PREVIEW SUMMARY ==========\n\n`;
+      output += `📊 表单总览 (${forms.length}个)\n`;
+      const groups = {};
+      forms.forEach(f => {
+        if (!groups[f.group]) groups[f.group] = [];
+        groups[f.group].push(f);
+      });
+      for (const [groupName, groupForms] of Object.entries(groups)) {
+        output += `  ${groupName}: ${groupForms.map(f => `${f.name}(${f.type})`).join(', ')}\n`;
+      }
+
+      output += `\n📋 各表单字段明细\n`;
+      forms.forEach(form => {
+        const suggestedTitle = inferSuggestedDataTitle(form.mainFields, form.type, allFormNames, form.name);
+        output += `\n### ${form.name} [${form.type}] 建议数据标题: ${suggestedTitle || '（需手动指定）'}\n`;
+
+        // 主表字段（一行一个，紧凑格式）
+        output += `主表字段:\n`;
+        form.mainFields.forEach(f => {
+          const suggestedType = mapFieldType(f.name, f.typeHint, f.isOptions, null, form.name);
+          const candidates = findAssociationCandidates(f.name, allFormNames, form.name);
+          let line = `  - ${f.name} → ${suggestedType}`;
+          if (f.typeHint) line += ` [hint:${f.typeHint}]`;
+          if (f.isOptions && f.options) line += ` [选项:${f.options.join('/')}]`;
+          if (candidates.length > 0) {
+            line += ` 🔗候选: ${candidates.map(c => `${c.formName}(${c.reason})`).join('; ')}`;
+            associationCandidates.push({ form: form.name, field: f.name, candidates });
+          }
+          output += line + '\n';
+        });
+
+        // 子表
+        if (form.subTables && form.subTables.length > 0) {
+          form.subTables.forEach(st => {
+            output += `子表「${st.name}」:\n`;
+            st.fields.forEach(f => {
+              const suggestedType = mapFieldType(f.name, f.typeHint, f.isOptions, null, form.name);
+              const candidates = findAssociationCandidates(f.name, allFormNames, form.name);
+              let line = `  - ${f.name} → ${suggestedType}`;
+              if (f.typeHint) line += ` [hint:${f.typeHint}]`;
+              if (f.isOptions && f.options) line += ` [选项:${f.options.join('/')}]`;
+              if (candidates.length > 0) {
+                line += ` 🔗候选: ${candidates.map(c => `${c.formName}(${c.reason})`).join('; ')}`;
+                associationCandidates.push({ form: form.name, field: f.name, candidates });
+              }
+              output += line + '\n';
+            });
+          });
+        }
+      });
+
+      // 汇总关联候选
+      if (associationCandidates.length > 0) {
+        output += `\n🔗 关联候选汇总 (${associationCandidates.length}个，需AI确认)\n`;
+        associationCandidates.forEach(item => {
+          output += `  ${item.form}.${item.field} → ${item.candidates.map(c => c.formName).join('/')}\n`;
+        });
+      }
+
+      output += `\n========== END ==========\n`;
+      console.log(output);
+    } catch (error) {
+      console.error('解析失败:', error.message);
+      console.error(error.stack);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // --preview 模式：只解析 Excel 输出 JSON，不生成字段清单（完整格式，兼容旧流程）
+  // 输出除原始结构外，还附带程序的确定性建议（建议类型/建议说明/关联候选/建议数据标题），
+  // 把跨表单名称匹配等机械工作交给程序，AI 专注于语义确认与内容创造
+  if (args[0] === '--preview') {
+    const excelPath = args[1];
+    if (!excelPath) {
+      console.error('用法: node excel_to_form.js --preview <Excel文件路径>');
+      process.exit(1);
+    }
+    if (!fs.existsSync(excelPath)) {
+      console.error('错误: Excel 文件不存在:', excelPath);
+      process.exit(1);
+    }
+    console.log('正在读取 Excel 文件:', excelPath);
+    try {
+      const forms = parseExcelForms(excelPath);
+      const allFormNames = forms.map(f => f.name);
+      const buildFieldPreview = (f, formName, formType) => ({
+        name: f.name,
+        typeHint: f.typeHint || null,
+        options: f.options || null,
+        isOptions: f.isOptions || false,
+        suggestedType: mapFieldType(f.name, f.typeHint, f.isOptions, null, formName),
+        suggestedDescription: generateFieldDescription(f, formType, formName),
+        associationCandidates: findAssociationCandidates(f.name, allFormNames, formName)
+      });
+      const preview = {
+        formCount: forms.length,
+        forms: forms.map(form => ({
+          group: form.group,
+          name: form.name,
+          type: form.type,
+          suggestedDataTitle: inferSuggestedDataTitle(form.mainFields, form.type, allFormNames, form.name),
+          mainFields: form.mainFields.map(f => buildFieldPreview(f, form.name, form.type)),
+          subTables: (form.subTables || []).map(st => ({
+            name: st.name,
+            fields: st.fields.map(f => buildFieldPreview(f, form.name, form.type))
+          }))
+        }))
+      };
+      console.log('\n' + JSON.stringify(preview, null, 2));
+    } catch (error) {
+      console.error('解析失败:', error.message);
+      console.error(error.stack);
+      process.exit(1);
+    }
+    return;
+  }
+
+  // --draft 模式：解析 Excel 并生成草稿 override 文件
+  // 程序预填确定性内容，AI 审核确认后用于正式生成。已存在的文件绝不覆盖。
+  if (args[0] === '--draft') {
+    const excelPath = args[1];
+    const outputPath = args[2] || 'field-types-override.json';
+    if (!excelPath) {
+      console.error('用法: node excel_to_form.js --draft <Excel文件路径> [草稿输出路径]');
+      process.exit(1);
+    }
+    if (!fs.existsSync(excelPath)) {
+      console.error('错误: Excel 文件不存在:', excelPath);
+      process.exit(1);
+    }
+    if (fs.existsSync(outputPath)) {
+      console.error(`错误: 文件已存在，为保护已有内容不予覆盖: ${outputPath}`);
+      console.error('如需重新生成草稿，请先备份并删除该文件。');
+      process.exit(1);
+    }
+    // 自动创建输出目录，保证后续正式生成时目录已存在
+    const outputDirPath = path.dirname(outputPath);
+    if (outputDirPath && !fs.existsSync(outputDirPath)) {
+      fs.mkdirSync(outputDirPath, { recursive: true });
+    }
+    console.log('正在读取 Excel 文件:', excelPath);
+    try {
+      const forms = parseExcelForms(excelPath);
+      const draft = generateDraftOverrides(forms);
+      fs.writeFileSync(outputPath, JSON.stringify(draft, null, 2), 'utf8');
+      let candidateCount = 0;
+      let needOptionsCount = 0;
+      for (const formName of Object.keys(draft)) {
+        if (formName === '_readme') continue;
+        for (const fieldName of Object.keys(draft[formName])) {
+          if (fieldName === '_meta') continue;
+          if (draft[formName][fieldName]._candidate) candidateCount++;
+          if (draft[formName][fieldName]._needOptions) needOptionsCount++;
+        }
+      }
+      console.log(`\n📝 草稿已生成: ${outputPath}`);
+      console.log(`   关联候选 ${candidateCount} 个（需 AI 确认）、待填选项 ${needOptionsCount} 个（需 AI 创造）`);
+      console.log('   请按文件内 _readme 说明审核后，再运行正式生成。');
+    } catch (error) {
+      console.error('解析失败:', error.message);
+      console.error(error.stack);
+      process.exit(1);
+    }
+    return;
+  }
+
   if (args.length < 1) {
-    console.log('用法: node excel_to_form.js <Excel文件路径> [输出目录] [系统名称] [版本号]');
+    console.log('用法: node excel_to_form.js <Excel文件路径> [输出目录] [系统名称] [版本号] [字段类型覆盖JSON路径]');
     console.log('示例: node excel_to_form.js "项目管理.xlsx" "01需求梳理" "项目管理系统" "1.0.0"');
+    console.log('        或传入覆盖文件: node excel_to_form.js "项目管理.xlsx" "01需求梳理" "项目管理系统" "1.0.0" "field-types-override.json"');
+    console.log('预览模式: node excel_to_form.js --preview <Excel文件路径>');
+    console.log('草稿模式: node excel_to_form.js --draft <Excel文件路径> [草稿输出路径]');
     process.exit(1);
   }
 
@@ -873,16 +1616,29 @@ function main() {
   const outputDir = args[1] || '.';
   const systemName = args[2] || '项目管理系统';
   const version = args[3] || '1.0.0';
+  const overridePath = args[4] || null;
 
   if (!fs.existsSync(excelPath)) {
     console.error('错误: Excel 文件不存在:', excelPath);
     process.exit(1);
   }
 
+  // 输出目录不存在时自动创建，避免写文件时才报 ENOENT
+  if (outputDir && !fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+  // v1.21.0 新增：加载 AI 字段类型覆盖配置
+  loadFieldTypeOverrides(overridePath, outputDir);
+
   console.log('正在读取 Excel 文件:', excelPath);
 
   try {
     const forms = parseExcelForms(excelPath);
+
+    // v1.27.0 新增：应用 AI override（字段重命名、关联表单完整配置、被填充字段插入、数据标题覆盖等）
+    applyOverrides(forms);
+
     console.log(`\n解析到 ${forms.length} 个表单\n`);
     forms.forEach((form, i) => {
       console.log(`${i + 1}. [${form.group}] [${form.type}] ${form.name} - ${form.mainFields.length} 个字段`);
@@ -894,11 +1650,18 @@ function main() {
     fs.writeFileSync(fieldListPath, fieldListMd, 'utf8');
     console.log('\n✅ 字段清单已生成:', fieldListPath);
 
-    // 生成规则清单
-    const ruleListMd = generateRuleListMarkdown(forms, systemName, version);
+    // 默认只生成占位规则清单，避免字段清单中的链接指向不存在的文件。
+    // 完整规则清单应在用户确认字段清单后再生成。
+    const ruleListMd = generateRuleListPlaceholderMarkdown(systemName, version);
     const ruleListPath = path.join(outputDir, '规则清单.md');
     fs.writeFileSync(ruleListPath, ruleListMd, 'utf8');
-    console.log('✅ 规则清单已生成:', ruleListPath);
+    console.log('✅ 规则清单占位文件已生成:', ruleListPath);
+
+    // v1.19.0新增：生成应用分组.md，让用户在创建应用前确认分组结构
+    const groupListMd = generateGroupListMarkdown(forms, systemName, version);
+    const groupListPath = path.join(outputDir, '应用分组.md');
+    fs.writeFileSync(groupListPath, groupListMd, 'utf8');
+    console.log('✅ 应用分组已生成:', groupListPath);
 
     console.log('\n🎉 转换完成！');
     console.log(`📁 输出目录: ${path.resolve(outputDir)}`);
@@ -923,7 +1686,20 @@ module.exports = {
   autoCompleteFields,
   generateFieldListMarkdown,
   generateRuleListMarkdown,
+  generateRuleListPlaceholderMarkdown,
+  generateGroupListMarkdown,
   parseExcelForms,
   industryFieldLibrary,
-  ensureSingleSerialNumber
+  ensureSingleSerialNumber,
+  inferDefaultOptions,
+  inferSerialPrefix,
+  inferTargetFields,
+  inferModuleGroup,
+  loadFieldTypeOverrides,
+  getFieldTypeOverride,
+  fieldTypeOverrides,
+  applyOverrides,
+  applyFieldOverrides,
+  VALID_DATA_TITLE_TYPES,
+  validateDataTitleType
 };

@@ -57,10 +57,10 @@ function isInternationalBaseUrl(baseUrl) {
 
 function detectContentLocaleFromEnv() {
   const candidates = [
-    process.env.OPENYIDA_CONTENT_LOCALE,
+    process.env.YEQIU_YIDA_CONTENT_LOCALE,
     process.env.YIDA_CONTENT_LOCALE,
-    process.env.OPENYIDA_APP_LOCALE,
-    process.env.OPENYIDA_LANG,
+    process.env.YEQIU_YIDA_APP_LOCALE,
+    process.env.YEQIU_YIDA_LANG,
     process.env.LC_ALL,
     process.env.LANG,
   ];
@@ -89,7 +89,7 @@ function normalizeTranslations(translations) {
   return translations && typeof translations === 'object' ? translations : {};
 }
 
-function buildYidaI18n(text, translations = {}, options = {}) {
+function buildPlatformI18n(text, translations = {}, options = {}) {
   const normalizedTranslations = normalizeTranslations(translations);
   const baseText = toText(text);
   const enText = toText(normalizedTranslations.en_US || normalizedTranslations.pureEn_US || baseText);
@@ -112,7 +112,7 @@ function buildYidaI18n(text, translations = {}, options = {}) {
 }
 
 function buildYidaTitleI18n(text, translations = {}) {
-  return buildYidaI18n(text, translations, {
+  return buildPlatformI18n(text, translations, {
     includePureEn: true,
     includeMeta: true,
   });
@@ -120,7 +120,7 @@ function buildYidaTitleI18n(text, translations = {}) {
 
 module.exports = {
   SUPPORTED_CONTENT_LOCALES,
-  buildYidaI18n,
+  buildPlatformI18n,
   buildYidaTitleI18n,
   detectContentLocaleFromEnv,
   isInternationalBaseUrl,

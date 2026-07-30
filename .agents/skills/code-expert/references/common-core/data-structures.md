@@ -309,6 +309,40 @@ if (typeof value === 'string') {
 if (!Array.isArray(value)) value = value ? [value] : [];
 ```
 
+**⚠️ 跨表查询时必须使用 getAssociationValue 工具函数:**
+
+在 `listTableDataByFormInstIdAndTableId` API 返回的子表行数据中，关联表单字段**只有 `_id` 后缀版本**才有数据，标准字段名为空。必须使用 `getAssociationValue` 函数来安全读取：
+
+```javascript
+/**
+ * 从子表行数据中安全读取关联表单字段
+ * listTableData API 返回的关联字段key带 _id 后缀，
+ * 如 associationFormField_xxx_id
+ * ⚠️ 前端 getValue() 返回的字段名不带 _id，但子表API只有 _id 版本有数据！
+ */
+function getAssociationValue(row, fieldId) {
+  // 优先尝试 _id 后缀（listTableData API 返回格式）
+  var value = row[fieldId + '_id'];
+  if (value !== undefined && value !== null) {
+    return formatAssociationField(value);
+  }
+  // 兼容无后缀（前端 getValue 格式）
+  return formatAssociationField(row[fieldId]);
+}
+
+// 使用示例
+var productAssoc = getAssociationValue(sourceRow, 'associationFormField_3e4o9dj9');
+if (productAssoc.length > 0) {
+  rowData['associationFormField_xxx'] = [{
+    appType: productAssoc[0].appType || CONFIG.APP_ID,
+    formType: 'receipt',
+    formUuid: productAssoc[0].formUuid || '',
+    instanceId: productAssoc[0].instanceId || '',
+    title: productAssoc[0].title || ''
+  }];
+}
+```
+
 ### 19. 子表单 (TableField/SubTable)
 
 ```javascript

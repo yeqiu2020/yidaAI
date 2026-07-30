@@ -232,7 +232,9 @@ async function main() {
 }
 
 // 运行主函数
-main().catch(error => {
-  console.error('程序运行出错:', error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error('程序运行出错:', error);
+    process.exit(1);
+  });
+}

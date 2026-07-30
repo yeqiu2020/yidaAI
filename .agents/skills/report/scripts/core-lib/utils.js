@@ -148,7 +148,7 @@ function detectActiveTool() {
  *   - ~/.real/users/{uuid}/workspace/           直接就是工作区
  *   - ~/.real/users/{uuid}/                     workspace 在其下
  *
- * openyida copy 在空工作区会把 project/ 内容直接铺入工作区，因此这里优先
+ * yeqiu-yida copy 在空工作区会把 project/ 内容直接铺入工作区，因此这里优先
  * 识别已经含 config.json 的目录，最后回退到 AGENT_WORK_ROOT 本身。
  *
  * @param {string} agentWorkRoot
@@ -428,7 +428,7 @@ function isCsrfTokenExpired(responseJson) {
  * 从 cookieData 中解析 base_url，支持多环境配置优先级。
  *
  * 优先级（高 → 低）：
- *   1. OPENYIDA_ENDPOINT 环境变量
+ *   1. YEQIU_YIDA_ENDPOINT 环境变量
  *   2. 当前激活的私有化环境配置（非默认公有云时）
  *   3. cookieData.base_url（历史兼容，含专属域名）
  *   4. 当前激活的环境配置（公有云默认）
@@ -647,7 +647,7 @@ async function requestWithAutoLogin(requestFn, authRef) {
       return {
         success: false,
         __needLogin: true,
-        errorMsg: t('common.login_expired', 'openyida login --qr / openyida login --browser'),
+        errorMsg: t('common.login_expired', 'yeqiu-yida login --qr / yeqiu-yida login --browser'),
       };
     }
     authRef.cookieData = newCookieData;

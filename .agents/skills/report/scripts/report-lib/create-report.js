@@ -9,7 +9,7 @@
  *   - lib/report/index.js         — 主流程入口
  *
  * 用法：
- *   openyida create-report <appType> "<报表名称>" <图表定义JSON或文件路径>
+ *   yeqiu-yida create-report <appType> "<报表名称>" <图表定义JSON或文件路径>
  */
 
 'use strict';

@@ -2,14 +2,14 @@
  * sample.js - 输出代码示例/模板文件到工作目录
  *
  * 用法：
- *   openyida sample --list                          列出所有可用 sample
- *   openyida sample <skill> <name>                  输出到 .cache/samples/<name>.js
- *   openyida sample <skill> <name> --output <路径>  输出到指定路径
- *   openyida sample <skill> <name> --var KEY=VALUE  替换模板变量 {{KEY}}
+ *   yeqiu-yida sample --list                          列出所有可用 sample
+ *   yeqiu-yida sample <skill> <name>                  输出到 .cache/samples/<name>.js
+ *   yeqiu-yida sample <skill> <name> --output <路径>  输出到指定路径
+ *   yeqiu-yida sample <skill> <name> --var KEY=VALUE  替换模板变量 {{KEY}}
  *
  * 示例：
- *   openyida sample yida-chart line-trend
- *   openyida sample yida-custom-page custom-page-template --output pages/src/my-page.jsx
+ *   yeqiu-yida sample yida-chart line-trend
+ *   yeqiu-yida sample yida-custom-page custom-page-template --output pages/src/my-page.jsx
  */
 
 'use strict';
@@ -71,7 +71,7 @@ function printSampleList() {
   for (const [skill, samples] of Object.entries(SAMPLES)) {
     console.log(`\n  ${c.bold}${c.cyan}${skill}${c.reset}`);
     for (const [name] of Object.entries(samples)) {
-      console.log(`    ${c.green}openyida sample ${skill} ${name}${c.reset}`);
+      console.log(`    ${c.green}yeqiu-yida sample ${skill} ${name}${c.reset}`);
     }
   }
   console.log('');
@@ -157,7 +157,7 @@ async function run(args) {
 
   // 校验 skill
   if (!SAMPLES[skill]) {
-    chalkError(`未知技能：${skill}`, { hint: `可用技能：${Object.keys(SAMPLES).join(', ')}\n  使用 openyida sample --list 查看所有可用 sample` });
+    chalkError(`未知技能：${skill}`, { hint: `可用技能：${Object.keys(SAMPLES).join(', ')}\n  使用 yeqiu-yida sample --list 查看所有可用 sample` });
   }
 
   // 校验 name
@@ -173,7 +173,7 @@ async function run(args) {
   // 解析源文件路径
   const sourcePath = resolveSampleSourcePath(skill, filename);
   if (!fs.existsSync(sourcePath)) {
-    chalkError(`sample 文件不存在：${sourcePath}`, { hint: '请确认 openyida 已正确安装（npm install -g openyida@latest）' });
+    chalkError(`sample 文件不存在：${sourcePath}`, { hint: '请确认 yeqiu-yida 已正确安装（npm install -g yeqiu-yida@latest）' });
   }
 
   // 解析输出路径与模板变量

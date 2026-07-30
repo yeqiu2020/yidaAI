@@ -14,7 +14,7 @@
 
 | 序号 | 文件名 | 说明 | 使用场景 |
 |------|--------|------|----------|
-| 01 | **[01-yida-formula-complete-reference.md](./01-yida-formula-complete-reference.md)** | **宜搭公式函数完整参考手册（⭐ 主文档）** | 包含所有96个函数的完整说明 |
+| 01 | **[01-formula-complete-reference.md](./01-formula-complete-reference.md)** | **宜搭公式函数完整参考手册（⭐ 主文档）** | 包含所有96个函数的完整说明 |
 | 02 | [02-common-errors.md](./02-common-errors.md) | 常见错误与解决方案 | 公式报错排查 |
 | 03 | [03-formula-patterns.md](./03-formula-patterns.md) | 常用公式模式 | 快速复制常用公式 |
 
@@ -32,7 +32,7 @@
 
 ### 1. 查找函数
 
-需要查找函数用法时，查阅：**[01-yida-formula-complete-reference.md](./01-yida-formula-complete-reference.md)**
+需要查找函数用法时，查阅：**[01-formula-complete-reference.md](./01-formula-complete-reference.md)**
 
 该文档包含：
 - 文本函数
@@ -92,7 +92,7 @@
 ```
 references/
 ├── 00-index.md                              # 本文档 - 索引
-├── 01-yida-formula-complete-reference.md    # ⭐ 主文档 - 完整公式参考
+├── 01-formula-complete-reference.md    # ⭐ 主文档 - 完整公式参考
 ├── 02-common-errors.md                      # 常见错误与解决方案
 ├── 03-formula-patterns.md                   # 常用公式模式
 └── 04-report-formulas.md                    # 报表公式（独立体系）

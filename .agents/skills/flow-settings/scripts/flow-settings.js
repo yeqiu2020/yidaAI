@@ -1,11 +1,14 @@
-const path = require('path');
+﻿const path = require('path');
 const fs = require('fs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
-const FORM_MANAGER_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'yida-api-client', 'scripts', 'form_manager.js');
-const API_CLIENT_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'yida-api-client', 'scripts', 'api_client.js');
+const FORM_MANAGER_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'form_manager.js');
+const API_CLIENT_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'api_client.js');
 const PLAYWRIGHT_CORE_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'js-action-tester', 'node_modules', 'playwright-core');
+
+// Phase 6: Cookie 加载统一委托给 lib/core/utils
+const coreUtils = require('../../../../lib/core/utils');
 
 /**
  * 获取 playwright-core 模块路径
@@ -95,7 +98,8 @@ function findBrowserPath(pwCorePath) {
 }
 
 function getAuthRef() {
-  const { loadCookieData, resolveBaseUrl, resolveCorpId } = require(API_CLIENT_PATH);
+  const { resolveCorpId } = require(API_CLIENT_PATH);
+  const { loadCookieData, resolveBaseUrl } = coreUtils;
   const cookieData = loadCookieData();
   if (!cookieData) {
     console.error('  ❌ 未找到登录态，请先登录');
@@ -322,7 +326,7 @@ async function cmdSetAutoApprovalBrowser(appType, formUuid, processCode, rules) 
   }
   console.error(`   浏览器路径: ${executablePath}`);
 
-  const { loadCookieData, resolveBaseUrl } = require(API_CLIENT_PATH);
+  const { loadCookieData, resolveBaseUrl } = coreUtils;
   const cookieData = loadCookieData();
   if (!cookieData) {
     console.log(JSON.stringify({ success: false, message: '未找到登录态，请先登录' }));
@@ -475,11 +479,11 @@ async function cmdSetAutoApprovalBrowser(appType, formUuid, processCode, rules) 
         await confirmBtn.click({ timeout: 5000 });
         await page.waitForTimeout(3000);
       }
-    } catch (e) {}
+    } catch (e) {} // 有意忽略：确认弹窗可能不存在
 
     console.log(JSON.stringify({
       success: true,
-      message: '自动审批规则设置成功（浏览器自动化方式）',
+      message: '流程设置成功（浏览器自动化方式）',
       method: 'browser',
       appType, formUuid, processCode, rules
     }, null, 2));
@@ -727,7 +731,7 @@ async function cmdDiscoverApi(appType, formUuid, processCode) {
   console.error(`   表单UUID: ${formUuid}`);
   console.error(`   流程Code: ${processCode}`);
 
-  const { loadCookieData, resolveBaseUrl } = require(API_CLIENT_PATH);
+  const { loadCookieData, resolveBaseUrl } = coreUtils;
   const cookieData = loadCookieData();
   if (!cookieData) {
     console.error('  ❌ 未找到登录态，请先登录');
@@ -796,7 +800,7 @@ async function cmdDiscoverApi(appType, formUuid, processCode) {
           status: response.status(),
           responseBody: body.substring(0, 2000)
         });
-      } catch (e) {}
+      } catch (e) {} // 有意忽略：响应体可能非文本或已 consumed
     }
   });
 
@@ -972,7 +976,9 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error('❌ 执行失败:', err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error('❌ 执行失败:', err.message);
+    process.exit(1);
+  });
+}

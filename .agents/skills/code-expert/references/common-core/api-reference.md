@@ -1,7 +1,7 @@
 # 宜搭 API 参考手册
 
 > 宜搭平台常用 API 速查（完整版）
-> 版本: v2.1.0
+> 版本: v2.3.0
 
 ***
 
@@ -331,12 +331,16 @@ this.dataSourceMap.dataSourceName.load(params)
 
 **⚠️ 重要：不同 API 返回格式不同！**
 
-| API 类型 | 成功返回值                          | 说明         |
+| API 类型 | 成功返回值                          | 数据位置 / 判断         |
 | ------ | ------------------------------ | ---------- |
-| 查询 API | `{success: true, data: [...]}` | 返回数据列表     |
-| 新增 API | `"FINST-xxx"` (字符串)            | 返回表单实例 ID  |
-| 编辑 API | `null`                         | 成功时返回 null |
-| 删除 API | `null`                         | 成功时返回 null |
+| `searchFormDatas` 查询 | `{success: true, result:{data:[...]}}` | `res.result.data`；`checkApiSuccess(res)` |
+| `getFormDataById` 按ID查 | `{serialNo, instValue, ...}`（扁平对象） | `res.serialNo`；❌不能用`checkApiSuccess`；❌不返回子表 |
+| `listTableData` 查子表 | `{data:[...], totalCount}` | `res.data`（顶层）；关联字段带`_id`后缀 |
+| `saveFormData` 新增 | `"FINST-xxx"` (字符串)            | 返回表单实例 ID  |
+| `updateFormData` 编辑 | `null`                         | 成功时返回 null |
+| `deleteFormData` 删除 | `null`                         | 成功时返回 null |
+
+> ⚠️ **各API返回结构完全不同，不能用同一套代码处理！** 详细结构与取值示例见 `references/form-actions/cross-form-query.md` §1.1~§1.3。
 
 **示例：**
 
@@ -680,12 +684,14 @@ this.dataSourceMap.queryDataSource.load({
 
 | API类型                    | 成功返回值                          | 说明        |
 | ------------------------ | ------------------------------ | --------- |
-| 查询API                    | `{success: true, data: [...]}` | 返回数据列表    |
-| 新增API (`saveFormData`)   | `"FINST-xxx"` (字符串)            | 返回表单实例ID  |
-| 编辑API (`updateFormData`) | `null`                         | 成功时返回null |
-| 删除API (`deleteFormData`) | `null`                         | 成功时返回null |
+| `searchFormDatas` 查询   | `{success: true, result:{data}}` | `res.result.data`  |
+| `getFormDataById` 按ID查 | `{serialNo, instValue, ...}`   | ❌不能用`checkApiSuccess`，判 `res.serialNo` |
+| `listTableData` 查子表   | `{data:[...], totalCount}`     | `res.data` 顶层，关联字段带`_id`后缀 |
+| `saveFormData` 新增       | `"FINST-xxx"` (字符串)          | 返回表单实例ID  |
+| `updateFormData` 编辑     | `null`                         | 成功时返回null |
+| `deleteFormData` 删除     | `null`                         | 成功时返回null |
 
-> ⚠️ **必须使用** **`checkApiSuccess()`** **工具函数判断结果**，详见 `references/common-core/error-guide.md`
+> ⚠️ **`searchFormDatas`/`saveFormData`/`updateFormData`/`deleteFormData` 用** **`checkApiSuccess()`** **判断；但 `getFormDataById` 不适用（扁平对象，需判 `res.serialNo`），`listTableData` 从 `res.data` 顶层取。** 详见 `references/form-actions/cross-form-query.md` §1.1 与 `references/common-core/error-guide.md`
 
 ### 6.4 API参数名配对表（易错！）
 
@@ -718,13 +724,13 @@ this.dataSourceMap.edit.load({
 
 ## 七、流程相关 API（自动化脚本）
 
-### 4.1 获取流程变量
+### 7.1 获取流程变量
 
 ```javascript
 this.getProcessVariables()
 ```
 
-### 4.2 设置流程变量
+### 7.2 设置流程变量
 
 ```javascript
 this.setProcessVariable(key, value)
@@ -741,11 +747,11 @@ if (amount > 10000) {
 
 ***
 
-## 六、子表列显隐控制
+## 八、子表列显隐控制
 
 > **实验性 API**，宜搭官方未公开文档，但实测可用。用于在运行时动态控制子表单中某一列的显示/隐藏。
 
-### 6.1 API 格式
+### 8.1 API 格式
 
 ```javascript
 this.$('tableField_xxx').setFieldProp(columnId, 'behavior', behavior);
@@ -757,7 +763,7 @@ this.$('tableField_xxx').setFieldProp(columnId, 'behavior', behavior);
 | 'behavior' | String | 固定写法                                               |
 | behavior   | String | `'HIDDEN'`（隐藏） / `'NORMAL'`（显示） / `'READONLY'`（只读） |
 
-### 6.2 示例
+### 8.2 示例
 
 ```javascript
 // 根据表单类型动态显示/隐藏子表列
@@ -777,7 +783,7 @@ export function handleTypeChange(value) {
 
 ***
 
-## 七、路由跳转 API（utils.router）
+## 九、路由跳转 API（utils.router）
 
 ### 跳转到指定页面
 
@@ -836,9 +842,9 @@ export function didMount() {
 
 ***
 
-## 八、this 指向处理
+## 十、this 指向处理
 
-### 8.1 问题：嵌套函数中 this 指向改变
+### 10.1 问题：嵌套函数中 this 指向改变
 
 ```javascript
 // ❌ 错误
@@ -849,7 +855,7 @@ export function wrongExample() {
 }
 ```
 
-### 8.2 解决方案
+### 10.2 解决方案
 
 ```javascript
 // ✅ 正确
@@ -863,9 +869,145 @@ export function correctExample() {
 
 ***
 
-*文档版本: v2.1.0*
+## 十一、页面状态管理（this.state / this.setState）
+
+> 官方 yidaAPI：自定义页面/表单页面用于驱动视图刷新的状态容器。**注意**：普通表单动作里字段值用 `this.$(id).setValue()`，`state` 主要用于自定义页面 JSX 渲染的数据。
+
+### 11.1 读取状态
+
+```javascript
+// 读取当前页面 state
+var list = this.state.tableData;
+var loading = this.state.loading;
+```
+
+### 11.2 更新状态（触发重新渲染）
+
+```javascript
+// setState 会浅合并并触发视图刷新
+this.setState({ loading: true });
+
+// 异步加载完成后更新
+var that = this;
+this.dataSourceMap.getList.load().then(function (res) {
+  that.setState({ tableData: res.result.data, loading: false });
+});
+```
+
+> ⚠️ `setState` 是异步的；需要拿到更新后的值时，用回调/后续逻辑，勿在 `setState` 下一行立即读 `this.state`。
+
+***
+
+## 十二、setValue 完整选项 & 读取组件属性 get
+
+### 12.1 setValue 的 options 全量
+
+```javascript
+this.$(componentId).setValue(value, options)
+```
+
+| 选项 | 类型 | 默认 | 说明 |
+| ---- | ---- | ---- | ---- |
+| triggerChange | Boolean | true | 是否触发 onChange 事件（子表批量赋值防死循环时置 `false`） |
+| doNotValidate | Boolean | false | 赋值后是否**跳过**校验（批量填充脏数据前有用） |
+| formatted | Boolean | false | 传入值是否为已格式化的展示值 |
+
+```javascript
+// 子表批量赋值：不触发 change、不触发校验
+this.$('tableField_xxx').setValue(rows, { triggerChange: false, doNotValidate: true });
+```
+
+### 12.2 读取组件属性 get(propName)
+
+> 与 §1.4 的 `set(propName, value)` 对应，用于读取组件当前属性。
+
+```javascript
+var isVisible  = this.$('textField_xxx').get('visible');
+var isReadOnly = this.$('textField_xxx').get('readOnly');
+var isRequired = this.$('textField_xxx').get('required');
+```
+
+***
+
+## 十三、钉钉 JSAPI（端内能力）
+
+> 来源：https://docs.aliwork.com/docs/developer/api/dingAPI 。用于宜搭页面运行在**钉钉端内**时调用扫码、原生弹框、设备能力等。完整 API 清单以官方文档为准，本节给出安全调用范式。
+
+### 13.1 环境判断（必须先判断，非端内会报错）
+
+```javascript
+function isDingTalk() {
+  return /DingTalk/i.test(navigator.userAgent);
+}
+```
+
+### 13.2 引入与就绪
+
+- **钉钉端内**：`window.dd` 已自动注入，直接用；建议包一层 `dd.ready()`。
+- **非端内 / 浏览器**：需先用 `utils.loadScript`（见 §三）引入 `dingtalk-jsapi` 后再用，否则 `window.dd` 为 undefined。
+
+```javascript
+export function didMount() {
+  if (!isDingTalk() || !window.dd) return; // 非端内直接跳过
+  window.dd.ready(function () {
+    // 端内能力就绪后再调用 dd.xxx
+  });
+  window.dd.error(function (err) {
+    console.error('dd error:', err);
+  });
+}
+```
+
+### 13.3 常用能力示例
+
+```javascript
+// 扫码
+window.dd.biz.util.scan({
+  type: 'all',
+  onSuccess: function (data) { /* data.text 为扫码结果 */ },
+  onFail: function (err) {}
+});
+
+// 原生 toast / 弹框
+window.dd.device.notification.toast({ text: '操作成功' });
+window.dd.device.notification.alert({ message: '提示内容', title: '标题', buttonName: '确定' });
+
+// 打开链接
+window.dd.biz.util.openLink({ url: 'https://www.aliwork.com' });
+```
+
+> ⚠️ 所有 `dd.*` 调用都应在 `isDingTalk()` 为真且 `dd.ready` 之后执行。更多设备/通讯录/导航等 API 见官方 dingAPI 文档（已登记在 `references/official-docs.md`）。
+
+***
+
+## 十四、router 补充：stringifyQuery
+
+> 与 §九 配合：把参数对象拼成 URL query 字符串，常用于手工拼跳转地址或分享链接。
+
+```javascript
+var qs = utils.router.stringifyQuery({ instanceId: 'FINST-xxx', mode: 'view' });
+// => "instanceId=FINST-xxx&mode=view"
+
+// 手工拼接完整跳转地址
+var url = '/apps/APP_ID/forms/FORM_ID?' + qs;
+```
+
+***
+
+*文档版本: v2.3.0*
 
 ### 版本更新记录
+
+#### v2.3.0 (2026-07-24)
+- **新增** §十一 页面状态管理（`this.state` / `this.setState`）
+- **新增** §十二 `setValue` 完整 options（triggerChange/doNotValidate/formatted）+ 组件属性读取 `get(propName)`
+- **新增** §十三 钉钉 JSAPI 端内能力（isDingTalk 判断 + loadScript 引入 + dd.ready + 扫码/弹框/openLink 范式）
+- **新增** §十四 `utils.router.stringifyQuery`
+- **来源** 对齐官方 yidaAPI / dingAPI，缺口来自 `references/official-docs.md` gap 分析
+
+#### v2.2.0 (2026-07-24)
+- **补充** ②数据源 API 返回表区分 `getFormDataById`（扁平对象/`res.serialNo`）与 `listTableData`（顶层 `res.data`），并链接到 cross-form-query.md §1.1~§1.3
+- **修复** 重复章节编号（两个“六”、两个“七”）重新排为 六~十；修正流程 API 子编号 4.1/4.2 → 7.1/7.2
 
 #### v2.1.0 (2026-03-21)
 - **新增** 组件状态 API：getBehavior、setBehavior、resetBehavior

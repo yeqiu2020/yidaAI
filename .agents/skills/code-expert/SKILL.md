@@ -8,17 +8,15 @@ description: "宜搭低代码平台代码开发专家。生成表单动作代码
 ## 🔴 硬规则（绝对不可违反）
 
 ### 通用硬规则
-1. **禁止通过API修改已有应用的表单字段内容** — 公式、代码、字段增删改只能复制粘贴（规则25）
-2. **应用ID和表单UUID必须填真实值** — 从系统配置清单.md读取，严禁占位符（规则24）
-3. **写入文件前必须校验** — 运行 `node scripts/ai-validator.js check-before-write <文件路径>` 确认不覆盖已有文件
-4. **写入文件后必须校验** — 运行 `node scripts/ai-validator.js check-after-write <文件路径>` 确认内容合规
-5. **Cookie必须使用根目录** — 严禁 process.cwd()，必须用 PROJECT_ROOT（规则26）
+
+> 本区块 1-5 条通用硬规则统一维护于 [../通用硬规则.md](../通用硬规则.md)（单一来源，避免多点复制导致规则漂移），执行前必须阅读并严格遵守。
 
 ### 专属硬规则
 1. **禁止通过API修改已有应用的代码** — 已有应用的代码只能本地生成后由用户手动复制粘贴
 2. **跨表单代码必须从系统配置清单读取真实ID** — 严禁写占位符如 FORM-XXX、APP_XXX
 3. **自动化脚本必须使用ES5语法** — 禁止使用箭头函数、let/const、模板字符串等ES6+语法
 4. **事件绑定必须手动操作** — 禁止代码自动绑定事件，必须提示用户手动绑定
+5. **getFormDataById 取订单号/流水号必须用 `res.serialNo`** — 严禁从 `instValueMap[fieldId]` 取值再 setValue 给文本字段（`instValueMap` 的值可能是不可预测的嵌套对象，直接 setValue 会显示 `[object Object]`）
 
 ## 🎯 触发场景（何时调用本Skill）
 
@@ -72,7 +70,7 @@ description: "宜搭低代码平台代码开发专家。生成表单动作代码
 **不调用本Skill的场景**：
 - ❌ **编写/创建/更新"提示词"文件**（用户只是要创建需求文档，而非生成代码）
 - ❌ 公式相关需求（调用 formula-generator）
-- ❌ 表单架构设计（调用 yida-architect）
+- ❌ 表单架构设计（调用 architect）
 - ❌ 【应用场景】为公式类型（表单公式/报表公式/自动化公式）
 
 **重要区分**：
@@ -164,7 +162,7 @@ export function onFieldChange(value) {
 | **[VALIDATION]** | 函数名为 `validateRule`，返回 `true/false` | 字段校验、格式验证、手机号校验、身份证验证 |
 | **[AUTOMATION]** | 无 `this` 上下文，使用 `inputs/outputs`，入口是 `main` | 流程节点、自动化脚本、定时任务、后端处理 |
 
-> **注意**：自定义页面代码请使用 `custom-page-coder` Skill，不在本 Skill 范围内。
+> **注意**：自定义页面代码请使用 `custom-page` Skill，不在本 Skill 范围内。
 
 **分类决策树**：
 ```
@@ -204,7 +202,7 @@ export function onFieldChange(value) {
 | [VALIDATION] | `references/form-validation/spec.md` | 校验专属规范 |
 | [AUTOMATION] | `references/automation-scripts/spec.md` | 脚本专属规范（ES5强制）|
 
-> **注意**：自定义页面规范在 `custom-page-coder` Skill 中维护，本 Skill 不处理。
+> **注意**：自定义页面规范在 `custom-page` Skill 中维护，本 Skill 不处理。
 
 ### 第四步：模板匹配 (Template Matching)
 
@@ -217,6 +215,23 @@ export function onFieldChange(value) {
 | [AUTOMATION] | `automation-template.js` | 只能用 `//` 注释 |
 
 ### 第五步：代码生成
+
+**5.0 跨表查询场景识别（若涉及跨表查询/数据获取，必须先做）**：
+
+先按下表确定场景，再选模板与数据源数量，切勿盲目套通用模板（本项是直播翻车根因）：
+
+| 场景 | 你要什么数据 | API | 数据源 | 模板 |
+|------|------------|-----|-------|------|
+| A 查主表列表 | 满足条件的多条主表记录 | `searchFormDatas` | 1个 | `form-action-template.js` |
+| B 按ID查主表 | 已知实例ID的主表字段 | `getFormDataById` | 1个 | 参 `cross-form-query.md` §1.2 |
+| C 查主表+子表 ⭐ | 完整记录（主表+子表明细） | `getFormDataById` + `listTableData` | **2个** | **`cross-form-query-template.js`** |
+| D 只查子表 | 已知实例ID的子表明细 | `listTableData` | 1个 | 参 `cross-form-query.md` §1.3 |
+
+- 5a. 识别场景类型（A/B/C/D）——决定调几个API、配几个数据源
+- 5b. 按场景选对应模板（场景C 用 `cross-form-query-template.js`）
+- 5c. 确认数据源数量（场景C 必须配 2 个数据源！）
+
+**5.1 通用生成步骤**：
 
 1. 使用模板生成基础框架
 2. 根据需求填充业务逻辑
@@ -234,9 +249,25 @@ export function onFieldChange(value) {
 **在输出最终代码前，必须扮演"宜搭代码审查员"，对代码进行逐行扫描，检查以下清单：**
 
 #### 通用检查项
-- [ ] **ES5语法检查**：没有 `let`, `const`, `=>`, 模板字符串
+- [ ] **ES5语法检查**：没有 `let`, `const`, `=>`, 模板字符串（表单动作代码可用ES6+）
 - [ ] **注释规范**：自动化脚本是否只用了 `//` 单行注释？
 - [ ] **版本号**：文件头是否包含版本号？
+- [ ] **JS语法完整性**：所有函数是否都有闭合大括号 `}`？是否有未闭合的函数？（⚠️ 此项遗漏会导致宜搭编译报错！）
+
+#### API响应结构检查项（⚠️ 极其重要！本次直播翻车的根因！）
+
+**不同API返回结构完全不同，不能用同一套代码处理！必须对照 `cross-form-query.md` 第1.1节逐个检查：**
+
+- [ ] **使用的API是否已确认返回结构？** 对照以下规则逐个检查：
+  - `searchFormDatas` → `checkApiSuccess(res)` + `res.result.data` ✅ 通用模板适用
+  - `getFormDataById` → **不能用 checkApiSuccess！** 判断 `res.serialNo`，订单号在 `res.serialNo` ⚠️
+  - `listTableData` → **不能用通用兼容逻辑！** `res.data` 在顶层，关联字段带 `_id` 后缀 ⚠️
+  - `saveFormData` → 返回 `"FINST-xxx"` 字符串
+  - `updateFormData/deleteFormData` → 返回 `null`
+- [ ] **getFormDataById 相关代码是否使用了 res.serialNo 判断成功？** 严禁用 checkApiSuccess
+- [ ] **getFormDataById 相关代码是否没有试图从返回值中取子表数据？** 子表必须单独调用 listTableData
+- [ ] **listTableData 相关代码是否直接从 res.data 取数据（而非 res.result.data）？**
+- [ ] **跨表查询子表数据时，关联字段是否使用了 getAssociationValue 函数？** 严禁直接用前端字段名读取
 
 #### 场景专属检查项
 
@@ -260,7 +291,7 @@ export function onFieldChange(value) {
 - [ ] 入口函数是否为 `function main()`？
 - [ ] 是否只用了 `//` 单行注释？
 
-> **注意**：自定义页面代码检查在 `custom-page-coder` Skill 中进行。
+> **注意**：自定义页面代码检查在 `custom-page` Skill 中进行。
 
 #### 如果发现错误
 - **立即修正代码**，不要输出有错误的版本
@@ -275,8 +306,10 @@ code-expert/
 ├── SKILL.md                          ← 本文件（核心路由+禁令）
 ├── references/
 │   ├── 00-index.md                   ← 【快速导航】需求定位+错误速查（必读入口）
+│   ├── official-docs.md              ← 【外部文献】官方4大文档权威链接（本地缺口时联网查）
 │   ├── common-core/                  ← 【公共基础】所有场景共用
-│   │   ├── api-reference.md          ← 完整 API 字典
+│   │   ├── api-reference.md          ← 完整 API 字典（前端 this.* / utils / 状态 / 钉钉JSAPI）
+│   │   ├── open-api-reference.md     ← HTTP OpenAPI 接口清单 + 写入/搜索格式附录
 │   │   ├── syntax-guide.md           ← 语法支持说明（ES5/ES6+ 分场景）
 │   │   ├── data-structures.md        ← 组件数据结构（getValue/setValue 格式）
 │   │   └── error-guide.md            ← 常见 API 错误案例（13 大必读坑 + UI 时序专题）
@@ -291,12 +324,16 @@ code-expert/
 │   ├── automation-scripts/           ← 【场景 3】自动化脚本专用
 │   │   ├── spec.md                   ← 脚本专属规范（ES5 强制）
 │   │   └── cases.md                  ← 脚本专属案例
-│   └── custom-pages/                 ← 【已移除】自定义页面代码已移至 custom-page-coder Skill
+│   └── （自定义页面已独立为 custom-page Skill，本 Skill 不再包含 custom-pages/）
 ├── assets/
 │   └── templates/                    ← 代码模板
 │       ├── form-action-template.js
 │       ├── field-validation-template.js
-│       └── automation-template.js
+│       ├── automation-template.js
+│       ├── api-response-utils.js                ← API响应处理工具函数（各API返回结构差异）
+│       ├── cross-form-query-template.js         ← 【场景C】查主表+子表→填充子表专用模板
+│       ├── script-node-template.js              ← 自动化脚本节点模板
+│       └── cross-form-operation-instructions-template.md  ← 跨表操作配置说明模板
 └── scripts/
     ├── code-checker.js               ← 代码语法检查工具
     └── es5-converter.js              ← ES5 兼容转换工具
@@ -320,7 +357,17 @@ code-expert/
 ```
 
 ### 文件保存位置
-**所有代码文件保存在 `代码/` 目录下**，命名规范：`功能描述.js`
+🔴 **代码文件必须保存在"触发表单本身已存在的目录"下的 `代码/` 子文件夹中，严禁在项目根目录或其他位置新建以表单名命名的文件夹。**
+
+**定位表单目录的方法**：
+1. 优先使用用户需求中明确指向的表单目录路径（如 `.../采购管理「分组」/采购入库「流程表单」`）
+2. 若用户未明确路径，用 `Glob` 搜索 `**/{表单名}*/{表单名}*.json` 定位表单 Schema 文件所在目录
+3. 也可从 `系统配置清单.md` 的「所属分组」列推断：`{项目目录}/{分组名}「分组」/{表单名}「{表单类型}」`
+
+**正确示例**：`进销存管理/采购管理「分组」/采购入库「流程表单」/代码/didMount.js`
+**错误示例**：`进销存管理/采购入库/代码/didMount.js`（在根目录新建表单名文件夹）
+
+命名规范：`功能描述.js`
 
 ### ⚠️ 强制要求：必须在代码末尾包含配置步骤
 
@@ -418,7 +465,7 @@ code-expert/
 
 你是宜搭低代码平台代码开发专家，专门负责生成表单动作代码、字段校验规则、自动化脚本。你熟悉宜搭平台的JS开发规范和API接口，能够根据需求精准生成符合场景要求的可运行代码。
 
-> **注意**：自定义页面代码请使用 `custom-page-coder` Skill，不在本 Skill 范围内。
+> **注意**：自定义页面代码请使用 `custom-page` Skill，不在本 Skill 范围内。
 
 ## 检查清单
 
@@ -427,6 +474,7 @@ code-expert/
 - [ ] 确认应用ID和表单UUID从系统配置清单.md读取真实值，严禁占位符
 - [ ] 确认已正确识别代码场景类型（表单动作/校验/自动化）
 - [ ] 确认已查阅对应场景的规范文档和代码模板
+- [ ] **已定位触发表单实际所在目录**（通过 Glob 搜索或用户需求路径），未在项目根目录新建表单名文件夹
 
 ### 执行后确认
 - [ ] 确认未通过API修改已有应用的表单字段内容（规则25）
@@ -434,18 +482,13 @@ code-expert/
 - [ ] 确认自动化脚本使用ES5语法，无let/const/箭头函数
 - [ ] 确认事件绑定采用手动方式，未使用代码自动绑定
 - [ ] 确认代码文件末尾包含宜搭内配置步骤注释
+- [ ] **确认代码文件已保存到触发表单所在目录下的 `代码/` 子文件夹**（非项目根目录）
 
 ---
 
-## 版本信息
+## 版本历史
 
-- **版本**: v2.7.0
-- **最后更新**: 2026-05-24
-
-### v1.1.0 更新内容
-
-- **【强制】新增第五步第5条**：跨表单代码生成时，应用ID和表单UUID必须从 `系统配置清单.md` 读取真实值直接填入代码的 `CONFIG` 中，严禁留占位符（如 `FORM-XXX`、`APP_XXX`）
-- **【强制】新增审查项**：在「第六步自我审查」中新增2条检查项，确保跨表单代码使用了真实应用ID和表单UUID
-- **根因**：此前未明确约束，导致代码中留空或需要用户二次提醒才填入，影响使用体验
+- **v2.13.0**（2026-07-29）：补充 getFormDataById 字段值对象格式坑点 — ①专属硬规则新增第5条「订单号/流水号必须用 res.serialNo，严禁从 instValueMap 取值」；② `cross-form-query.md` 升 v2.4.0 新增 §1.3；③ `error-guide.md` 升 v1.10.0 在案例 20 中增加同条警告
+- **v2.12.0**（2026-07-24）：清理自定义页面历史残留 — 删除已废弃的 `references/custom-pages/spec.md`、`references/custom-pages/pitfalls.md` 与 `assets/templates/custom-page-template.js`
 
 

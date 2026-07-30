@@ -15,7 +15,13 @@ const fs = require('fs');
 const path = require('path');
 const https = require('https');
 
-const API_CLIENT_DIR = path.join(__dirname, '..', '..', 'yida-api-client', 'scripts');
+// Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
+const coreUtils = require('../../../../lib/core/utils');
+
+// v2.11.0: 引入 form-scanner（UUID 表单目录匹配引擎，与 sync_server.js / sync_all_configs.js 共享）
+const { findFormDir } = require('../../../../lib/sync-server/form-scanner');
+
+const API_CLIENT_DIR = path.join(__dirname, '..', '..', 'api-client', 'scripts');
 const LOGIN_MANAGER = path.join(API_CLIENT_DIR, 'login_manager.js');
 
 // 颜色输出
@@ -49,49 +55,11 @@ function logWarning(message) {
 }
 
 /**
- * 递归查找已存在的表单目录
- * 优先查找已有的目录，避免在错误位置重复创建
+ * 查找已存在的表单目录
+ * v2.11.0: 委托给 form-scanner.findFormDir，统一 UUID 匹配逻辑，消除重复代码
  */
-function findExistingFormDir(projectDir, formName, formType) {
-  const expectedDirName = `${formName}「${formType}」`;
-
-  // 1. 先检查项目根目录
-  const rootDir = path.join(projectDir, expectedDirName);
-  if (fs.existsSync(rootDir)) {
-    return rootDir;
-  }
-
-  // 2. 递归搜索子目录（最多3层）
-  function walk(currentDir, depth) {
-    if (depth > 3) return null;
-
-    let entries = [];
-    try {
-      entries = fs.readdirSync(currentDir, { withFileTypes: true });
-    } catch (_) {
-      return null;
-    }
-
-    for (const entry of entries) {
-      if (!entry.isDirectory()) continue;
-      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-
-      const fullPath = path.join(currentDir, entry.name);
-
-      // 检查是否匹配目标目录名
-      if (entry.name === expectedDirName) {
-        return fullPath;
-      }
-
-      // 递归搜索
-      const found = walk(fullPath, depth + 1);
-      if (found) return found;
-    }
-
-    return null;
-  }
-
-  return walk(projectDir, 0);
+function findExistingFormDir(projectDir, formName, formType, formUuid) {
+  return findFormDir(projectDir, formName, formType, formUuid);
 }
 
 function formatCookieString(cookies) {
@@ -159,28 +127,53 @@ function readSystemConfig(projectDir) {
   // 提取表单UUID列表
   const formMap = {};
   const lines = content.split('\n');
-  
+
   for (const line of lines) {
-    // 新格式: | 1 | 产品信息「普通表单」 | FORM-XXX |
-    const newMatch = line.match(/\|\s*\d+\s*\|\s*([^|]+?)「([^|]+?)」\s*\|\s*`?(FORM-[A-Z0-9]+)`?/);
-    if (newMatch) {
-      formMap[newMatch[1].trim()] = { 
-        formUuid: newMatch[3].trim(), 
-        formType: newMatch[2].trim() 
+    // 新格式（含分组列）: | 1 | 产品信息「普通表单」 | FORM-XXX | 流程Code | 分组 |
+    const withModuleMatch = line.match(/\|\s*\d+\s*\|\s*([^|]+?)「([^|]+?)」\s*\|\s*`?(FORM-[A-Z0-9]+)`?\s*\|\s*([^|]*)\s*\|\s*([^|]*)\s*\|/);
+    if (withModuleMatch) {
+      const moduleName = withModuleMatch[5].trim();
+      formMap[withModuleMatch[1].trim()] = {
+        formUuid: withModuleMatch[3].trim(),
+        formType: withModuleMatch[2].trim(),
+        module: (moduleName && moduleName !== '-' && moduleName !== '') ? moduleName : null
       };
       continue;
     }
-    
+
+    // 新格式: | 1 | 产品信息「普通表单」 | FORM-XXX | 流程Code |
+    const newMatch = line.match(/\|\s*\d+\s*\|\s*([^|]+?)「([^|]+?)」\s*\|\s*`?(FORM-[A-Z0-9]+)`?\s*\|\s*([^|]*)\s*\|/);
+    if (newMatch) {
+      formMap[newMatch[1].trim()] = {
+        formUuid: newMatch[3].trim(),
+        formType: newMatch[2].trim(),
+        module: null
+      };
+      continue;
+    }
+
+    // 新格式（无流程Code）: | 1 | 产品信息「普通表单」 | FORM-XXX |
+    const simpleMatch = line.match(/\|\s*\d+\s*\|\s*([^|]+?)「([^|]+?)」\s*\|\s*`?(FORM-[A-Z0-9]+)`?/);
+    if (simpleMatch) {
+      formMap[simpleMatch[1].trim()] = {
+        formUuid: simpleMatch[3].trim(),
+        formType: simpleMatch[2].trim(),
+        module: null
+      };
+      continue;
+    }
+
     // 旧格式: | 1 | 产品信息 | 普通 | `FORM-XXX` | - |
     const oldMatch = line.match(/\|\s*\d+\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*`?(FORM-[A-Z0-9]+)`?/);
     if (oldMatch) {
-      formMap[oldMatch[1].trim()] = { 
-        formUuid: oldMatch[3].trim(), 
-        formType: oldMatch[2].trim() 
+      formMap[oldMatch[1].trim()] = {
+        formUuid: oldMatch[3].trim(),
+        formType: oldMatch[2].trim(),
+        module: null
       };
     }
   }
-  
+
   return { appId, formMap, baseUrl };
 }
 
@@ -196,13 +189,13 @@ function isCookieDomainMatch(cookieDomain, host) {
 
 function loadCookies(baseUrl = '') {
   try {
-    const cookiePath = path.join(__dirname, '..', '..', '..', '..', '.cookies.json');
-    if (!fs.existsSync(cookiePath)) {
+    // Phase 6: 通过 lib/core/utils.loadCookieData 统一加载 cookie 文件
+    const cookieData = coreUtils.loadCookieData();
+    if (!cookieData) {
       logWarning('Cookie文件不存在，将尝试无Cookie访问');
       return '';
     }
-    
-    const cookieData = JSON.parse(fs.readFileSync(cookiePath, 'utf-8'));
+
     const allCookies = Array.isArray(cookieData.cookies) ? cookieData.cookies : [];
     if (allCookies.length === 0) {
       return '';
@@ -486,12 +479,29 @@ function parseFieldsFromSchema(schema) {
 
 /**
  * 更新本地JSON文件
+ * v2.11.0: 修复硬编码「普通表单」文件名 bug；写入 formUuid 元数据；清理旧名 JSON
  */
-function updateLocalJson(formDir, formName, schema) {
-  const jsonPath = path.join(formDir, `${formName}「普通表单」.json`);
-  
+function updateLocalJson(formDir, formName, formType, formUuid, schema) {
+  // v2.11.0: 使用正确的 formType 作为文件名后缀（修复原来硬编码「普通表单」的 bug）
+  const jsonFileName = `${formName}「${formType}」.json`;
+  const jsonPath = path.join(formDir, jsonFileName);
+
   try {
-    fs.writeFileSync(jsonPath, JSON.stringify(schema, null, 2), 'utf-8');
+    // v2.11.0: 写入 formUuid/formName/formType 元数据，使后续同步能按 UUID 匹配改名/删除
+    const schemaWithMeta = { ...schema };
+    schemaWithMeta.formUuid = formUuid;
+    schemaWithMeta.formName = formName;
+    schemaWithMeta.formType = formType;
+    fs.writeFileSync(jsonPath, JSON.stringify(schemaWithMeta, null, 2), 'utf-8');
+    // v2.11.0: 清理目录内其他旧名 JSON 文件（如原来硬编码「普通表单」遗留的文件）
+    try {
+      const inner = fs.readdirSync(formDir);
+      for (const f of inner) {
+        if (/^.+「(普通表单|流程表单)」\.json$/.test(f) && f !== jsonFileName) {
+          fs.unlinkSync(path.join(formDir, f));
+        }
+      }
+    } catch (_) {} // 有意忽略（清理失败不影响主流程）
     logSuccess(`已更新本地JSON: ${jsonPath}`);
     return true;
   } catch (error) {
@@ -525,6 +535,7 @@ function getComponentTypeCN(componentType) {
     'LocationField': '定位',
     'RelateField': '关联表单',
     'AssociationFormField': '关联表单',
+    'SerialNumberField': '流水号',
     'SubTableField': '子表单',
     'Button': '按钮'
   };
@@ -760,18 +771,45 @@ async function main() {
     // 5. 更新本地文件
     log(`\n[5/5] 更新本地文件...`, 'bright');
 
-    // 查找表单目录（优先查找已存在的，避免重复创建）
-    let formDir = findExistingFormDir(projectDir, formName, formInfo.formType);
+    // 查找表单目录（v2.11.0: 优先按 UUID 查找，正确处理改名）
+    let formDir = findExistingFormDir(projectDir, formName, formInfo.formType, formInfo.formUuid);
     if (!formDir) {
-      formDir = path.join(projectDir, `${formName}「${formInfo.formType}」`);
+      // v1.1.0: 支持按分组创建目录
+      // v1.2.0: 分组目录加「分组」后缀，与表单目录结构对齐
+      const folderName = `${formName}「${formInfo.formType}」`;
+      if (formInfo.module) {
+        const groupDirName = `${formInfo.module}「分组」`;
+        formDir = path.join(projectDir, groupDirName, folderName);
+        logInfo(`创建新目录（分组: ${formInfo.module}）: ${formDir}`);
+      } else {
+        formDir = path.join(projectDir, folderName);
+        logInfo(`创建新目录: ${formDir}`);
+      }
       fs.mkdirSync(formDir, { recursive: true });
-      logInfo(`创建新目录: ${formDir}`);
     } else {
       logInfo(`找到已有目录: ${formDir}`);
+      // v2.11.0: UUID 命中但目录名变化（改名/改类型/移分组）→ 重命名目录，避免残留旧目录
+      const currentDirName = path.basename(formDir);
+      const expectedDirName = `${formName}「${formInfo.formType}」`;
+      if (currentDirName !== expectedDirName) {
+        const targetDir = formInfo.module
+          ? path.join(projectDir, `${formInfo.module}「分组」`, expectedDirName)
+          : path.join(projectDir, expectedDirName);
+        try {
+          if (fs.existsSync(targetDir) && path.resolve(targetDir) !== path.resolve(formDir)) {
+            fs.rmSync(targetDir, { recursive: true, force: true });
+          }
+          fs.renameSync(formDir, targetDir);
+          logInfo(`表单改名/移动: ${currentDirName} → ${expectedDirName}`);
+          formDir = targetDir;
+        } catch (err) {
+          logWarning(`重命名目录失败，继续使用原目录: ${err.message}`);
+        }
+      }
     }
     
-    // 更新JSON
-    updateLocalJson(formDir, formName, schema);
+    // 更新JSON（v2.11.0: 写入 formUuid 元数据 + 使用正确的 formType 文件名）
+    updateLocalJson(formDir, formName, formInfo.formType, formInfo.formUuid, schema);
     
     // 更新组件ID清单
     updateComponentList(formDir, formName, fields);
@@ -809,7 +847,9 @@ async function main() {
   }
 }
 
-main().catch(error => {
-  logError(`未捕获的错误: ${error.message}`);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    logError(`未捕获的错误: ${error.message}`);
+    process.exit(1);
+  });
+}

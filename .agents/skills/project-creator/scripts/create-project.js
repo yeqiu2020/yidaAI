@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 宜搭项目创建工具
  * 版本: 2.5.0
  * 更新日期: 2026-05-17
@@ -177,8 +177,8 @@ function createProject(projectName) {
   console.log('');
   console.log('💡 提示：项目已创建');
   console.log('   项目开发提示词.md 位于根目录，所有项目共用');
-  console.log('   后续可通过 yida-config-sync 技能同步宜搭应用配置');
-  console.log('   同步命令: node .agents/skills/yida-config-sync/scripts/sync_all_configs.js\n');
+  console.log('   后续可通过 config-sync 技能同步宜搭应用配置');
+  console.log('   同步命令: node .agents/skills/config-sync/scripts/sync_all_configs.js\n');
 
   return {
     success: true,
@@ -318,14 +318,14 @@ function generateConfigTemplate(projectName, appId = null, corpId = '', domain =
 
 \`\`\`powershell
 # 统一同步（推荐）- 同步应用ID、表单UUID、组件ID、表结构
-node .agents/skills/yida-config-sync/scripts/sync_all_configs.js "${projectName}/01需求梳理/字段清单.md" "APP_XXX"
+node .agents/skills/config-sync/scripts/sync_all_configs.js "${projectName}/01需求梳理/字段清单.md" "APP_XXX"
 
 # 或分步同步
 # 步骤1：同步系统配置清单
-node .agents/skills/yida-config-sync/scripts/sync_config.js --appId "APP_XXX" --output "${projectName}"
+node .agents/skills/config-sync/scripts/sync_config.js --appId "APP_XXX" --output "${projectName}"
 
 # 步骤2：同步表单结构及组件ID
-node .agents/skills/yida-config-sync/scripts/sync_form_schemas.js "${projectName}/01需求梳理/字段清单.md" "APP_XXX"
+node .agents/skills/config-sync/scripts/sync_form_schemas.js "${projectName}/01需求梳理/字段清单.md" "APP_XXX"
 \`\`\`
 
 ### 已有应用同步
@@ -333,7 +333,7 @@ node .agents/skills/yida-config-sync/scripts/sync_form_schemas.js "${projectName
 如果是已有宜搭应用，先手动复制部署运维信息到本文件，然后执行：
 
 \`\`\`powershell
-node .agents/skills/yida-config-sync/scripts/sync_config.js --appId "APP_XXX" --output "${projectName}" --smart-group
+node .agents/skills/config-sync/scripts/sync_config.js --appId "APP_XXX" --output "${projectName}" --smart-group
 \`\`\`
 `;
 }
@@ -382,7 +382,7 @@ ${projectName}/
 2. **表单设计** - 根据字段清单设计表单结构
 3. **生成配置** - 使用 form_creator 生成JSON配置
 4. **创建应用** - 在宜搭平台创建应用和表单
-5. **同步配置** - 使用 yida-config-sync 同步应用ID、表单UUID、组件ID
+5. **同步配置** - 使用 config-sync 同步应用ID、表单UUID、组件ID
 6. **配置规则** - 设置公式、校验、流程等业务规则
 7. **测试验证** - 完成功能测试和数据验证
 8. **上线部署** - 正式发布使用
@@ -395,14 +395,14 @@ ${projectName}/
 
 \`\`\`bash
 # 统一同步（推荐）
-node .agents/skills/yida-config-sync/scripts/sync_all_configs.js "${projectName}/01需求梳理/字段清单.md" "APP_XXX"
+node .agents/skills/config-sync/scripts/sync_all_configs.js "${projectName}/01需求梳理/字段清单.md" "APP_XXX"
 
 # 或分步同步
 # 步骤1：同步系统配置
-node .agents/skills/yida-config-sync/scripts/sync_config.js --appId "APP_XXX" --output "${projectName}"
+node .agents/skills/config-sync/scripts/sync_config.js --appId "APP_XXX" --output "${projectName}"
 
 # 步骤2：同步表单结构
-node .agents/skills/yida-config-sync/scripts/sync_form_schemas.js "${projectName}/01需求梳理/字段清单.md" "APP_XXX"
+node .agents/skills/config-sync/scripts/sync_form_schemas.js "${projectName}/01需求梳理/字段清单.md" "APP_XXX"
 \`\`\`
 
 ---
@@ -410,7 +410,7 @@ node .agents/skills/yida-config-sync/scripts/sync_form_schemas.js "${projectName
 ## 注意事项
 
 1. **不要直接修改已生成的JSON文件** - 如需调整，修改字段清单后重新生成
-2. **定期同步配置** - 使用 yida-config-sync 同步应用配置信息
+2. **定期同步配置** - 使用 config-sync 同步应用配置信息
 3. **版本控制** - 重要的字段清单和配置变更建议做版本记录
 
 ---
@@ -420,7 +420,7 @@ node .agents/skills/yida-config-sync/scripts/sync_form_schemas.js "${projectName
 - **form_creator** - 根据字段清单生成宜搭表单配置
 - **formula-generator** - 生成宜搭公式
 - **code-expert** - 生成宜搭JS代码
-- **yida-config-sync** - 同步宜搭应用配置信息
+- **config-sync** - 同步宜搭应用配置信息
 
 ---
 

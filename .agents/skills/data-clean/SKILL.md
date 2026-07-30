@@ -6,11 +6,8 @@ description: 当用户说"清空数据"、"删除数据"、"清空表单数据"�
 ## 🔴 硬规则（绝对不可违反）
 
 ### 通用硬规则
-1. **禁止通过API修改已有应用的表单字段内容** — 公式、代码、字段增删改只能复制粘贴（规则25）
-2. **应用ID和表单UUID必须填真实值** — 从系统配置清单.md读取，严禁占位符（规则24）
-3. **写入文件前必须校验** — 运行 `node scripts/ai-validator.js check-before-write <文件路径>` 确认不覆盖已有文件
-4. **写入文件后必须校验** — 运行 `node scripts/ai-validator.js check-after-write <文件路径>` 确认内容合规
-5. **Cookie必须使用根目录** — 严禁 process.cwd()，必须用 PROJECT_ROOT（规则26）
+
+> 本区块 1-5 条通用硬规则统一维护于 [../通用硬规则.md](../通用硬规则.md)（单一来源，避免多点复制导致规则漂移），执行前必须阅读并严格遵守。
 
 ### 专属硬规则
 1. **执行前必须确认** — 清空数据前必须向用户确认
@@ -47,12 +44,16 @@ description: 当用户说"清空数据"、"删除数据"、"清空表单数据"�
 - CSRF Token
 - 基础 URL
 
-### 第4步：执行数据清空
+### 第4步：执行数据清空（两步走：先预览，后确认）
 
-使用 `scripts/clear-form-data.js` 脚本执行清空操作：
+使用 `scripts/clear-form-data.js` 脚本执行清空操作。**必须显式指定删除范围**，且删除前必须先预览、再确认：
 
 ```bash
-node scripts/clear-form-data.js [应用ID] [选项]
+# 第一步：--dry-run 预览将删除的表单与条数（不会删除任何数据）
+node scripts/clear-form-data.js [应用ID] <--all|--form <uuid>|--forms <u1,u2>> --dry-run
+
+# 第二步：确认无误后加 --confirm 执行删除
+node scripts/clear-form-data.js [应用ID] <--all|--form <uuid>|--forms <u1,u2>> --confirm
 ```
 
 **选项说明：**
@@ -60,6 +61,13 @@ node scripts/clear-form-data.js [应用ID] [选项]
 - `--form <formUuid>`：清空指定表单数据
 - `--forms <formUuid1,formUuid2,...>`：清空多个指定表单数据
 - `--appName <应用名称>`：指定应用名称，直接定位系统配置清单（推荐通过API调用时使用）
+- `--dry-run`：预览模式，仅列出将删除的表单与条数，不执行任何删除
+- `--confirm`：确认执行删除（不可逆）。缺省时脚本会要求交互输入 `DELETE` 确认，非交互环境下不加 `--confirm` 将直接取消
+
+> ⚠️ 安全约束（v2.2.0）：
+> - 未指定 `--all`/`--form`/`--forms` 时脚本直接拒绝执行，不会删除任何数据；
+> - 未加 `--confirm` 且非交互输入 `DELETE` 时不会删除；
+> - 删除前自动将每条记录的完整内容备份到 `temp-file/data-backup/`，若内容抓取不完整会在备份文件与终端明确提示“不可完整还原”。
 
 ### 第5步：输出执行结果
 
@@ -101,17 +109,18 @@ node scripts/clear-form-data.js [应用ID] [选项]
 ### 常用命令
 
 ```bash
-# 清空所有表单数据
-node scripts/clear-form-data.js APP_XXXXXXXX --all
+# 第一步：预览（不删除）——清空所有表单数据
+node scripts/clear-form-data.js APP_XXXXXXXX --all --dry-run
 
-# 清空所有表单数据（指定应用名称，推荐）
-node scripts/clear-form-data.js APP_XXXXXXXX --all --appName AI宜搭场景
+# 第二步：确认执行——清空所有表单数据（指定应用名称，推荐）
+node scripts/clear-form-data.js APP_XXXXXXXX --all --confirm --appName AI宜搭场景
 
-# 清空指定表单数据
-node scripts/clear-form-data.js APP_XXXXXXXX --form FORM-XXXXXXXX
+# 清空指定表单数据（先 --dry-run 预览，再 --confirm 执行）
+node scripts/clear-form-data.js APP_XXXXXXXX --form FORM-XXXXXXXX --dry-run
+node scripts/clear-form-data.js APP_XXXXXXXX --form FORM-XXXXXXXX --confirm
 
 # 清空多个指定表单
-node scripts/clear-form-data.js APP_XXXXXXXX --forms FORM-XXX,FORM-YYY
+node scripts/clear-form-data.js APP_XXXXXXXX --forms FORM-XXX,FORM-YYY --confirm
 ```
 
 ### API 接口说明

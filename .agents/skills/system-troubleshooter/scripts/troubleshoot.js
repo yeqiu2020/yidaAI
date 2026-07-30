@@ -210,7 +210,7 @@ function main() {
   if (process.platform === 'win32') {
     try {
       execSync('chcp 65001', { stdio: 'ignore' });
-    } catch (e) {}
+    } catch (e) {} // 有意忽略：chcp 命令在非 Windows 环境不存在
   }
   
   switch (command) {
@@ -262,4 +262,6 @@ function main() {
 }
 
 // 运行主函数
-main();
+if (require.main === module) {
+  main();
+}

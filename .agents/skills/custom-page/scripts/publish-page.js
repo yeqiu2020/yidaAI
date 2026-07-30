@@ -1,20 +1,26 @@
-const fs = require('fs');
+﻿const fs = require('fs');
 const path = require('path');
 const querystring = require('querystring');
 const https = require('https');
 const http = require('http');
+
+// Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
+const coreUtils = require('../../../../lib/core/utils');
 
 var PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 var COOKIES_PATH = path.join(PROJECT_ROOT, '.cookies.json');
 var PREFIX = '_view';
 var DOMAIN_CODE = 'tEXDRG';
 
+// Phase 6: loadCookieData 委托给 lib/core/utils.loadCookieData（统一实现）
+// 保留原行为：cookie 文件不存在时 process.exit(1)
 function loadCookieData() {
-  if (!fs.existsSync(COOKIES_PATH)) {
-    console.error('Cookie 文件不存在: ' + COOKIES_PATH);
+  const data = coreUtils.loadCookieData(PROJECT_ROOT);
+  if (!data) {
+    console.error('Cookie 文件不存在或为空: ' + COOKIES_PATH);
     process.exit(1);
   }
-  return JSON.parse(fs.readFileSync(COOKIES_PATH, 'utf8'));
+  return data;
 }
 
 function httpRequest(method, baseUrl, apiPath, postData, cookieStr) {
@@ -233,15 +239,43 @@ async function createCustomPage(baseUrl, appType, pageName, csrfToken, cookieStr
 
 async function main() {
   var args = process.argv.slice(2);
+  
+  // ── 解析 --no-lint 开关（增量增强，Phase 3）──
+  var skipLint = false;
+  args = args.filter(function(arg) {
+    if (arg === '--no-lint') {
+      skipLint = true;
+      return false;
+    }
+    return true;
+  });
+  
   if (args.length < 2) {
-    console.log('用法: node publish-page.js <代码文件路径> <appType> [formUuid] [页面名称]');
+    console.log('用法: node publish-page.js <代码文件路径> <appType> [formUuid] [页面名称] [--no-lint]');
     console.log('');
     console.log('参数说明:');
-    console.log('  代码文件路径  JSX 源码文件路径');
+    console.log('  代码文件路径  JSX 源码文件路径 (.js/.jsx native, .canvas.jsx/.canvas.tsx Canvas)');
     console.log('  appType       应用ID (如 APP_C8U5IYBXYRHUWY0H3GJ8)');
     console.log('  formUuid      自定义页面ID (可选，若不提供则自动创建新页面)');
     console.log('  页面名称      自定义页面名称 (可选，默认"自定义页面")');
+    console.log('  --no-lint     跳过 lint 检查（可选）');
     process.exit(1);
+  }
+
+  // ── Canvas 链路检测（增量增强，Phase 3）──
+  // .canvas.jsx / .canvas.tsx 文件走 Canvas 编译链路
+  // 不影响现有 native .js/.oyd.jsx 文件的发布流程
+  var codePathRaw = args[0];
+  var fileNameLower = path.basename(codePathRaw).toLowerCase();
+  if (fileNameLower.endsWith('.canvas.jsx') || fileNameLower.endsWith('.canvas.tsx')) {
+    console.log('检测到 Canvas 源码文件，切换到 Canvas 编译链路...');
+    var canvasPublishPath = path.join(__dirname, 'canvas-publish.js');
+    // 将 --no-lint 传递给 Canvas 发布流程
+    var canvasArgs = args.slice();
+    if (skipLint) canvasArgs.push('--no-lint');
+    var child = require('child_process').fork(canvasPublishPath, canvasArgs, { stdio: 'inherit' });
+    child.on('exit', function(code) { process.exit(code || 0); });
+    return;
   }
 
   var codePath = path.resolve(args[0]);
@@ -269,6 +303,26 @@ async function main() {
   }
   var sourceCode = fs.readFileSync(codePath, 'utf8');
   console.log('代码长度: ' + sourceCode.length + ' 字符');
+
+  // ── 发布前 Lint 检查（增量增强，Phase 3）──
+  // lint → 编译 → 压缩 → 发布
+  // 默认：警告非阻断，仅致命错误阻断；--no-lint 可完全跳过
+  if (!skipLint) {
+    try {
+      var linter = require(path.join(__dirname, 'lint-page.js'));
+      var lintResult = linter.lintCode(sourceCode, path.basename(codePath));
+      console.log(linter.formatLintResult(lintResult));
+      if (!lintResult.passed) {
+        console.error('\n❌ Lint 检查发现 ' + lintResult.fatalIssues.length + ' 个致命错误，发布中止。');
+        console.error('   修复后重试，或使用 --no-lint 跳过检查（不推荐）。');
+        process.exit(1);
+      }
+    } catch(lintErr) {
+      console.log('  ⚠️ Lint 脚本加载失败，跳过检查: ' + lintErr.message);
+    }
+  } else {
+    console.log('⚠️ 已跳过 lint 检查 (--no-lint)');
+  }
 
   if (!formUuid) {
     console.log('\n[Step 0] 未提供 formUuid，自动创建自定义页面...');
@@ -319,10 +373,26 @@ async function main() {
     console.error('\n=== 发布失败 ===');
     console.error('错误: ' + JSON.stringify(saveRes).substring(0, 500));
     if (saveRes.errorMsg && (saveRes.errorMsg.indexOf('302') >= 0 || saveRes.errorMsg.indexOf('LOGIN') >= 0)) {
-      console.error('\n登录态已过期，请先运行: node .agents/skills/yida-api-client/scripts/login_manager.js');
+      console.error('\n登录态已过期，请先运行: node .agents/skills/api-client/scripts/login_manager.js');
     }
     process.exit(1);
   }
 }
 
-main().catch(function(e) { console.error('发布异常:', e); process.exit(1); });
+// 导出函数供门禁测试和其他模块 require 使用
+module.exports = {
+  compileSource,
+  extractExportedFunctions,
+  buildSchemaContent,
+  buildDefaultPageDataSource,
+  createNodeIdGenerator,
+  generateSuffix,
+  httpRequest,
+  loadCookieData,
+  main,
+};
+
+// 仅在直接运行时执行 main（防止 require 时触发 process.exit）
+if (require.main === module) {
+  main().catch(function(e) { console.error('发布异常:', e); process.exit(1); });
+}

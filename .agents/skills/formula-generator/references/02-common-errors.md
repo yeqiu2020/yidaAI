@@ -55,7 +55,7 @@ SUMPRODUCT(子表.单价, 子表.数量)
 - **混淆相似函数**：`GetArrayItem` vs `ARRAYGET`
 
 **解决方案**：
-- 查阅 [01-yida-formula-complete-reference.md](./01-yida-formula-complete-reference.md) 确认函数存在
+- 查阅 [01-formula-complete-reference.md](./01-formula-complete-reference.md) 确认函数存在
 - **严格按文档大小写使用函数**（宜搭函数大小写敏感）
 - 表单场域**不支持**`MAPX`、`SUMPRODUCTX`
 - 减法用 `-` 运算符，除法用 `/` 运算符

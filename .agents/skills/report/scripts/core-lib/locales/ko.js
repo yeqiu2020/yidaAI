@@ -79,7 +79,7 @@ module.exports = {
     group_utility: '유틸리티',
     cmd_commands: 'Output machine-readable command manifest',
     cmd_a2a: 'Start local read-only A2A adapter or print Agent Card',
-    cmd_bridge: 'Start OpenYida local web bridge service',
+    cmd_bridge: 'Start Yeqiu-Yida local web bridge service',
     cmd_copy: 'project 작업 디렉토리 복사',
     cmd_sample: '코드 샘플/템플릿 출력',
     cmd_doctor: '환경 진단 및 자동 수정',
@@ -100,21 +100,21 @@ module.exports = {
 
   // ── bin/yida.js ────────────────────────────────────
   cli: {
-    integration_help: '사용법: openyida integration <create|list|enable|disable> ...',
+    integration_help: '사용법: yeqiu-yida integration <create|list|enable|disable> ...',
     integration_unknown: '알 수 없는 integration 하위 명령: {0}',
-    integration_help_hint: '사용 가능한 하위 명령은 openyida integration --help로 확인하세요',
-    integration_list_usage: '사용법: openyida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
-    integration_list_example: '예시: openyida integration list APP_XXX --form-uuid FORM-XXX --json',
-    integration_enable_usage: '사용법: openyida integration enable <appType> <formUuid> <processCode>',
-    integration_enable_example: '예시: openyida integration enable APP_XXX FORM-XXX LPROC-XXX',
-    integration_disable_usage: '사용법: openyida integration disable <appType> <formUuid> <processCode>',
-    integration_disable_example: '예시: openyida integration disable APP_XXX FORM-XXX LPROC-XXX',
-    compile_usage: '사용법: openyida compile <sourceFile>',
-    compile_example: '예: openyida compile pages/src/home.oyd.jsx',
-    check_page_usage: 'Usage: openyida check-page <sourceFile> [--compat] [--json]',
-    check_page_example: 'Example: openyida check-page pages/src/home.oyd.jsx --json',
-    generate_page_usage: 'Usage: openyida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/openyida/page-specs/home.json] [--compile]',
-    generate_page_example: 'Example: openyida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
+    integration_help_hint: '사용 가능한 하위 명령은 yeqiu-yida integration --help로 확인하세요',
+    integration_list_usage: '사용법: yeqiu-yida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
+    integration_list_example: '예시: yeqiu-yida integration list APP_XXX --form-uuid FORM-XXX --json',
+    integration_enable_usage: '사용법: yeqiu-yida integration enable <appType> <formUuid> <processCode>',
+    integration_enable_example: '예시: yeqiu-yida integration enable APP_XXX FORM-XXX LPROC-XXX',
+    integration_disable_usage: '사용법: yeqiu-yida integration disable <appType> <formUuid> <processCode>',
+    integration_disable_example: '예시: yeqiu-yida integration disable APP_XXX FORM-XXX LPROC-XXX',
+    compile_usage: '사용법: yeqiu-yida compile <sourceFile>',
+    compile_example: '예: yeqiu-yida compile pages/src/home.oyd.jsx',
+    check_page_usage: 'Usage: yeqiu-yida check-page <sourceFile> [--compat] [--json]',
+    check_page_example: 'Example: yeqiu-yida check-page pages/src/home.oyd.jsx --json',
+    generate_page_usage: 'Usage: yeqiu-yida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/yeqiu-yida/page-specs/home.json] [--compile]',
+    generate_page_example: 'Example: yeqiu-yida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
   },
 
   // ── lib/integration/integration-check.js ─────────
@@ -143,9 +143,9 @@ module.exports = {
     summary: 'Check complete: {0} apps, {1} automations, {2} with abnormal logs',
     apps_failed: '{0} app(s) failed to check. See JSON output or error summary for details.',
     no_logs: 'No abnormal execution logs found.',
-    usage: 'openyida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
-    example: 'openyida integration check APP_XXX --output project/output/automation-errors.xlsx',
-    missing_app: 'Missing appType. Usage: openyida integration check <appType...>',
+    usage: 'yeqiu-yida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
+    example: 'yeqiu-yida integration check APP_XXX --output project/output/automation-errors.xlsx',
+    missing_app: 'Missing appType. Usage: yeqiu-yida integration check <appType...>',
     banner_title: 'Check integration automation abnormal logs',
     status_filter: 'Execution status filter: {0}',
     checking_app: 'Checking app: {0}',
@@ -156,7 +156,7 @@ module.exports = {
 
   // ── lib/env.js ─────────────────────────────────────
   env: {
-    title: '  openyida env - AI 도구 환경 감지',
+    title: '  yeqiu-yida env - AI 도구 환경 감지',
     detecting: '  AI 도구 환경 감지 중...',
     tool_label: '  AI 도구:    {0}',
     login_label: '  로그인 상태: {0}',
@@ -175,7 +175,7 @@ module.exports = {
     starting_qr: '  QR 코드 로그인 시작 중...',
     success: '✅ 로그인 성공!',
     failed: '❌ 로그인 실패: {0}',
-    usage: '사용법: openyida login',
+    usage: '사용법: yeqiu-yida login',
   },
 
   // ── lib/logout.js ───────────────────────────────────
@@ -188,8 +188,8 @@ module.exports = {
 
   // ── lib/create-app.js ───────────────────────────────
   create_app: {
-    usage: '사용법: openyida create-app "<앱 이름>" 또는 openyida create-app --name "<앱 이름>" [--desc "..."] [--theme deepBlue]',
-    example: '예시: openyida create-app --name "내 앱" --desc "앱 설명" --theme deepBlue',
+    usage: '사용법: yeqiu-yida create-app "<앱 이름>" 또는 yeqiu-yida create-app --name "<앱 이름>" [--desc "..."] [--theme deepBlue]',
+    example: '예시: yeqiu-yida create-app --name "내 앱" --desc "앱 설명" --theme deepBlue',
     title: '  create-app - Yida 앱 생성 도구',
     app_name: '\n  앱 이름: {0}',
     app_desc: '  설명:     {0}',
@@ -205,8 +205,8 @@ module.exports = {
 
   // ── lib/create-form.js ──────────────────────────────
   create_form: {
-    usage: '사용법: openyida create-form <appType> <페이지 이름> [스키마 JSON]',
-    example: '예시: openyida create-form "APP_XXX" "내 폼"',
+    usage: '사용법: yeqiu-yida create-form <appType> <페이지 이름> [스키마 JSON]',
+    example: '예시: yeqiu-yida create-form "APP_XXX" "내 폼"',
     title: '  create-form - Yida 폼 페이지 생성/업데이트 도구',
     app_id: '\n  앱 ID:    {0}',
     page_name: '  페이지 이름: {0}',
@@ -221,7 +221,7 @@ module.exports = {
     data_exists_impact: '     - 기존 데이터 손실 또는 손상\n     - 프로세스 상태 이상\n     - 데이터 불일치',
     data_exists_abort: '  ❌ 수정이 중단되었습니다. 계속하려면 --force를 추가하세요.',
     data_exists_confirm_message: '이 양식에 {0}개의 기존 레코드가 있습니다. 구조 변경 시 기존 데이터에 영향을 줄 수 있습니다. 확인하려면 --force를 추가하세요.',
-    data_exists_force_hint: '사용법: openyida create-form update <appType> <formUuid> <changesJson> --force',
+    data_exists_force_hint: '사용법: yeqiu-yida create-form update <appType> <formUuid> <changesJson> --force',
     data_exists_force_proceed: '  ⚠️  --force 모드: 확인 건너뛰기, {0}개의 기존 레코드가 있는 양식 구조 강제 변경',
     data_check_empty: '  ✅ 양식에 데이터가 없습니다. 안전하게 수정할 수 있습니다',
     data_check_failed: '  ⚠️  데이터 확인 실패, 수정을 계속합니다',
@@ -229,8 +229,8 @@ module.exports = {
 
   // ── lib/create-page.js ──────────────────────────────
   create_page: {
-    usage: '사용법: openyida create-page <appType> <페이지 이름> [--mode dashboard]',
-    example: '예: openyida create-page APP_XXX "Dashboard" --mode dashboard',
+    usage: '사용법: yeqiu-yida create-page <appType> <페이지 이름> [--mode dashboard]',
+    example: '예: yeqiu-yida create-page APP_XXX "Dashboard" --mode dashboard',
     title: '  create-page - Yida 커스텀 페이지 생성 도구',
     app_id: '\n  앱 ID:    {0}',
     page_name: '  페이지 이름: {0}',
@@ -248,8 +248,8 @@ module.exports = {
 
   // ── lib/get-schema.js ───────────────────────────────
   get_schema: {
-    usage: '사용법: openyida get-schema <appType> <formUuid>',
-    example: '예시: openyida get-schema "APP_XXX" "FORM-XXX"',
+    usage: '사용법: yeqiu-yida get-schema <appType> <formUuid>',
+    example: '예시: yeqiu-yida get-schema "APP_XXX" "FORM-XXX"',
     title: '  get-schema - Yida 폼 스키마 조회 도구',
     app_id: '\n  앱 ID:    {0}',
     form_uuid: '  폼 UUID: {0}',
@@ -262,7 +262,7 @@ module.exports = {
   // ── lib/check-update.js ─────────────────────────────
   check_update: {
     new_version: '\n🎉 새 버전 사용 가능: {0} → {1}',
-    update_cmd: '   업데이트: npm install -g openyida',
+    update_cmd: '   업데이트: npm install -g yeqiu-yida',
     check_failed: '버전 확인 실패: {0}',
   },
 
@@ -272,10 +272,10 @@ module.exports = {
     fetch_failed: '최신 버전 정보를 가져올 수 없습니다. 네트워크 연결을 확인하세요',
     already_latest: '이미 최신 버전입니다 ({0}), 업데이트 불필요',
     found_new_version: '새 버전 발견: {0} (현재: {1})',
-    installing: 'openyida@latest 설치 중...',
+    installing: 'yeqiu-yida@latest 설치 중...',
     success: '업데이트 성공! 현재 버전: {0}',
     install_failed: '업데이트 실패: {0}',
-    manual_hint: '수동으로 실행해 보세요: npm install -g openyida@latest',
+    manual_hint: '수동으로 실행해 보세요: npm install -g yeqiu-yida@latest',
     available: '업데이트 가능',
     up_to_date: '최신 상태',
     label_install: 'Install',
@@ -283,12 +283,12 @@ module.exports = {
     label_version: 'Version',
     label_update: 'Update',
     done: '업데이트 완료!',
-    done_hint: 'openyida --version 으로 새 버전을 확인하세요',
+    done_hint: 'yeqiu-yida --version 으로 새 버전을 확인하세요',
   },
 
   // ── lib/export-app.js ───────────────────────────────
   export_app: {
-    usage: '사용법: openyida export-app <appType>',
+    usage: '사용법: yeqiu-yida export-app <appType>',
     title: '  export-app - Yida 앱 내보내기 도구',
     app_id: '\n  앱 ID: {0}',
     step_export: '\n📦 앱 내보내기 중...',
@@ -299,7 +299,7 @@ module.exports = {
 
   // ── lib/import-app.js ───────────────────────────────
   import_app: {
-    usage: '사용법: openyida import-app <파일 경로>',
+    usage: '사용법: yeqiu-yida import-app <파일 경로>',
     title: '  import-app - Yida 앱 가져오기 도구',
     file_path: '\n  파일 경로: {0}',
     step_import: '\n📥 앱 가져오기 중...',
@@ -310,7 +310,7 @@ module.exports = {
 
   // ── lib/get-page-config.js ──────────────────────────
   get_page_config: {
-    usage: '사용법: openyida get-page-config <appType> <formUuid>',
+    usage: '사용법: yeqiu-yida get-page-config <appType> <formUuid>',
     title: '  get-page-config - Yida 페이지 설정 조회 도구',
     app_id: '\n  앱 ID:    {0}',
     form_uuid: '  폼 UUID: {0}',
@@ -322,7 +322,7 @@ module.exports = {
 
   // ── lib/save-share-config.js ────────────────────────
   save_share_config: {
-    usage: '사용법: openyida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
+    usage: '사용법: yeqiu-yida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
     title: '  save-share-config - Yida 공개 접근 설정 저장 도구',
     app_id: '\n  앱 ID:    {0}',
     form_uuid: '  폼 UUID: {0}',
@@ -348,7 +348,7 @@ module.exports = {
 
   // ── lib/update-form-config.js ──────────────────────
   update_form_config: {
-    usage: '사용법: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    usage: '사용법: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
     title: '  update-form-config - Yida 폼 설정 업데이트 도구',
     app_id: '\n  앱 ID:    {0}',
     form_uuid: '  폼 UUID: {0}',
@@ -365,7 +365,7 @@ module.exports = {
 
   // ── lib/verify-short-url.js ────────────────────────
   verify_short_url: {
-    usage: '사용법: openyida verify-short-url <appType> <formUuid> <url>',
+    usage: '사용법: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
     title: '  verify-short-url - Yida URL 검증 도구',
     app_id: '\n  앱 ID:    {0}',
     form_uuid: '  폼 UUID: {0}',
@@ -387,19 +387,19 @@ module.exports = {
 
   // ── lib/copy.js ────────────────────────────────────
   copy: {
-    title: '  openyida copy - Yida 작업 디렉토리 초기화',
+    title: '  yeqiu-yida copy - Yida 작업 디렉토리 초기화',
     package_root: '\n📦 패키지 루트: {0}',
     dest_root: '🤖 대상 루트: {0}',
     dest_empty_flatten: '📂 대상 디렉토리가 비어 있어 project/ 내용을 직접 복사합니다 (project/ 하위 디렉토리 생성 안 함)',
     force_mode: '⚠️  --force 모드: 대상 디렉토리를 초기화 후 복사합니다',
-    no_package: '\n❌ openyida 패키지 디렉토리를 찾을 수 없습니다',
-    no_package_hint1: '   openyida가 전역으로 설치되어 있는지 확인하세요:',
-    no_package_hint2: '   npm install -g openyida',
+    no_package: '\n❌ yeqiu-yida 패키지 디렉토리를 찾을 수 없습니다',
+    no_package_hint1: '   yeqiu-yida가 전역으로 설치되어 있는지 확인하세요:',
+    no_package_hint2: '   npm install -g yeqiu-yida',
     no_active_tool: '\n❌ 활성 AI 도구 환경이 감지되지 않았습니다',
     supported_tools: '   지원 도구: Wukong, Codex, OpenCode, Claude Code, Aone Copilot, Cursor, Qoder',
     current_result: '\n   현재 감지 결과:',
-    force_hint: '\n   현재 디렉토리에 강제 복사하려면:\n   openyida copy --force',
-    force_cmd: '   openyida copy --force',
+    force_hint: '\n   현재 디렉토리에 강제 복사하려면:\n   yeqiu-yida copy --force',
+    force_cmd: '   yeqiu-yida copy --force',
     copying_label: '\n📂 {0} 복사 중...',
     creating_symlink: '\n📂 yida-skills/ 심볼릭 링크 생성 중...',
     file_copied: '    복사됨: {0}',
@@ -431,7 +431,7 @@ module.exports = {
     available_templates: 'Available templates: {0}',
     template_not_found: 'Template file not found: {0}',
     done: 'Page generated: {0}',
-    hint: 'Next run openyida compile <file>, or pass --compile to compile immediately.',
+    hint: 'Next run yeqiu-yida compile <file>, or pass --compile to compile immediately.',
     success: 'Page generation complete',
   },
   publish: {
@@ -481,7 +481,7 @@ module.exports = {
     target_not_found: 'Publish target was not found in app navigation: {0}',
     target_type_invalid: 'Publish target is not a custom display page: {0} current type is {1}',
     target_type_hint: 'The current target "{0}" does not look like a custom page (type: {1}). Do not publish JSX to data forms or process forms.',
-    target_list_hint: 'Run openyida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
+    target_list_hint: 'Run yeqiu-yida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
     target_force_hint: 'Append --force only when you intentionally bypass this guard; it overwrites the target Schema and should be used only for a known custom page.',
     step_compile: '\n📦 Step 1: 소스 컴파일 및 스키마 빌드\n',
     reading_source: '[1/4] {0} 소스 읽는 중...',
@@ -507,8 +507,8 @@ module.exports = {
     health_check_failed: '  ⚠️  Health check failed: HTTP {0} {1}',
     exception: '\n❌ 배포 오류: {0}',
     source_not_found: '❌ 소스 파일을 찾을 수 없습니다: {0}',
-    usage: '사용법: openyida publish <소스 파일> <appType> <formUuid> [--health-check]',
-    example: '예시: openyida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
+    usage: '사용법: yeqiu-yida publish <소스 파일> <appType> <formUuid> [--health-check]',
+    example: '예시: yeqiu-yida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
   },
 
   // ── lib/qr-login.js ────────────────────────────────
@@ -542,9 +542,9 @@ module.exports = {
 
   // ── scripts/postinstall.js ─────────────────────────
   postinstall: {
-    welcome_title: '  🎉 OpenYida에 오신 것을 환영합니다!                          ',
+    welcome_title: '  🎉 Yeqiu-Yida에 오신 것을 환영합니다!                          ',
     install_success: '  ✅ 설치 완료! {0} Yida AI 개발 도구가 준비되었습니다.',
-    update_success: '  ✅ 업데이트 완료! {0} OpenYida가 최신 버전으로 업그레이드되었습니다.',
+    update_success: '  ✅ 업데이트 완료! {0} Yeqiu-Yida가 최신 버전으로 업그레이드되었습니다.',
     ai_mode_title: '  🚀 AI 대화 모드',
     ai_mode_desc: '  Codex / Claude Code / Aone Copilot / Cursor 등 AI 도구에서 바로 대화하세요:',
     prompt1: '  📋  "Yida로 근태 관리 시스템을 만들어줘"',
@@ -554,21 +554,21 @@ module.exports = {
     steps_title: '  📖 시작하기',
     step1: '  {0}Step 1{1}  AI 코딩 도구 열기 (Codex / Claude Code / Cursor 등)',
     step2: '  {0}Step 2{1}  원하는 앱을 자연어로 설명하기',
-    step3: '  {0}Step 3{1}  AI가 자동으로 openyida 명령어를 실행하여 앱 생성 및 배포',
+    step3: '  {0}Step 3{1}  AI가 자동으로 yeqiu-yida 명령어를 실행하여 앱 생성 및 배포',
     step4: '  {0}Step 4{1}  Yida 앱 링크 받기 🎉',
     commands_title: '  ⚡ 빠른 명령어',
-    cmd_env: '  {0}openyida env{1}      {2}# AI 도구 환경 및 로그인 상태 감지{3}',
-    cmd_login: '  {0}openyida login{1}    {2}# Yida 로그인{3}',
-    cmd_help: '  {0}openyida --help{1}   {2}# 모든 명령어 보기{3}',
-    footer1: '  📚 문서: https://github.com/openyida/openyida',
-    footer2: '  💬 커뮤니티: DingTalk에서 OpenYida 커뮤니티 참여',
+    cmd_env: '  {0}yeqiu-yida env{1}      {2}# AI 도구 환경 및 로그인 상태 감지{3}',
+    cmd_login: '  {0}yeqiu-yida login{1}    {2}# Yida 로그인{3}',
+    cmd_help: '  {0}yeqiu-yida --help{1}   {2}# 모든 명령어 보기{3}',
+    footer1: '  📚 문서: https://github.com/yeqiu-yida/yeqiu-yida',
+    footer2: '  💬 커뮤니티: DingTalk에서 Yeqiu-Yida 커뮤니티 참여',
   },
 
   // ── lib/cdn-*.js ───────────────────────────────────
   cdn: {
     config_load_error: 'CDN 설정 로드 실패: {0}',
     config_saved: '✅ CDN 설정이 저장되었습니다: {0}',
-    config_usage: '사용법: openyida cdn-config [옵션]',
+    config_usage: '사용법: yeqiu-yida cdn-config [옵션]',
     config_file_path: '📄 설정 파일: {0}',
     config_section_aliyun: '🔐 알리바바 클라우드 자격 증명',
     config_section_cdn: '🌐 CDN 설정',
@@ -594,7 +594,7 @@ module.exports = {
     upload_no_files: '❌ 업로드할 이미지 파일을 지정하세요',
     config_incomplete: '❌ CDN 설정이 불완전합니다',
     missing_fields: '   누락된 필드: {0}',
-    run_config_init: '   먼저 실행하세요: openyida cdn-config --init',
+    run_config_init: '   먼저 실행하세요: yeqiu-yida cdn-config --init',
     no_config: '❌ CDN 설정을 찾을 수 없습니다',
     oss_sdk_required: '❌ ali-oss SDK가 없습니다',
     run_npm_install: '   실행하세요: npm install {0}',
@@ -628,15 +628,15 @@ module.exports = {
   flashNote: {
     toPrd: {
       title: '📋 DingTalk 플래시 노트를 PRD로 변환',
-      help_usage: '사용법: openyida flash-to-prd --file <경로> [--name <프로젝트명>]',
-      help_usage2: '        openyida flash-to-prd --name <프로젝트명>  (표준 입력에서 읽기)',
+      help_usage: '사용법: yeqiu-yida flash-to-prd --file <경로> [--name <프로젝트명>]',
+      help_usage2: '        yeqiu-yida flash-to-prd --name <프로젝트명>  (표준 입력에서 읽기)',
       help_args_title: '인수:',
       help_arg_file: '  --file, -f <경로>       플래시 노트 파일 경로 (.txt / .md)',
       help_arg_name: '  --name, -n <이름>       프로젝트 이름 (선택, 내용에서 자동 추출)',
       help_arg_max_tokens: '  --max-tokens <수>       AI 최대 출력 토큰 수 (기본값 8000)',
       help_examples_title: '예시:',
-      help_example1: '  openyida flash-to-prd --file ./meeting-notes.txt --name "장비점검시스템"',
-      help_example2: '  cat meeting.txt | openyida flash-to-prd --name "장비점검시스템"',
+      help_example1: '  yeqiu-yida flash-to-prd --file ./meeting-notes.txt --name "장비점검시스템"',
+      help_example2: '  cat meeting.txt | yeqiu-yida flash-to-prd --name "장비점검시스템"',
       step_read: '[Step 1] 플래시 노트 내용 읽는 중...',
       file_not_found: '파일을 찾을 수 없습니다: {0}',
       no_input: '플래시 노트 내용이 제공되지 않았습니다. --file로 파일을 지정하거나 파이프로 입력하세요.',
@@ -671,11 +671,11 @@ module.exports = {
     },
   },
   codex_login: {
-    title: '  openyida login {0} - {1} Login Mode',
+    title: '  yeqiu-yida login {0} - {1} Login Mode',
     not_codex: 'Current environment is not detected as Codex / Qoder / Wukong; returning an in-app browser login handoff only.',
     no_playwright: '{0} mode does not require Playwright or a separate Chromium install.',
-    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use openyida login --browser for Yida login cookies.',
-    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use openyida login --browser when CLI cookies are required.',
+    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use yeqiu-yida login --browser for Yida login cookies.',
+    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use yeqiu-yida login --browser when CLI cookies are required.',
     handoff_message: '{0} in-app Browser cannot export Yida login cookies. Run fallback_command when CLI cookies are required.',
     cache_available: 'Existing CLI Cookie cache is available; no browser login needed.',
   },

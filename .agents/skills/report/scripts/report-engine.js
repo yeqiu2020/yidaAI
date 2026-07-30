@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /**
- * yida-report-engine.js - 宜搭报表创建引擎（完全自包含）
+ * report-engine.js - 宜搭报表创建引擎（完全自包含）
+ * 项目：yeqiu-yida（作者：叶秋）
  *
  * 不依赖任何外部CLI工具，直接调用宜搭HTTP API创建报表。
  */
@@ -66,7 +67,7 @@ function loadCookieData(projectRoot) {
   const cookieFile = path.join(root, '.cookies.json');
 
   if (!fs.existsSync(cookieFile)) {
-    console.error('[yida-report] 未找到登录态文件:', cookieFile);
+    console.error('[report] 未找到登录态文件:', cookieFile);
     return null;
   }
 
@@ -91,7 +92,7 @@ function loadCookieData(projectRoot) {
 
     return cookieData;
   } catch (e) {
-    console.error('[yida-report] 读取登录态失败:', e.message);
+    console.error('[report] 读取登录态失败:', e.message);
     return null;
   }
 }
@@ -438,7 +439,7 @@ function buildDataViewQueryModel(fields, cubeCode, cubeTenantId) {
   };
 }
 
-// ── DataSetModelMap 构建（完全对齐 openyida 格式） ────────
+// ── DataSetModelMap 构建（完全对齐 yeqiu-yida 格式） ────────
 
 function buildDataSetModelMap(chart, corpId) {
   const cubeCode = normalizeCubeCode(chart.cubeCode || '');
@@ -933,14 +934,14 @@ function readReportConfig(chartsJsonOrFile) {
     try {
       raw = JSON.parse(fs.readFileSync(chartsJsonOrFile, 'utf-8'));
     } catch (e) {
-      console.error('[yida-report] 读取配置文件失败:', e.message);
+      console.error('[report] 读取配置文件失败:', e.message);
       process.exit(1);
     }
   } else {
     try {
       raw = JSON.parse(chartsJsonOrFile);
     } catch (e) {
-      console.error('[yida-report] 配置解析失败:', e.message);
+      console.error('[report] 配置解析失败:', e.message);
       process.exit(1);
     }
   }
@@ -955,7 +956,7 @@ function readReportConfig(chartsJsonOrFile) {
     return { charts: raw.charts, filters };
   }
 
-  console.error('[yida-report] 配置格式错误：必须是图表数组或包含 charts 字段的对象');
+  console.error('[report] 配置格式错误：必须是图表数组或包含 charts 字段的对象');
   process.exit(1);
 }
 
@@ -964,7 +965,7 @@ function readReportConfig(chartsJsonOrFile) {
 async function createReport(appType, reportTitle, chartsJsonOrFile, options = {}) {
   const SEP = '='.repeat(50);
   console.log(SEP);
-  console.log('[yida-report] 宜搭报表创建引擎');
+  console.log('[report] 宜搭报表创建引擎');
   console.log(SEP);
   console.log('应用 ID:', appType);
   console.log('报表名称:', reportTitle);
@@ -1162,8 +1163,8 @@ async function createReport(appType, reportTitle, chartsJsonOrFile, options = {}
 if (require.main === module) {
   const args = process.argv.slice(2);
   if (args.length < 3) {
-    console.log('用法: node yida-report-engine.js <appType> "<报表名称>" <配置JSON文件路径>');
-    console.log('示例: node yida-report-engine.js APP_XXX "销售报表" charts.json');
+    console.log('用法: node report-engine.js <appType> "<报表名称>" <配置JSON文件路径>');
+    console.log('示例: node report-engine.js APP_XXX "销售报表" charts.json');
     process.exit(1);
   }
 

@@ -1,4 +1,4 @@
-﻿---
+---
 name: simulated-login
 description: 宜搭模拟登录管理器，通过浏览器自动化完成宜搭平台的登录流程，自动处理"立即登录"按钮点击、组织选择等操作
 ---
@@ -6,14 +6,11 @@ description: 宜搭模拟登录管理器，通过浏览器自动化完成宜搭�
 ## 🔴 硬规则（绝对不可违反）
 
 ### 通用硬规则
-1. **禁止通过API修改已有应用的表单字段内容** — 公式、代码、字段增删改只能复制粘贴（规则25）
-2. **应用ID和表单UUID必须填真实值** — 从系统配置清单.md读取，严禁占位符（规则24）
-3. **写入文件前必须校验** — 运行 `node scripts/ai-validator.js check-before-write <文件路径>` 确认不覆盖已有文件
-4. **写入文件后必须校验** — 运行 `node scripts/ai-validator.js check-after-write <文件路径>` 确认内容合规
-5. **Cookie必须使用根目录** — 严禁 process.cwd()，必须用 PROJECT_ROOT（规则26）
+
+> 本区块 1-5 条通用硬规则统一维护于 [../通用硬规则.md](../通用硬规则.md)（单一来源，避免多点复制导致规则漂移），执行前必须阅读并严格遵守。
 
 ### 专属硬规则
-1. **与yida-api-client共用.cookies.json** — Cookie文件路径必须指向项目根目录
+1. **与api-client共用.cookies.json** — Cookie文件路径必须指向项目根目录
 2. **ensureLogin/handleLoginFlow核心API** — 所有登录操作必须通过这两个函数
 
 ---
@@ -45,7 +42,7 @@ description: 宜搭模拟登录管理器，通过浏览器自动化完成宜搭�
 
 ## 与 API 登录的区别
 
-| 特性 | simulated-login (本 Skill) | yida-api-client (API 方式) |
+| 特性 | simulated-login (本 Skill) | api-client (API 方式) |
 |------|---------------------------|---------------------------|
 | 实现方式 | 浏览器自动化 | HTTP API 调用 |
 | 适用场景 | 需要前端交互的场景 | 纯后端操作 |
@@ -296,10 +293,10 @@ npm install playwright
 simulated-login (本 Skill)
     │
     ├── 被 js-action-tester 调用（浏览器自动化测试）
-    ├── 被 yida-config-sync 调用（配置同步）
+    ├── 被 config-sync 调用（配置同步）
     └── 被其他需要浏览器登录的 Skill 调用
     │
-    └── 共用 .cookies.json（与 yida-api-client 等 Skill 共享）
+    └── 共用 .cookies.json（与 api-client 等 Skill 共享）
 
 
 ---

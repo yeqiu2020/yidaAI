@@ -245,7 +245,7 @@ this.utils.yida.request({
 
 ### Q：如何获取 cid？
 
-1. 执行 `node .agents/skills/yida-get-schema/scripts/get-schema.js <appType> <reportFormUuid>` 获取报表 Schema
+1. 执行 `node .agents/skills/get-schema/scripts/get-schema.js <appType> <reportFormUuid>` 获取报表 Schema
 2. 在 `componentsTree` 中找到目标组件节点，其 `id` 字段即为 `cid`
 3. 或在浏览器 DevTools Network 中筛选 `getDataAsync` 请求查看
 

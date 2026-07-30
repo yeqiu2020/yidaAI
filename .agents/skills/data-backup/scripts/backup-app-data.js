@@ -17,6 +17,9 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
+const coreUtils = require('../../../../lib/core/utils');
+
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
 let CURRENT_STAGING_DIR = null;
@@ -35,27 +38,20 @@ try {
 
 /**
  * 加载Cookie
+ * Phase 6: 委托给 lib/core/utils.loadCookieData（统一实现）
+ * 保留原返回结构：{ cookies, baseUrl, csrfToken, userId }
  */
 function loadCookies() {
-  try {
-    const data = JSON.parse(fs.readFileSync(COOKIE_FILE, 'utf-8'));
-    if (Array.isArray(data)) {
-      return {
-        cookies: data,
-        baseUrl: 'https://www.aliwork.com',
-        csrfToken: '',
-        userId: ''
-      };
-    }
-    return {
-      cookies: data.cookies || [],
-      baseUrl: data.base_url || 'https://www.aliwork.com',
-      csrfToken: data.csrf_token || '',
-      userId: data.user_id || ''
-    };
-  } catch (e) {
-    throw new Error(`读取Cookie失败: ${e.message}。请先运行登录脚本获取Cookie。`);
+  const data = coreUtils.loadCookieData(PROJECT_ROOT);
+  if (!data) {
+    throw new Error(`读取Cookie失败：.cookies.json 不存在或为空。请先运行登录脚本获取Cookie。`);
   }
+  return {
+    cookies: data.cookies || [],
+    baseUrl: data.base_url || 'https://www.aliwork.com',
+    csrfToken: data.csrf_token || '',
+    userId: data.user_id || ''
+  };
 }
 
 /**
@@ -154,9 +150,7 @@ function getFormsFromConfig(appId, appName) {
         if (content.includes(appId)) return parseFormsFromConfig(content);
       }
     }
-  } catch (_) {}
-
-  return null;
+  } catch (_) {} // 有意忽略：配置文件可能不存在或格式无效
 }
 
 function parseFormsFromConfig(configContent) {
@@ -301,9 +295,7 @@ async function getFormsFromAPI(appId, cookies, hostname, csrfToken) {
         forms.push({ name: formName, uuid: formUuid, isProcess });
       }
     }
-  } catch (_) {}
-
-  return forms;
+  } catch (_) {} // 有意忽略：HTML 解析失败时返回空列表
 }
 
 /**
@@ -796,14 +788,16 @@ async function main() {
   }));
 }
 
-main().catch(error => {
-  if (CURRENT_STAGING_DIR && fs.existsSync(CURRENT_STAGING_DIR)) {
-    try {
-      fs.rmSync(CURRENT_STAGING_DIR, { recursive: true, force: true });
-    } catch (cleanupError) {
-      console.error('⚠️ 清理临时目录失败:', cleanupError.message);
+if (require.main === module) {
+  main().catch(error => {
+    if (CURRENT_STAGING_DIR && fs.existsSync(CURRENT_STAGING_DIR)) {
+      try {
+        fs.rmSync(CURRENT_STAGING_DIR, { recursive: true, force: true });
+      } catch (cleanupError) {
+        console.error('⚠️ 清理临时目录失败:', cleanupError.message);
+      }
     }
-  }
-  console.error('❌ 执行出错:', error.message);
-  process.exit(1);
-});
+    console.error('❌ 执行出错:', error.message);
+    process.exit(1);
+  });
+}

@@ -2,7 +2,10 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadCookieData, triggerLogin, resolveBaseUrl } = require(path.resolve(__dirname, '../../yida-api-client/scripts/api_client'));
+// Phase 6: Cookie 加载统一委托给 lib/core/utils
+const coreUtils = require('../../../../lib/core/utils');
+const { loadCookieData, resolveBaseUrl } = coreUtils;
+const { triggerLogin } = require(path.resolve(__dirname, '../../api-client/scripts/api_client'));
 const { listLogicflows, listFormLogicflows, listLogicflowLogs } = require('./integration-api');
 
 const LOG_STATUS = {
@@ -189,6 +192,56 @@ function formatTimestamp(value) {
     ' ' + pad(date.getHours()) + ':' + pad(date.getMinutes()) + ':' + pad(date.getSeconds());
 }
 
+/**
+ * 将检查结果导出为 Excel（.xlsx）。
+ * 工作表 1「异常汇总」：每条异常逻辑流一行；
+ * 工作表 2「异常日志」：每条日志展开一行（含所属逻辑流）。
+ */
+function exportToExcel(result, outputPath) {
+  const xlsx = require('xlsx');
+  const workbook = xlsx.utils.book_new();
+
+  const summaryRows = result.abnormalFlows.map((flow) => ({
+    应用ID: flow.appType || '',
+    表单: flow.formTitle || flow.formUuid || '',
+    逻辑流名称: flow.name || '',
+    processCode: flow.processCode || '',
+    异常日志数: flow.abnormalLogCount || (flow.logs ? flow.logs.length : 0),
+    最后修改人: flow.modifier || '',
+    最后修改时间: formatTimestamp(flow.gmtModified),
+  }));
+  if (summaryRows.length === 0) {
+    summaryRows.push({ 应用ID: '', 表单: '', 逻辑流名称: '未发现异常', processCode: '', 异常日志数: 0, 最后修改人: '', 最后修改时间: '' });
+  }
+  const summarySheet = xlsx.utils.json_to_sheet(summaryRows);
+  xlsx.utils.book_append_sheet(workbook, summarySheet, '异常汇总');
+
+  const logRows = [];
+  for (const flow of result.abnormalFlows) {
+    for (const log of flow.logs || []) {
+      logRows.push({
+        应用ID: flow.appType || '',
+        表单: flow.formTitle || flow.formUuid || '',
+        逻辑流名称: flow.name || '',
+        processCode: flow.processCode || '',
+        procInstId: log.procInstId || '',
+        formInstId: log.formInstId || '',
+        异常信息: log.exceptionEntity || '',
+        时间: formatTimestamp(log.finishDate || log.finishTime || log.createDate),
+      });
+    }
+  }
+  if (logRows.length === 0) {
+    logRows.push({ 应用ID: '', 表单: '', 逻辑流名称: '', processCode: '', procInstId: '', formInstId: '', 异常信息: '无异常日志', 时间: '' });
+  }
+  const logSheet = xlsx.utils.json_to_sheet(logRows);
+  xlsx.utils.book_append_sheet(workbook, logSheet, '异常日志');
+
+  const resolved = path.resolve(outputPath);
+  xlsx.writeFile(workbook, resolved);
+  return resolved;
+}
+
 function printTextResult(result) {
   console.error('检查完成: ' + result.checkedApps.length + ' 个应用, ' +
     result.totalFlows + ' 条逻辑流, ' + result.abnormalFlows.length + ' 条异常');
@@ -276,6 +329,18 @@ async function run(args) {
     }
   }
 
+  if (outputPath) {
+    try {
+      const savedPath = exportToExcel(result, outputPath);
+      console.error('已导出 Excel 报告: ' + savedPath);
+      result.outputPath = savedPath;
+    } catch (error) {
+      console.error('导出 Excel 失败: ' + error.message);
+      if (!result.errors) { result.errors = []; }
+      result.errors.push({ appType: '(export)', message: '导出Excel失败: ' + error.message });
+    }
+  }
+
   if (outputJson) {
     console.log(JSON.stringify(result, null, 2));
     return;
@@ -288,7 +353,16 @@ async function run(args) {
 }
 
 const args = process.argv.slice(2);
-run(args).catch((err) => {
-  console.error('执行异常: ' + err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  run(args).catch((err) => {
+    console.error('执行异常: ' + err.message);
+    process.exit(1);
+  });
+}
+
+module.exports = {
+  run,
+  exportToExcel,
+  collectAbnormalFlows,
+  normalizeLogStatus,
+};

@@ -84,7 +84,7 @@ function validateMarks(text, marks, fields) {
       throw new Error(`Mark ${index}: 找不到对应的字段配置 (value: ${mark.value})`);
     }
 
-    // marks现在包含零宽空格，所以提取的内容应该是 "​字段名​"
+    // marks现在包含零宽空格，所以提取的内容应该是 "字段名"前后各含一个零宽空格
     const expectedWithZws = ZERO_WIDTH_SPACE + field.displayName + ZERO_WIDTH_SPACE;
     if (extracted !== expectedWithZws) {
       throw new Error(

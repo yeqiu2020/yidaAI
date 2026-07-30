@@ -117,7 +117,7 @@ export function resolveSignedContentDisposition(signInfo, file) {
     if (matched) {
       return matched;
     }
-  } catch (error) {}
+  } catch (error) {} // 有意忽略：Content-Disposition 可能不匹配正则，回退到默认 filename
   return 'attachment; filename=' + encodeURIComponent(file.name);
 }
 

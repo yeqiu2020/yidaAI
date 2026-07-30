@@ -1,12 +1,12 @@
 /**
- * ×éÖ¯³õÊ¼»¯½Å±¾ - V1.0.0
+ * ï¿½ï¿½Ö¯ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½Å±ï¿½ - V1.0.0
  */
 const { chromium } = require('playwright');
 const fs = require('fs');
 
 const CONFIG = {
-  cookiesFile: 'd:/ÒË´î AI ±à³Ì/ÒË´î AI ÖúÊÖ V1.4/.cookies.json',
-  orgConfigFile: 'd:/ÒË´î AI ±à³Ì/ÒË´î AI ÖúÊÖ V1.4/×éÖ¯¼°Ó¦ÓÃÐÅÏ¢.md',
+  cookiesFile: 'd:/ï¿½Ë´ï¿½ AI ï¿½ï¿½ï¿½/ï¿½Ë´ï¿½ AI ï¿½ï¿½ï¿½ï¿½ V1.4/.cookies.json',
+  orgConfigFile: 'd:/ï¿½Ë´ï¿½ AI ï¿½ï¿½ï¿½/ï¿½Ë´ï¿½ AI ï¿½ï¿½ï¿½ï¿½ V1.4/ï¿½ï¿½Ö¯ï¿½ï¿½Ó¦ï¿½ï¿½ï¿½ï¿½Ï¢.md',
   baseUrl: 'https://qfhefh.aliwork.com'
 };
 
@@ -16,7 +16,7 @@ function loadCookies() {
     const data = JSON.parse(fs.readFileSync(CONFIG.cookiesFile, 'utf-8'));
     return data.cookies || data;
   } catch (e) {
-    console.error('¼ÓÔØ Cookie Ê§°Ü:', e.message);
+    console.error('ï¿½ï¿½ï¿½ï¿½ Cookie Ê§ï¿½ï¿½:', e.message);
     return null;
   }
 }
@@ -28,26 +28,26 @@ function updateAppIdInMarkdown(appName, appId) {
     const regex = new RegExp('(\\|\\s*\\d+\\s*\\|\\s*' + escaped + '\\s*\\|\\s*)[^|]*(\\s*\\|)', 'g');
     
     if (content.match(regex)) {
-      content = content.replace(regex, '$1' + (appId || 'ÇëÊÖ¶¯²¹³ä') + '$2');
+      content = content.replace(regex, '$1' + (appId || 'ï¿½ï¿½ï¿½Ö¶ï¿½ï¿½ï¿½ï¿½ï¿½') + '$2');
       fs.writeFileSync(CONFIG.orgConfigFile, content);
-      console.log('  ?', appName, '->', appId || 'ÇëÊÖ¶¯²¹³ä');
+      console.log('  ?', appName, '->', appId || 'ï¿½ï¿½ï¿½Ö¶ï¿½ï¿½ï¿½ï¿½ï¿½');
       return true;
     }
     return false;
   } catch (e) {
-    console.error('  ? ¸üÐÂÊ§°Ü:', e.message);
+    console.error('  ? ï¿½ï¿½ï¿½ï¿½Ê§ï¿½ï¿½:', e.message);
     return false;
   }
 }
 
 async function fetchApps() {
-  console.log('?? Æô¶¯ä¯ÀÀÆ÷...');
+  console.log('?? ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½...');
   const browser = await chromium.launch({ headless: false });
   
   try {
     const cookies = loadCookies();
     if (!cookies) {
-      console.log('?? ÇëÏÈµÇÂ¼');
+      console.log('?? ï¿½ï¿½ï¿½Èµï¿½Â¼');
       return [];
     }
     
@@ -55,12 +55,12 @@ async function fetchApps() {
     await context.addCookies(cookies);
     const page = await context.newPage();
     
-    console.log('?? ·ÃÎÊÎÒµÄÓ¦ÓÃÒ³Ãæ...');
+    console.log('?? ï¿½ï¿½ï¿½ï¿½ï¿½Òµï¿½Ó¦ï¿½ï¿½Ò³ï¿½ï¿½...');
     await page.goto(CONFIG.baseUrl + '/myApp', { waitUntil: 'networkidle' });
     await page.waitForTimeout(5000);
     
     if (page.url().includes('login')) {
-      console.log('?? Î´µÇÂ¼');
+      console.log('?? Î´ï¿½ï¿½Â¼');
       return [];
     }
     
@@ -92,24 +92,26 @@ async function fetchApps() {
 
 async function main() {
   console.log('='.repeat(60));
-  console.log('ÒË´î×éÖ¯³õÊ¼»¯¹¤¾ß');
+  console.log('ï¿½Ë´ï¿½ï¿½ï¿½Ö¯ï¿½ï¿½Ê¼ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½');
   console.log('='.repeat(60));
   
   const apps = await fetchApps();
   if (apps.length === 0) {
-    console.log('Î´»ñÈ¡µ½Ó¦ÓÃ');
+    console.log('Î´ï¿½ï¿½È¡ï¿½ï¿½Ó¦ï¿½ï¿½');
     return;
   }
   
-  console.log('\n?? ÕÒµ½', apps.length, '¸öÓ¦ÓÃ');
-  console.log('\n?? ¸üÐÂÅäÖÃÎÄ¼þ...');
+  console.log('\n?? ï¿½Òµï¿½', apps.length, 'ï¿½ï¿½Ó¦ï¿½ï¿½');
+  console.log('\n?? ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½Ä¼ï¿½...');
   
   let updated = 0;
   for (const app of apps) {
     if (updateAppIdInMarkdown(app.name, app.appId)) updated++;
   }
   
-  console.log('\n? Íê³É! ¸üÐÂÁË', updated, '¸öÓ¦ÓÃ');
+  console.log('\n? ï¿½ï¿½ï¿½! ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½', updated, 'ï¿½ï¿½Ó¦ï¿½ï¿½');
 }
 
-main().catch(console.error);
+if (require.main === module) {
+  main().catch(console.error);
+}

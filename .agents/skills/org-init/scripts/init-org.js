@@ -1,5 +1,5 @@
-/**
- * 组织初始化脚本 - V1.4.0
+﻿/**
+ * 组织初始化脚本 - V1.5.0
  * 自动从宜搭平台获取应用列表并更新到配置文件
  * 修复：配合 login-manager v1.0.11，修复页面跳转后登录流程提前退出的问题
  * 修复：文件不存在时自动创建默认配置文件
@@ -18,6 +18,9 @@
  * 修复：添加必要的请求头（Referer、User-Agent等），使API调用成功
  * 修复：添加 UTF-8 编码支持，解决 Windows 绫端中文乱码
  * 新增：初始化完成后自动启动HTTP服务并打开门户页面
+ * 新增：rebuildAppList 以宜搭为准整体重建应用列表（删除宜搭中不存在的应用）
+ * 修复：updateOrgInfo 在 loginState 没有 corpName/corpId 时保留原文件中的值
+ * 修复：login-manager 抓取组织名称失败时会用域名前缀兜底，updateOrgInfo 将"corpName 等于域名前缀"也视为无效值，保留原文件中的组织名称，避免被域名前缀覆盖
  */
 
 const { chromium } = require('playwright');
@@ -26,6 +29,9 @@ const path = require('path');
 const https = require('https');
 const http = require('http');
 const { execSync } = require('child_process');
+
+// Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
+const coreUtils = require('../../../../lib/core/utils');
 
 // Windows 平台设置 UTF-8 代码页，解决中文乱码
 if (process.platform === 'win32') {
@@ -48,15 +54,11 @@ const CONFIG = {
   baseUrl: null  // 将在登录后动态获取
 };
 
+// Phase 6: loadCookies 委托给 lib/core/utils.loadCookieData（统一实现）
+// 兼容原签名：返回 cookies 数组（或 null）
 function loadCookies() {
-  try {
-    if (!fs.existsSync(CONFIG.cookiesFile)) return null;
-    const data = JSON.parse(fs.readFileSync(CONFIG.cookiesFile, 'utf-8'));
-    return data.cookies || data;
-  } catch (e) {
-    console.error('加载 Cookie 失败:', e.message);
-    return null;
-  }
+  const cookieData = coreUtils.loadCookieData(PROJECT_ROOT);
+  return cookieData?.cookies || null;
 }
 
 function createDefaultOrgConfigFile(loginState) {
@@ -69,8 +71,12 @@ function createDefaultOrgConfigFile(loginState) {
     String(now.getMinutes()).padStart(2, '0');
   const baseUrl = loginState?.base_url || 'https://qfhefh.aliwork.com';
   const corpId = loginState?.corp_id || '';
-  const corpName = loginState?.login_user?.corpName || '未知';
   const domainPrefix = baseUrl.replace('https://', '').replace('.aliwork.com', '');
+  // 旧版登录态可能残留"域名前缀兜底"的组织名称，视为无效
+  let corpName = (loginState?.login_user?.corpName || '').trim();
+  if (!corpName || corpName === domainPrefix) {
+    corpName = '未知';
+  }
   
   const defaultContent = `# 组织及应用信息
 
@@ -169,7 +175,21 @@ const apps = orgConfig.apps;
 }
 
 /**
+ * 从已存在的配置文件中读取某个字段的当前值
+ * @param {string} content - 配置文件内容
+ * @param {string} label - 字段名（例如 "组织名称"）
+ * @returns {string|null} 当前值，没有则 null
+ */
+function readExistingField(content, label) {
+  const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp('\\|\\s*' + escapedLabel + '\\s*\\|\\s*([^|\\n]+?)\\s*\\|');
+  const m = content.match(re);
+  return m ? m[1].trim() : null;
+}
+
+/**
  * 更新组织信息到配置文件
+ * 当 loginState 中没有 corpName / corpId 时，保留原文件中的值
  * @param {Object} loginState - 登录态对象
  * @returns {boolean} 是否成功
  */
@@ -179,13 +199,34 @@ function updateOrgInfo(loginState) {
       console.log('  [提示] 配置文件不存在，跳过组织信息更新');
       return false;
     }
-    
+
     let content = fs.readFileSync(CONFIG.orgConfigFile, 'utf-8');
-    
+
     const baseUrl = loginState?.base_url || 'https://qfhefh.aliwork.com';
-    const corpId = loginState?.corp_id || '';
-    const corpName = loginState?.login_user?.corpName || '未知';
     const domainPrefix = baseUrl.replace('https://', '').replace('.aliwork.com', '');
+
+    // corpName 优先取 loginState，否则从原文件读出，最后才回退到"未知"
+    // 注意：login-manager 抓取失败时会用域名前缀兜底，这种值不是真实组织名称，同样视为无效
+    let corpName = (loginState?.login_user?.corpName || '').trim();
+    if (!corpName || corpName === '未知' || corpName === domainPrefix) {
+      const existing = readExistingField(content, '组织名称');
+      if (existing && existing !== '未知' && existing !== domainPrefix) {
+        corpName = existing;
+        console.log('  [保留] 组织名称从原文件读取:', corpName);
+      } else {
+        corpName = '未知';
+      }
+    }
+
+    // corpId 同样保留原值
+    let corpId = (loginState?.corp_id || '').trim();
+    if (!corpId) {
+      const existingCorpId = readExistingField(content, 'corpId');
+      if (existingCorpId) {
+        corpId = existingCorpId;
+        console.log('  [保留] corpId 从原文件读取:', corpId);
+      }
+    }
     
     // 更新时间
     const now = new Date();
@@ -195,41 +236,31 @@ function updateOrgInfo(loginState) {
       String(now.getHours()).padStart(2, '0') + ':' + 
       String(now.getMinutes()).padStart(2, '0');
     
+    // 更新表格字段的通用方法
+    // 注意：编辑器的 Markdown 格式化会对齐填充表格（字段名后可能有多个空格），
+    // 正则必须容忍任意空格，否则替换会静默失败
+    const replaceTableField = (label, value) => {
+      const escapedLabel = label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp('(\\|\\s*' + escapedLabel + '\\s*\\|)[^|\\n]*(\\|)');
+      if (!re.test(content)) {
+        console.log('  [警告] 未在配置文件中找到字段行:', label, '（未更新）');
+        return;
+      }
+      content = content.replace(re, '$1 ' + value + ' $2');
+    };
+
     // 更新最后更新时间
-    content = content.replace(
-      /(\| 最后更新时间 \|)[^|]+(\|)/,
-      '$1 ' + timeStr + ' $2'
-    );
-    
+    replaceTableField('最后更新时间', timeStr);
     // 更新组织名称
-    content = content.replace(
-      /(\| 组织名称 \|)[^|]+(\|)/,
-      '$1 ' + corpName + ' $2'
-    );
-    
+    replaceTableField('组织名称', corpName);
     // 更新域名前缀
-    content = content.replace(
-      /(\| 域名前缀 \|)[^|]+(\|)/,
-      '$1 ' + domainPrefix + ' $2'
-    );
-    
+    replaceTableField('域名前缀', domainPrefix);
     // 更新完整域名
-    content = content.replace(
-      /(\| 完整域名 \|)[^|]+(\|)/,
-      '$1 ' + baseUrl + ' $2'
-    );
-    
+    replaceTableField('完整域名', baseUrl);
     // 更新 corpId
-    content = content.replace(
-      /(\| corpId \|)[^|]*(\|)/,
-      '$1 ' + corpId + ' $2'
-    );
-    
+    replaceTableField('corpId', corpId);
     // 更新 corp名称
-    content = content.replace(
-      /(\| corp名称 \|)[^|]+(\|)/,
-      '$1 ' + corpName + ' $2'
-    );
+    replaceTableField('corp名称', corpName);
     
     fs.writeFileSync(CONFIG.orgConfigFile, content);
     console.log('  [更新] 组织信息已更新');
@@ -337,6 +368,176 @@ function updateAppIdInMarkdown(appName, appId) {
     console.error('  [失败]', e.message);
     return false;
   }
+}
+
+/**
+ * 整体重建应用列表表格
+ * - 以宜搭返回的 apps 为准（数组中已包含 name 和 appId）
+ * - 保留本地未同步的应用（appId 为"待创建"或"请手动补充"且在云端不存在的应用）
+ * - 同时扫描本地项目文件夹，补充配置文件中未记录的本地应用
+ * - 保留 3 列结构：序号 | 应用名称 | 应用ID (appId)
+ * - 按宜搭返回顺序重新编号，本地未同步应用追加在末尾
+ * @param {Array<{name:string, appId:string|null}>} apps - 宜搭上的应用列表
+ * @returns {{updated:number, removed:number, added:number, preserved:number}}
+ */
+function rebuildAppList(apps) {
+  if (!fs.existsSync(CONFIG.orgConfigFile)) {
+    createDefaultOrgConfigFile();
+  }
+
+  let content = fs.readFileSync(CONFIG.orgConfigFile, 'utf-8');
+  const beforeNames = parseAppListNames(content);
+  const remoteNameSet = new Set(apps.map(a => a.name));
+
+  // 收集本地的 {name -> appId}，便于在宜搭没返回 appId 时保留旧值
+  const localMap = new Map();
+  beforeNames.forEach(({ name, appId }) => {
+    if (name) localMap.set(name, appId);
+  });
+
+  // ── 识别本地未同步应用（appId 为"待创建"/"请手动补充"，且云端不存在）──
+  const localOnlyApps = [];
+  beforeNames.forEach(({ name, appId }) => {
+    if (name && !remoteNameSet.has(name) && (appId === '待创建' || appId === '请手动补充')) {
+      // 检查本地项目文件夹是否存在
+      const projectDir = path.join(PROJECT_ROOT, name);
+      if (fs.existsSync(projectDir)) {
+        localOnlyApps.push({ name, appId });
+        console.log(`  [保留] 本地未同步应用：${name} (${appId})`);
+      }
+    }
+  });
+
+  // ── 扫描本地项目文件夹，发现配置文件中未记录的本地应用 ──
+  const existingNames = new Set([...apps.map(a => a.name), ...localOnlyApps.map(a => a.name)]);
+  const discoveredApps = discoverLocalApps(existingNames);
+  localOnlyApps.push(...discoveredApps);
+
+  // 构造新的应用列表行：云端应用 + 本地未同步应用
+  const allApps = [...apps, ...localOnlyApps];
+  const newRows = allApps.map((app, idx) => {
+    let appId = app.appId;
+    if (!appId || appId === '请手动补充') {
+      // 宜搭没返回 ID 时，保留本地已有的（如果有）
+      appId = localMap.get(app.name) || '请手动补充';
+    }
+    return `| ${idx + 1} | ${app.name} | ${appId} |`;
+  });
+
+  // 定位"应用列表"section：从"## 应用列表"开始到下一个"## "或文件末尾
+  const sectionRegex = /(## 应用列表[\s\S]*?)(?=\n## |\n--- |\n# |\s*$)/;
+  const sectionMatch = content.match(sectionRegex);
+  if (!sectionMatch) {
+    console.log('  [警告] 未找到 ## 应用列表 section，无法重建');
+    return { updated: 0, removed: 0, added: 0, preserved: 0 };
+  }
+
+  // 在原 section 内，替换"表头+分隔行之后"到 section 结束的所有表格行
+  const sectionText = sectionMatch[1];
+  const tableHeaderRegex = /(\| 序号[^\n]*\n\|[ -|]+\n)([\s\S]*)/;
+  const headerMatch = sectionText.match(tableHeaderRegex);
+
+  let newSection;
+  if (headerMatch) {
+    newSection = sectionText.replace(tableHeaderRegex, (_m, header) => header + newRows.join('\n') + '\n');
+  } else {
+    newSection = sectionText.replace(/\s*$/, '\n' + newRows.join('\n') + '\n');
+  }
+
+  content = content.replace(sectionText, newSection);
+  fs.writeFileSync(CONFIG.orgConfigFile, content, 'utf-8');
+
+  // 计算增删
+  const newNameSet = new Set(allApps.map(a => a.name));
+  let removed = 0;
+  beforeNames.forEach(({ name, appId }) => {
+    if (name && !newNameSet.has(name)) {
+      // 只移除已经同步过的应用（有真实 appId 的），不移除未同步应用
+      if (appId !== '待创建' && appId !== '请手动补充') {
+        removed++;
+        console.log('    - 已删除（宜搭中不存在）:', name);
+      }
+    }
+  });
+  let added = 0;
+  allApps.forEach(a => { if (!beforeNames.find(b => b.name === a.name)) added++; });
+  const updated = apps.length - added;
+  const preserved = localOnlyApps.length;
+
+  console.log(`  [重建] 应用列表：共 ${allApps.length} 个（云端 ${apps.length} + 本地未同步 ${preserved}），新增 ${added}，删除 ${removed}，更新 ${updated}`);
+  return { updated, removed, added, preserved };
+}
+
+/**
+ * 扫描本地项目文件夹，发现配置文件中未记录的本地应用
+ * 判断依据：项目根目录下的子文件夹包含"系统配置清单.md"或"01需求梳理"目录
+ * 排除已知系统目录（如 .agents, .cache, lib, scripts, node_modules 等）
+ * @param {Set<string>} existingNames - 已知的应用名称集合
+ * @returns {Array<{name:string, appId:string}>}
+ */
+function discoverLocalApps(existingNames) {
+  const discovered = [];
+  const SYSTEM_DIRS = new Set([
+    '.agents', '.cache', '.playwright-browsers', '.playwright-cli', '.trae', '.figma', '.git',
+    '.codebuddy', 'lib', 'scripts', 'node_modules', 'temp-file', 'tests',
+    '本地操作页面', '★宜搭场景案例库', '★宜搭开发参考文档', 'AI宜搭场景',
+  ]);
+
+  try {
+    const entries = fs.readdirSync(PROJECT_ROOT, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const dirName = entry.name;
+      
+      // 跳过系统目录和隐藏目录
+      if (dirName.startsWith('.') || SYSTEM_DIRS.has(dirName)) continue;
+      
+      // 跳过已存在的应用
+      if (existingNames.has(dirName)) continue;
+      
+      // 检查是否是宜搭应用项目目录（包含特征文件）
+      const dirPath = path.join(PROJECT_ROOT, dirName);
+      const hasSystemConfig = fs.existsSync(path.join(dirPath, '系统配置清单.md'));
+      const hasRequirementDir = fs.existsSync(path.join(dirPath, '01需求梳理'));
+      const hasReadme = fs.existsSync(path.join(dirPath, 'README.md'));
+      
+      // 至少满足两个条件才认为是应用目录
+      const score = (hasSystemConfig ? 1 : 0) + (hasRequirementDir ? 1 : 0) + (hasReadme ? 1 : 0);
+      if (score >= 2) {
+        console.log(`  [发现] 本地项目文件夹中的未记录应用：${dirName}`);
+        discovered.push({ name: dirName, appId: '待创建' });
+        existingNames.add(dirName); // 防止重复添加
+      }
+    }
+  } catch (error) {
+    console.log('  [警告] 扫描本地项目文件夹失败:', error.message);
+  }
+
+  return discovered;
+}
+
+/**
+ * 从配置文件中解析出应用列表 section 的所有行
+ * @returns {Array<{name:string, appId:string}>}
+ */
+function parseAppListNames(content) {
+  const result = [];
+  const lines = content.split('\n');
+  let inAppSection = false;
+  for (const line of lines) {
+    if (line.startsWith('## 应用列表')) {
+      inAppSection = true;
+      continue;
+    }
+    if (inAppSection) {
+      if (line.startsWith('## ') || line.startsWith('# ')) break;
+      const m = line.match(/^\|\s*\d+\s*\|\s*([^|]+?)\s*\|\s*([^|]+?)\s*\|\s*$/);
+      if (m) {
+        result.push({ name: m[1].trim(), appId: m[2].trim() });
+      }
+    }
+  }
+  return result;
 }
 
 /**
@@ -533,10 +734,10 @@ async function fetchAppsViaBrowser(loginState) {
           if (data && (data.data || data.content || data.result || Array.isArray(data))) {
             apiCalls.push({ url, data });
           }
-        } catch (e) {}
+        } catch (e) {} // 有意忽略：响应体可能非 JSON 格式
       }
     });
-    
+
     // 访问我的应用页面
     console.log('访问我的应用页面:', baseUrl + '/myApp');
     await page.goto(baseUrl + '/myApp', { waitUntil: 'networkidle' });
@@ -637,7 +838,7 @@ async function fetchAppsViaBrowser(loginState) {
         try {
           await page.goto(baseUrl + '/myApp', { waitUntil: 'networkidle' });
           await page.waitForTimeout(3000);
-        } catch (e2) {}
+        } catch (e2) {} // 有意忽略：回退导航也可能失败，不影响主流程
       }
     }
     
@@ -647,50 +848,7 @@ async function fetchAppsViaBrowser(loginState) {
   }
 }
 
-/**
- * 确保门户页面文件存在
- * 使用固定的本地操作页面(index.html)作为组织主页
- */
-function ensurePortalPage() {
-  const rootIndex = path.join(PROJECT_ROOT, 'index.html');
-  const localPageDir = path.join(PROJECT_ROOT, '本地操作页面');
-  const localPageIndex = path.join(localPageDir, 'index.html');
 
-  // 检查根目录 index.html 是否已存在
-  if (fs.existsSync(rootIndex)) {
-    console.log('  ✅ 组织门户首页已存在');
-    return;
-  }
-
-  // 检查本地操作页面是否存在
-  if (!fs.existsSync(localPageIndex)) {
-    console.log('  ⚠️ 本地操作页面目录不存在，将创建简易首页');
-  }
-
-  // 创建根目录 index.html（门户首页 -> 指向本地操作页面）
-  console.log('  📁 创建组织门户首页...');
-  const indexHtml = `<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="refresh" content="0; url=本地操作页面/index.html">
-  <title>宜搭AI助手 - 组织管理门户</title>
-  <link rel="stylesheet" href="本地操作页面/css/style.css">
-</head>
-<body>
-  <div style="display:flex;justify-content:center;align-items:center;min-height:100vh;font-family:-apple-system,BlinkMacSystemFont,'PingFang SC','Microsoft YaHei',sans-serif;background:#f5f7fa;">
-    <div style="text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
-      <h2 style="color:#1677ff;margin-bottom:12px;">&#127970; 宜搭组织管理门户</h2>
-      <p style="color:#666;font-size:14px;">正在跳转至组织门户页面...</p>
-      <p style="color:#666;font-size:14px;">如果未自动跳转，请<a href="本地操作页面/index.html" style="color:#1677ff;">点击此处</a></p>
-    </div>
-  </div>
-</body>
-</html>`;
-  fs.writeFileSync(rootIndex, indexHtml, 'utf-8');
-  console.log('  ✅ 组织门户首页已创建（指向本地操作页面）');
-}
 
 /**
  * 确保门户页面资源文件存在（CSS/JS）
@@ -716,12 +874,12 @@ async function startServicesAndOpenPortal() {
   const { spawn } = require('child_process');
 
   const serverManagerScript = path.join(
-    PROJECT_ROOT, '.agents', 'skills', 'yida-server-manager', 'scripts', 'server_manager.js'
+    PROJECT_ROOT, '.agents', 'skills', 'server-manager', 'scripts', 'server_manager.js'
   );
 
   if (!fs.existsSync(serverManagerScript)) {
     console.log('  ⚠️ 服务管理器脚本不存在，跳过自动启动');
-    console.log('  💡 请手动运行: node .agents/skills/yida-server-manager/scripts/server_manager.js start');
+    console.log('  💡 请手动运行: node .agents/skills/server-manager/scripts/server_manager.js start');
     return;
   }
 
@@ -763,7 +921,7 @@ async function startServicesAndOpenPortal() {
   }
 
   console.log('  ⚠️ 服务启动超时，请手动启动');
-  console.log('  💡 运行: node .agents/skills/yida-server-manager/scripts/server_manager.js start');
+  console.log('  💡 运行: node .agents/skills/server-manager/scripts/server_manager.js start');
 }
 
 /**
@@ -784,7 +942,7 @@ function checkHttpServiceRunning() {
  * 在浏览器中打开门户页面
  */
 function openPortalInBrowser() {
-  const portalUrl = 'http://127.0.0.1:8080/';
+  const portalUrl = 'http://127.0.0.1:8080/本地操作页面/index.html';
   console.log('\n' + '='.repeat(60));
   console.log('🎉 门户页面已就绪！');
   console.log('  📍 访问地址: ' + portalUrl);
@@ -874,16 +1032,11 @@ async function main() {
   }
   
   updateOrgInfo(loginState);
-  
-  let updated = 0;
-  let notFound = 0;
-  for (const app of apps) {
-    if (updateAppIdInMarkdown(app.name, app.appId)) {
-      updated++;
-    } else {
-      notFound++;
-    }
-  }
+
+  // 用宜搭返回的应用列表整体重建本地应用列表（新增 / 更新 / 删除）
+  const rebuildResult = rebuildAppList(apps);
+  const updated = rebuildResult.updated + rebuildResult.added;
+  const notFound = rebuildResult.added === 0 && apps.length === 0 ? 0 : 0;
   
   console.log('\n' + '='.repeat(60));
   console.log('✅ 初始化完成!');
@@ -891,16 +1044,12 @@ async function main() {
   console.log('  - 未匹配:', notFound, '个');
   console.log('  - 配置文件:', CONFIG.orgConfigFile);
 
-  // 第四步：确保门户页面存在
-  console.log('\n🌐 第四步：检查门户页面...');
-  ensurePortalPage();
-
-  // 第五步：启动HTTP服务并打开门户页面
-  console.log('\n🚀 第五步：启动HTTP服务...');
+  // 第四步：启动HTTP服务并打开门户页面
+  console.log('\n🚀 第四步：启动HTTP服务...');
   await startServicesAndOpenPortal();
 
-  // 第六步：注册开机自启
-  console.log('\n🔌 第六步：注册开机自启...');
+  // 第五步：注册开机自启
+  console.log('\n🔌 第五步：注册开机自启...');
   registerAutoStart();
 }
 
@@ -925,7 +1074,7 @@ function registerAutoStart() {
   const startupScript = `@echo off
 chcp 65001 >nul 2>&1
 cd /d "${PROJECT_ROOT}"
-start /min "" node ".agents\\skills\\yida-server-manager\\scripts\\server_manager.js" start
+start /min "" node ".agents\\skills\\server-manager\\scripts\\server_manager.js" start
 `;
 
   try {
@@ -945,13 +1094,15 @@ start /min "" node ".agents\\skills\\yida-server-manager\\scripts\\server_manage
   }
 }
 
-main().catch((error) => {
-  console.error('\n❌ 脚本执行失败:');
-  console.error('  错误类型:', error.name || 'Unknown');
-  console.error('  错误信息:', error.message);
-  console.error('  堆栈跟踪:', error.stack);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error('\n❌ 脚本执行失败:');
+    console.error('  错误类型:', error.name || 'Unknown');
+    console.error('  错误信息:', error.message);
+    console.error('  堆栈跟踪:', error.stack);
+    process.exit(1);
+  });
+}
 
 // 捕获未处理的 Promise 拒绝
 process.on('unhandledRejection', (reason, promise) => {

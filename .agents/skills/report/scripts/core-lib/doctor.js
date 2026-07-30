@@ -264,9 +264,9 @@ class EnvironmentChecker {
         label: '宜搭登录态',
         passed: false,
         severity: Severity.WARNING,
-        message: '未登录（运行 openyida login 登录）',
+        message: '未登录（运行 yeqiu-yida login 登录）',
         fixType: FixType.COMMAND,
-        fixCommand: 'openyida login --qr',
+        fixCommand: 'yeqiu-yida login --qr',
       };
     }
 
@@ -277,9 +277,9 @@ class EnvironmentChecker {
       label: `宜搭登录态：${passed ? '已登录' : 'Cookie 存在但可能已过期'}`,
       passed,
       severity: passed ? Severity.INFO : Severity.WARNING,
-      message: passed ? null : 'Cookie 可能已过期，运行 openyida login 重新登录',
+      message: passed ? null : 'Cookie 可能已过期，运行 yeqiu-yida login 重新登录',
       fixType: passed ? null : FixType.COMMAND,
-      fixCommand: passed ? null : 'openyida login --qr',
+      fixCommand: passed ? null : 'yeqiu-yida login --qr',
     };
   }
 
@@ -326,7 +326,7 @@ class EnvironmentChecker {
 // ── VersionChecker ───────────────────────────────────
 
 /**
- * openyida 版本检查器。
+ * yeqiu-yida 版本检查器。
  * 检测当前安装版本是否与 SKILL.md 中的 metadata.version 一致，
  * 不一致时在 --fix 模式下自动升级到最新版。
  */
@@ -355,12 +355,12 @@ class VersionChecker {
   }
 
   /**
-   * 获取当前安装的 openyida 版本。
+   * 获取当前安装的 yeqiu-yida 版本。
    * @returns {string|null}
    */
   getInstalledVersion() {
     try {
-      return execSync('openyida -v', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+      return execSync('yeqiu-yida -v', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
     } catch {
       return null;
     }
@@ -373,7 +373,7 @@ class VersionChecker {
     if (!skillVersion) {
       return [{
         id: 'version-skill',
-        label: 'openyida 版本检测',
+        label: 'yeqiu-yida 版本检测',
         passed: true,
         severity: Severity.INFO,
         message: '无法读取 SKILL.md 版本，跳过版本比对',
@@ -384,12 +384,12 @@ class VersionChecker {
     if (!installedVersion) {
       return [{
         id: 'version-installed',
-        label: 'openyida 版本检测',
+        label: 'yeqiu-yida 版本检测',
         passed: false,
         severity: Severity.ERROR,
-        message: 'openyida 未安装，请运行：npm install -g openyida',
+        message: 'yeqiu-yida 未安装，请运行：npm install -g yeqiu-yida',
         fixType: FixType.COMMAND,
-        fixCommand: 'npm install -g openyida@latest',
+        fixCommand: 'npm install -g yeqiu-yida@latest',
       }];
     }
 
@@ -400,12 +400,12 @@ class VersionChecker {
 
     return [{
       id: 'version-match',
-      label: `openyida 版本：${installedVersion}（SKILL 期望：${skillVersion}）`,
+      label: `yeqiu-yida 版本：${installedVersion}（SKILL 期望：${skillVersion}）`,
       passed,
       severity: passed ? Severity.INFO : Severity.WARNING,
       message: passed ? null : '版本不匹配，建议升级到最新版',
       fixType: passed ? null : FixType.COMMAND,
-      fixCommand: passed ? null : 'npm install -g openyida@latest',
+      fixCommand: passed ? null : 'npm install -g yeqiu-yida@latest',
     }];
   }
 }
@@ -414,7 +414,7 @@ class VersionChecker {
 
 /**
  * project 工作目录初始化检查器。
- * 检测 project/ 目录是否存在，不存在时在 --fix 模式下自动执行 openyida copy。
+ * 检测 project/ 目录是否存在，不存在时在 --fix 模式下自动执行 yeqiu-yida copy。
  */
 class ProjectInitChecker {
   constructor({ projectRoot } = {}) {
@@ -724,7 +724,7 @@ class FixEngine {
           return {
             id: issue.id,
             fixed: false,
-            message: `project/ 初始化失败，请手动运行：openyida copy（${error.message}）`,
+            message: `project/ 初始化失败，请手动运行：yeqiu-yida copy（${error.message}）`,
           };
         }
       }
@@ -809,7 +809,7 @@ class ReportGenerator {
   generateMarkdown(results, summary, reportDir, timestamp) {
     const reportPath = path.join(reportDir, `doctor-${timestamp}.md`);
     const lines = [
-      '# OpenYida 诊断报告',
+      '# Yeqiu-Yida 诊断报告（作者：叶秋）',
       '',
       `生成时间：${new Date().toLocaleString()}`,
       '',
@@ -853,7 +853,7 @@ class ReportGenerator {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>OpenYida 诊断报告</title>
+  <title>Yeqiu-Yida 诊断报告（叶秋）</title>
   <style>
     body { font-family: -apple-system, sans-serif; max-width: 800px; margin: 40px auto; padding: 0 20px; }
     h1 { color: #333; }
@@ -866,7 +866,7 @@ class ReportGenerator {
   </style>
 </head>
 <body>
-  <h1>🔍 OpenYida 诊断报告</h1>
+  <h1>🔍 Yeqiu-Yida 诊断报告（叶秋）</h1>
   <p>生成时间：${new Date().toLocaleString()}</p>
   <div class="summary">
     <div class="summary-card"><div class="number">${summary.total}</div><div>总检查项</div></div>
@@ -1486,7 +1486,7 @@ async function run(args) {
   }
 
   const { c: cc4 } = require('./chalk');
-  console.log(`\n  ${cc4.cyan}🔍${cc4.reset} ${cc4.bold}检查 OpenYida 环境依赖...${cc4.reset}\n`);
+  console.log(`\n  ${cc4.cyan}🔍${cc4.reset} ${cc4.bold}检查 Yeqiu-Yida 环境依赖...${cc4.reset}\n`);
 
   const results = await engine.runAll();
   console.log(engine.formatConsoleOutput());

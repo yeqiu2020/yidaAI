@@ -1,7 +1,7 @@
 # 跨表单数据查询规范
 
-> 跨表单数据查询的完整指南（含分页、兼容处理、坑点）
-> 版本: v2.0.0
+> 跨表单数据查询的完整指南（含分页、兼容处理、坑点、场景分类）
+> 版本: v2.4.0
 > 迁移自: 03-cross-form-query.md
 
 ---
@@ -36,15 +36,191 @@ this.dataSourceMap.edit.load({
 
 ## 一、API返回数据结构不统一（必须兼容）
 
-### 1.1 查询API返回格式（三种之一）
+### ⚠️ 1.0 极其重要：每个API的返回结构完全不同！
 
-| 返回格式 | success字段 | 数据位置 |
-|---------|------------|---------|
-| 标准格式 | `true/false` | `res.result.data` |
-| 数字格式 | `0/1` | `res.data` |
-| 无success | 无 | `res.data` |
+**不要用同一套代码模板处理所有API！** 宜搭各API返回结构差异极大，必须针对每个API单独处理。
 
-### 1.2 操作API返回格式
+### 1.1 各API返回格式对照表（必须逐个记忆！）
+
+| API | 返回结构 | 成功判断方式 | 数据位置 | 常见错误 |
+|-----|---------|------------|---------|---------|
+| `searchFormDatas` | `{success, result:{data, totalCount}}` | `res.success === true` | `res.result.data` | 无 |
+| `getFormDataById` | `{serialNo, instValue, creator, ...}` | `res.serialNo` 存在 | `res.serialNo`(订单号)<br>`res.instValue`(字段JSON) | ❌用`checkApiSuccess`判断失败！<br>❌子表数据不在返回值中！ |
+| `listTableData` | `{data:[...], totalCount, currentPage}` | `res.data` 是数组 | `res.data` | ❌`res.result`是undefined！<br>❌关联字段key带`_id`后缀！ |
+| `saveFormData` | `"FINST-xxx"` 字符串 | `typeof res === 'string'` | 返回值本身就是实例ID | 无 |
+| `updateFormData` | `null` | `res === null` | 无数据返回 | 无 |
+| `deleteFormData` | `null` | `res === null` | 无数据返回 | 无 |
+
+### 1.2 getFormDataById 返回结构（极其特殊！）
+
+**⚠️ 这是与其他查询API完全不同的返回结构，必须单独处理！**
+
+```javascript
+// getFormDataById 返回扁平对象，没有 success / result / data 字段！
+// 实际返回：
+{
+  "serialNo": "CG20260724004",      // ← 订单号/流水号在这里
+  "instValue": "[{componentName, fieldData, fieldId...}]",  // ← 字段数据JSON字符串
+  "creator": "0249654712697493",
+  "gmtModified": 1784849065984,
+  "modifier": "0249654712697493",
+  "originator": { "name": {...}, "userId": "..." },
+  "title": "{\"zh_CN\":\"CG20260724004\"}",
+  "modelUuid": "FORM-5CCACE2552084BDFB53DF788687CFBB7GPPQ",
+  "version": 3
+}
+```
+
+**✅ 正确的判断和取值方式：**
+
+```javascript
+// ❌ 错误：用 checkApiSuccess 判断 → 永远失败！
+if (checkApiSuccess(res)) { ... }  // res 没有 success/data/result，返回 false！
+
+// ✅ 正确：直接判断 serialNo 是否存在
+if (!res || !res.serialNo) {
+  throw new Error('查询失败');
+}
+var orderNo = res.serialNo;  // 直接取流水号
+```
+
+**⚠️ 关键警告：getFormDataById 不返回子表数据！**
+
+```javascript
+// ❌ 错误：试图从返回值中取子表
+var formData = res.formData || res;
+var subTableData = formData['tableField_xxx'];  // undefined！子表数据不在返回值中！
+
+// ✅ 正确：必须单独调用 listTableData 接口获取子表
+// 先查主表拿基本信息
+var orderNo = res.serialNo;
+// 再查子表拿明细数据
+that.dataSourceMap['getOrderSubTable'].load({
+  formUuid: 'FORM-XXX',
+  formInstanceId: formInstId,
+  tableFieldId: 'tableField_xxx',
+  currentPage: 1,
+  pageSize: 50
+}).then(function(subRes) {
+  var subTableRows = subRes.data || [];  // 子表行数据
+});
+```
+
+### 1.3 ⚠️ instValueMap 字段值可能是对象格式，不能直接 setValue
+
+`getFormDataById` 返回的 `instValue` 经过解析后得到 `instValueMap[fieldId]`，但该字段值**不一定是字符串**。很多字段类型（如流水号、标题、部分文本字段）的 `fieldData` 是 i18n 对象或嵌套对象：
+
+```javascript
+// ❌ 错误：直接把 instValueMap[fieldId] 当字符串用
+var orderNo = mainResult.instValueMap['serialNumberField_xxx'];
+row['textField_dst'] = orderNo;  // 可能显示 [object Object]
+
+// 实际 instValueMap 中的值可能是：
+{
+  "serialNumberField_xxx": { "zh_CN": "CG20260729002", "en_US": "" },
+  "textField_xxx": { "value": "xxx", "display": "xxx" }
+}
+```
+
+**✅ 正确做法：**
+
+1. **订单号/流水号优先用 `res.serialNo`**，它已经是稳定字符串：
+```javascript
+var orderNo = res.serialNo;  // ✅ 最可靠
+```
+
+2. 如果必须从 `instValueMap` 取文本字段，先用工具函数提取纯文本：
+```javascript
+function extractTextValue(value) {
+  if (value === undefined || value === null || value === '') return '';
+  if (typeof value === 'string') return value;
+  if (typeof value === 'object') {
+    if (value.zh_CN !== undefined && value.zh_CN !== '') return value.zh_CN;
+    if (value.en_US !== undefined && value.en_US !== '') return value.en_US;
+  }
+  return String(value);
+}
+
+var orderNo = extractTextValue(mainResult.instValueMap['serialNumberField_xxx']);
+```
+
+3. 子表 `setValue` 前，确保赋给文本字段的是字符串或数字，不是对象。
+
+> **真实案例**：采购入库选择多个采购订单后，入库明细的「采购订单编号」全部显示 `[object Object]`。根因就是代码用 `instValueMap[serialNumberField_xxx]` 取值，而实际返回的是 `{zh_CN: "CG20260729002"}` 对象。改为 `res.serialNo` 后正常。
+
+### 1.4 listTableDataByFormInstIdAndTableId 返回结构
+
+**⚠️ 返回结构与其他查询API不同！data 在顶层，不在 result 下！**
+
+```javascript
+// listTableData 实际返回：
+{
+  "idCursor": 0,
+  "data": [                        // ← data 在顶层！不是 res.result.data！
+    {
+      "textField_xxx": "文本值",
+      "numberField_xxx": 100,
+      "numberField_xxx_value": "100",   // ← 数值字段带 _value 后缀（字符串）
+      "selectField_xxx": "选项显示值",
+      "selectField_xxx_id": "选项实际值", // ← 下拉字段带 _id 后缀
+      "associationFormField_xxx_id": "\"[{\\\"instanceId\\\":\\\"FINST-xxx\\\"...]\"", // ← 关联字段只有 _id 后缀版本！
+      "textareaField_xxx": "备注"
+    }
+  ],
+  "totalCount": 2,
+  "currentPage": 1
+}
+```
+
+**✅ 正确的取值方式：**
+
+```javascript
+// ❌ 错误：用通用兼容逻辑取数据
+var result = res.result || res || {};
+var list = result.data || [];  // res.result 是 undefined，res.data 是数组，
+                               // result 变成数组，result.data 是 undefined！
+
+// ✅ 正确：直接从顶层取 data
+var list = [];
+if (res && res.data && Array.isArray(res.data)) {
+  list = res.data;
+} else if (res && res.result && res.result.data && Array.isArray(res.result.data)) {
+  list = res.result.data;  // 兼容少数环境
+}
+var totalCount = res.totalCount || 0;
+```
+
+**⚠️ 关键警告：子表API返回的字段key带后缀！**
+
+| 字段类型 | 前端 getValue() 的 key | 子表API返回的 key | 说明 |
+|---------|----------------------|------------------|------|
+| 文本 | `textField_xxx` | `textField_xxx` | 一致，无后缀 |
+| 数值 | `numberField_xxx` | `numberField_xxx` + `numberField_xxx_value` | 多一个字符串版本 |
+| 下拉单选 | `selectField_xxx` | `selectField_xxx` + `selectField_xxx_id` | 多一个id版本 |
+| **关联表单** | `associationFormField_xxx` | **`associationFormField_xxx_id`** | ⚠️ 只有 _id 版本有数据！ |
+| 多行文本 | `textareaField_xxx` | `textareaField_xxx` | 一致，无后缀 |
+
+**✅ 读取关联表单字段的正确方式：**
+
+```javascript
+// ❌ 错误：用前端字段名读取
+var productAssoc = sourceRow['associationFormField_xxx'];  // undefined！
+
+// ✅ 正确：优先尝试 _id 后缀
+function getAssociationValue(row, fieldId) {
+  // 优先尝试 _id 后缀（listTableData API 返回格式）
+  var value = row[fieldId + '_id'];
+  if (value !== undefined && value !== null) {
+    return formatAssociationField(value);
+  }
+  // 兼容无后缀（前端 getValue 格式）
+  return formatAssociationField(row[fieldId]);
+}
+
+var productAssoc = getAssociationValue(sourceRow, 'associationFormField_xxx');
+```
+
+### 1.5 操作API返回格式
 
 | 操作 | 成功返回 | 说明 |
 |------|---------|------|
@@ -52,11 +228,12 @@ this.dataSourceMap.edit.load({
 | 编辑 | `null` | 成功返回null |
 | 删除 | `null` | 成功返回null |
 
-### 1.3 必须使用统一工具函数判断结果
+### 1.6 必须使用统一工具函数判断结果
 
 ```javascript
 /**
- * 检查宜搭API调用是否成功（必须使用，不能直接判断 success）
+ * 检查宜搭API调用是否成功（适用于 searchFormDatas / saveFormData / updateFormData / deleteFormData）
+ * ⚠️ 不适用于 getFormDataById！该API返回扁平对象，需单独判断 res.serialNo 是否存在
  */
 function checkApiSuccess(res) {
   if (res === null || res === undefined) return true;
@@ -73,13 +250,16 @@ function getApiErrorMessage(res, defaultMsg) {
 }
 ```
 
-### 1.4 兼容数据位置
+### 1.7 兼容数据位置
 
 ```javascript
-// ✅ 兼容 res.result.data 和 res.data 两种位置
+// ✅ 兼容 res.result.data 和 res.data 两种位置（仅适用于 searchFormDatas）
 var result = res.result || res || {};
 var dataList = result.data || res.data || [];
 var totalCount = result.totalCount || res.totalCount || 0;
+
+// ⚠️ 以上兼容逻辑不适用于 listTableData！
+// listTableData 用：var list = res.data || [];
 ```
 
 ---
@@ -564,6 +744,105 @@ this.$('tableField_xxx').setValue(subTableData, { triggerChange: false });
 
 ---
 
+## 六点五、场景分类与场景C端到端完整实现（⭐直播翻车根因，最常见）
+
+> 跨表查询到底要配几个数据源、调几个API，**取决于你要什么数据**。先按下表选场景，再套对应实现，切勿盲目套通用模板。
+
+### 场景分类决策表
+
+| 场景 | 你要什么 | API | 数据源 | 成功判断 | 数据位置 |
+|------|---------|-----|-------|---------|---------|
+| **A** 查主表列表 | 满足条件的多条主表记录 | `searchFormDatas` | 1个 | `checkApiSuccess(res)` | `res.result.data` |
+| **B** 按ID查主表详情 | 已知实例ID的主表字段 | `getFormDataById` | 1个 | `res.serialNo` 存在 | `res.serialNo` / `res.instValue` |
+| **C** 查主表+子表 ⭐ | 完整记录（主表+子表明细） | `getFormDataById` + `listTableData` | **2个** | 见下 | 见下 |
+| **D** 只查子表 | 已知实例ID的子表明细 | `listTableData` | 1个 | `res.data` 是数组 | `res.data`（顶层） |
+
+> ⚠️ **场景C必须调2个API、配2个数据源**：`getFormDataById` 不返回子表，子表必须单独调 `listTableData`。这正是直播翻车最集中的地方。
+
+### 场景C完整实现（选关联表单 → 查主表 → 查子表 → 映射 → 填充当前子表）
+
+> 📦 可直接套用模板：`assets/templates/cross-form-query-template.js`（含完整工具函数与配置步骤）。下面是核心串联逻辑：
+
+```javascript
+// ① 查主表：getFormDataById（❌不能用 checkApiSuccess，判断 res.serialNo）
+function fetchMainForm(that, formInstId) {
+  return that.dataSourceMap['getSourceMainForm'].load({
+    formInstId: formInstId
+  }).then(function(res) {
+    var main = extractFormDataByIdResult(res); // 无 serialNo 返回 null
+    if (!main) { throw new Error('主表查询失败'); }
+    return main; // { serialNo, instValueMap, raw }
+  });
+}
+
+// ② 查子表：listTableData（数据在 res.data 顶层，pageSize 上限 50，含分页）
+function fetchSubTable(that, formInstId, currentPage, accumulated) {
+  return that.dataSourceMap['getSourceSubTable'].load({
+    formUuid: 'FORM-XXX',                  // 源表单UUID（真实值）
+    formInstanceId: formInstId,
+    tableFieldId: 'tableField_source',     // 源子表字段ID
+    currentPage: String(currentPage),
+    pageSize: '50'
+  }).then(function(res) {
+    var parsed = extractListTableDataResult(res); // 从 res.data 顶层取
+    var all = accumulated.concat(parsed.list);
+    if (all.length < parsed.totalCount) {
+      return fetchSubTable(that, formInstId, currentPage + 1, all);
+    }
+    return all;
+  });
+}
+
+// ③ 映射源子表行 → 目标子表行（关联列必须用 getAssociationValue）
+function buildSubTableRows(sourceRows) {
+  var rows = [];
+  for (var i = 0; i < sourceRows.length; i++) {
+    var src = sourceRows[i];
+    rows.push({
+      'textField_dstName': src['textField_srcName'] || '',
+      'numberField_dstQty': src['numberField_srcQty'] || 0,
+      // ⚠️ 关联字段带 _id 后缀，标准字段名为空！
+      'associationFormField_dstProduct': getAssociationValue(src, 'associationFormField_srcProduct')
+    });
+  }
+  return rows;
+}
+
+// ④ 关联字段 onChange 串联全流程（手动绑定到关联字段的 onChange）
+var isProcessing = false;
+export function onSourceFieldChange(event) {
+  var that = this;
+  if (isProcessing) return;
+  var value = event && event.value;
+  if (!value || !value.length || !value[0].instanceId) return;
+  var formInstId = value[0].instanceId;
+
+  isProcessing = true;
+  fetchMainForm(that, formInstId).then(function(main) {
+    return fetchSubTable(that, formInstId, 1, []); // 查完主表再查子表
+  }).then(function(sourceRows) {
+    var targetRows = buildSubTableRows(sourceRows);
+    // triggerChange:false 防死循环
+    that.$('tableField_target').setValue(targetRows, { triggerChange: false });
+    that.utils.toast({ type: 'success', title: '已填充 ' + targetRows.length + ' 条明细' });
+  }).catch(function(err) {
+    that.utils.toast({ type: 'error', title: '填充失败', content: err.message });
+  }).then(function() {
+    isProcessing = false; // 相当于 finally 释放锁
+  });
+}
+```
+
+**场景C避坑清单（逐项对照）：**
+- [ ] 是否配了 **2 个数据源**（getFormDataById + listTableData）？
+- [ ] 主表用 `res.serialNo` / `extractFormDataByIdResult` 判断，**没有**用 `checkApiSuccess`？
+- [ ] 订单号/流水号是否优先从 `res.serialNo` 取，**没有**把 `instValueMap[fieldId]` 对象直接 setValue 给文本字段？
+- [ ] 子表从 `res.data` **顶层**取，**没有**用 `res.result.data` 通用逻辑？
+- [ ] 子表关联列用了 `getAssociationValue`（`_id` 后缀）？
+- [ ] `setValue` 带了 `{ triggerChange: false }` 且有 `isProcessing` 锁？
+
+---
+
 ## 七、跨表单查询检查清单
 
 - [ ] 部门选择器是否提取了 `value` 属性？
@@ -575,6 +854,7 @@ this.$('tableField_xxx').setValue(subTableData, { triggerChange: false });
 - [ ] 是否使用 `checkApiSuccess()` 判断结果？
 - [ ] 数据量可能超100条时是否使用分页递归？
 - [ ] **成员/部门/关联表单字段是否使用了格式转换函数？（极其重要！）**
+- [ ] **getFormDataById 取订单号/流水号是否优先用 `res.serialNo`，且 setValue 给文本字段前已确保不是对象？**
 
 ---
 
@@ -729,5 +1009,6 @@ this.dataSourceMap.query.load(params).then(function(res) {
 
 ---
 
-*文档版本: v2.2.0*
-*更新内容：澄清"不需要先转化为文本类型"的错误观念，补充日期区间格式*
+*文档版本: v2.3.0*
+*更新内容（v2.3.0）：新增“六点五、场景分类与场景C端到端完整实现”，与 cross-form-query-template.js 模板配套*
+*更新内容（v2.2.0）：澄清“不需要先转化为文本类型”的错误观念，补充日期区间格式*

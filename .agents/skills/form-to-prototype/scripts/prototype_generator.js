@@ -1,12 +1,17 @@
 /**
  * 宜搭表单原型页面生成器 - 通用模板方案
- * 版本: 2.9.0
+ * 版本: 2.10.1
  *
  * 功能: 读取Markdown字段清单，生成通用HTML原型页面模板
  * 用法: node prototype_generator.js <字段清单md文件路径> [输出目录]
  * 示例: node prototype_generator.js "../../../出入库管理/01需求梳理/字段清单.md" "../../../出入库管理/01需求梳理/原型页面"
  *
  * 更新说明:
+ * - v2.10.1: 【修复】查找组件ID清单时支持带编号的分组目录
+ *           问题：generate_from_markdown.js 创建的目录带编号（如 02基础信息），
+ *                 但 prototype_generator.js 使用 form.module（如 基础信息）构建路径，找不到目录。
+ *           修复：添加 findFormDirectoryWithNumberPrefix 函数，支持查找带编号的目录。
+ *
  * - v2.9.0: 新增开发引导页面
  *          1. 新增 templates/guide.html 开发引导页（3步引导：需求分析→原型设计→系统构建）
  *          2. 侧边栏菜单第一个位置添加「📋 开发引导」菜单项（橙色高亮）
@@ -147,7 +152,8 @@ function parseMarkdown(content) {
     // 匹配模块标题: ## 一、模块名称
     const moduleMatch = line.match(/^##\s+([一二三四五六七八九十]+、.+)$/);
     if (moduleMatch) {
-      currentModule = moduleMatch[1].trim();
+      // v2.8.0: 去掉模块名称中的中文序号前缀（如"一、基础信息" → "基础信息"）
+      currentModule = moduleMatch[1].trim().replace(/^[一二三四五六七八九十]+[、.．]\s*/, '');
       continue;
     }
 
@@ -413,11 +419,8 @@ function generateIndexHtml(systemInfo, allForms) {
     <!-- 左侧菜单 -->
     <aside class="sidebar">
       <nav class="menu">
-        <div class="menu-group">
-          <div class="menu-group-title">业务表单</div>
-          <div id="menuItems">
-            <!-- 菜单项由JavaScript动态生成 -->
-          </div>
+        <div id="menuItems">
+          <!-- 菜单（含分组）由JavaScript动态生成 -->
         </div>
       </nav>
     </aside>
@@ -537,11 +540,8 @@ function generateListTemplateHtml(allForms) {
     <!-- 左侧菜单 -->
     <aside class="sidebar">
       <nav class="menu" id="mainMenu">
-        <div class="menu-group">
-          <div class="menu-group-title">业务表单</div>
-          <div id="menuItems">
-            <!-- 菜单项由JavaScript动态生成 -->
-          </div>
+        <div id="menuItems">
+          <!-- 菜单（含分组）由JavaScript动态生成 -->
         </div>
       </nav>
     </aside>
@@ -759,11 +759,8 @@ function generateFormTemplateHtml(allForms) {
     <!-- 左侧菜单 -->
     <aside class="sidebar">
       <nav class="menu" id="mainMenu">
-        <div class="menu-group">
-          <div class="menu-group-title">业务表单</div>
-          <div id="menuItems">
-            <!-- 菜单项由JavaScript动态生成 -->
-          </div>
+        <div id="menuItems">
+          <!-- 菜单（含分组）由JavaScript动态生成 -->
         </div>
       </nav>
     </aside>
@@ -974,10 +971,7 @@ function generateGuideHtml() {
   <div class="container">
     <aside class="sidebar">
       <nav class="menu" id="mainMenu">
-        <div class="menu-group">
-          <div class="menu-group-title">&#19994;&#21153;&#34920;&#21333;</div>
-          <div id="menuItems"></div>
-        </div>
+        <div id="menuItems"></div>
       </nav>
     </aside>
 
@@ -1149,11 +1143,15 @@ function generateGuideHtml() {
  */
 function generateFormConfigJs(allForms, outputDir) {
   // 生成表单路径映射
-  // 表单直接放在项目根目录下，不再使用"未分组表单"子目录
+  // v2.8.0: 支持分组目录，如果表单有module字段，路径为"分组名/表单目录"
+  // v2.11.0: 分组目录加「分组」后缀，与表单目录结构对齐
   const formPathsEntries = allForms.map(form => {
     const formDir = form.name + (form.type === 'process' ? '「流程表单」' : '「普通表单」');
+    // 如果有分组信息，构建包含分组的路径（分组目录加「分组」后缀）
+    const groupDir = form.module ? `${form.module}「分组」` : '';
+    const fullPath = groupDir ? `${groupDir}/${formDir}` : formDir;
     // 只存储表单目录名，路径前缀由 getBasePath() 动态提供
-    return `    '${form.name}': '${formDir}'`;
+    return `    '${form.name}': '${fullPath}'`;
   }).join(',\n');
 
   // 生成表单UUID映射（如果表单有uuid字段）
@@ -1248,6 +1246,7 @@ ${formPathsEntries}
   },
 
   // 从系统配置清单动态加载表单列表并更新 formPaths 和 staticConfigData
+  // v2.8.0: 支持从系统配置清单读取分组信息，构建包含分组的路径
   async loadFormListFromConfig() {
     try {
       const configUrl = this.getBasePath() + '%E7%B3%BB%E7%BB%9F%E9%85%8D%E7%BD%AE%E6%B8%85%E5%8D%95.md';
@@ -1265,13 +1264,18 @@ ${formPathsEntries}
         const trimmed = line.trim();
         if (trimmed.startsWith('|') && trimmed.includes('「')) {
           const cells = trimmed.split('|').map(c => c.trim()).filter(c => c);
+          // 解析分组信息（如果有5列，第5列是所属分组）
           if (cells.length >= 3 && /^\\d+$/.test(cells[0])) {
             const nameMatch = cells[1].match(/^(.+?)「(.+?)」/);
             if (nameMatch) {
+              // 第5列所属分组：'-' 是 markdown 无值占位符，归一化为空字符串
+              const rawGroup = cells.length >= 5 ? cells[4].trim() : '';
+              const group = (rawGroup && rawGroup !== '-' && rawGroup !== '—') ? rawGroup : '';
               forms.push({
                 name: nameMatch[1].trim(),
                 type: nameMatch[2].trim(),
-                uuid: cells[2].trim()
+                uuid: cells[2].trim(),
+                group: group  // 保存分组信息
               });
             }
           }
@@ -1303,14 +1307,18 @@ ${formPathsEntries}
         }
       }
 
-      // 更新 formPaths
+      // 更新 formPaths（包含分组路径）
+      // v2.11.0: 分组目录加「分组」后缀，与表单目录结构对齐
+      // v2.16.0: 总是用最新分组信息覆盖 formPaths，修正旧版不匹配的路径
       for (const form of forms) {
-        if (!this.formPaths[form.name]) {
+        if (form.group) {
+          this.formPaths[form.name] = form.group + '「分组」/' + form.name + '「' + form.type + '」';
+        } else {
           this.formPaths[form.name] = form.name + '「' + form.type + '」';
         }
       }
 
-      // 更新 staticConfigData 中缺失的表单
+      // 更新 staticConfigData 中缺失的表单，并回填 group 字段（兼容旧版静态JS无group的情况）
       for (const form of forms) {
         if (!this.staticConfigData[form.name]) {
           this.staticConfigData[form.name] = {
@@ -1319,6 +1327,8 @@ ${formPathsEntries}
             fields: []
           };
         }
+        // 无论新旧条目，都用系统配置清单的 group 覆盖回填，确保运行时可读
+        this.staticConfigData[form.name].group = form.group || '';
       }
 
       // 更新 FormConfigData
@@ -1330,6 +1340,7 @@ ${formPathsEntries}
               fields: []
             };
           }
+          window.FormConfigData[form.name].group = form.group || '';
         }
       }
 
@@ -1743,8 +1754,15 @@ ${formPathsEntries}
       this.configCache[formName] = config;
       return config;
     } catch (error) {
-      console.warn('[FormConfig] 加载表单配置失败:', error);
-      // 返回空配置而不是抛出错误，避免页面崩溃
+      console.warn('[FormConfig] 加载表单配置失败，回退到静态配置:', error);
+      // v2.16.0: 优先回退到静态配置，而非直接返回空配置
+      const staticConfig = this.getStaticConfig(formName);
+      if (staticConfig && staticConfig.fields && staticConfig.fields.length > 0) {
+        console.log('[FormConfig] 使用静态配置兜底: ' + formName);
+        this.configCache[formName] = staticConfig;
+        return staticConfig;
+      }
+      // 静态配置也没有，才返回空配置
       const emptyConfig = {
         formName: formName,
         fields: [],
@@ -1858,6 +1876,7 @@ window.FormConfig = FormConfig;
 
 /**
  * 生成表单静态配置数据对象（用于内联到 form-config.js）
+ * v2.10.1: 优先从组件ID清单.md读取真实fieldId
  * @param {Array} allForms - 所有表单列表
  * @param {string} outputDir - 原型页面输出目录（用于定位组件ID清单）
  * @returns {Object} 配置数据对象
@@ -1884,59 +1903,201 @@ function generateStaticConfigData(allForms, outputDir) {
     '评分': 'RateField'
   };
 
+  // v2.10.1: 从组件ID清单.md中提取字段（含子表字段）
+  function parseComponentIdListFromFile(filePath) {
+    try {
+      if (!fs.existsSync(filePath)) return null;
+      const content = fs.readFileSync(filePath, 'utf-8');
+      const lines = content.split('\n');
+      const fields = [];
+      let inTable = false;
+      let currentSection = 'main';
+      let currentSubTableName = null;
+      let mainIndex = 0;
+
+      for (const rawLine of lines) {
+        const line = rawLine.trim();
+
+        if (line === '## 📋 主表字段') {
+          currentSection = 'main';
+          currentSubTableName = null;
+          inTable = false;
+          continue;
+        }
+
+        if (line.startsWith('## 📋 子表：')) {
+          currentSection = 'subTable';
+          const subTableFullName = line.replace('## 📋 子表：', '').trim();
+          const subTableMatch = subTableFullName.match(/^(.+?)\s*\((tableField(?:\\_)?[^)]+)\)$/);
+          let subTableFieldId;
+          if (subTableMatch) {
+            currentSubTableName = subTableMatch[1].trim();
+            subTableFieldId = subTableMatch[2].trim().replace(/\\_/g, '_');
+          } else {
+            currentSubTableName = subTableFullName;
+            subTableFieldId = 'tableField_' + subTableFullName;
+          }
+          mainIndex++;
+          fields.push({
+            index: String(mainIndex),
+            componentType: '子表单',
+            fieldName: currentSubTableName,
+            fieldId: subTableFieldId,
+            isSubTableContainer: true
+          });
+          inTable = false;
+          continue;
+        }
+
+        if (line.replace(/\s/g, '').startsWith('|序号|')) { inTable = true; continue; }
+        if (inTable && line.startsWith('## ') && !line.includes('组件清单')) { break; }
+        if (inTable && line && !line.startsWith('|')) { inTable = false; continue; }
+        if (line.includes('---') && line.startsWith('|') && line.endsWith('|')) { continue; }
+        if (inTable && line.startsWith('|') && line.includes('|')) {
+          const cells = line.split('|').map(function(c) { return c.trim(); }).filter(function(c) { return c; });
+          if (
+            cells.length >= 4 &&
+            cells[0] !== '序号' &&
+            cells[0] !== '统计项' &&
+            /^\d+(?:\.\d+)?$/.test(cells[0])
+          ) {
+            const field = {
+              componentType: cells[1],
+              fieldName: cells[2],
+              fieldId: cells[3].replace(/\\_/g, '_')
+            };
+
+            if (currentSection === 'subTable' && currentSubTableName) {
+              field.index = String(mainIndex) + '.' + cells[0];
+            } else {
+              mainIndex++;
+              field.index = String(mainIndex);
+            }
+
+            fields.push(field);
+          }
+        }
+      }
+      return fields;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // v2.10.1: 查找带编号的分组目录（如 02基础信息）
+  function findFormDirectoryWithNumberPrefix(baseDir, moduleName) {
+    if (!fs.existsSync(baseDir)) return null;
+
+    var directPath = path.join(baseDir, moduleName);
+    if (fs.existsSync(directPath)) return directPath;
+
+    var items = fs.readdirSync(baseDir, { withFileTypes: true });
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (!item.isDirectory()) continue;
+      var dirName = item.name;
+      if (dirName === '01需求梳理' || dirName.startsWith('.') || dirName === 'temp-file') continue;
+      var nameWithoutNumber = dirName.replace(/^\d+/, '');
+      if (nameWithoutNumber === moduleName) {
+        return path.join(baseDir, dirName);
+      }
+    }
+
+    return null;
+  }
+
+  // 计算项目根目录：从原型页面/ 向上2级
+  var projectRoot = '';
+  if (outputDir) {
+    projectRoot = path.resolve(outputDir, '..', '..');
+  }
+
   const formConfigData = {};
 
   allForms.forEach(function(form) {
     var fields = [];
-    var mainIndex = 0;
 
-    // 处理主表字段
-    if (form.fields && Array.isArray(form.fields)) {
-      form.fields.forEach(function(field) {
-        // 跳过统计行
-        if (field.name === '主表字段' || field.name === '子表字段') return;
-        mainIndex++;
-        var componentType = typeMap[field.type] || 'TextField';
-        fields.push({
-          index: String(mainIndex),
-          componentType: componentType,
-          fieldName: field.name,
-          fieldId: field.id || ('field_' + field.name + '_' + String(mainIndex).padStart(2, '0'))
-        });
-      });
+    // v2.10.1: 先尝试从组件ID清单.md获取完整字段数据（含子表子字段）
+    // v2.11.0: 分组目录加「分组」后缀，与表单目录结构对齐
+    var typeStr = form.type === 'process' ? '流程表单' : '普通表单';
+    var formDirName = form.name + '「' + typeStr + '」';
+    var groupDirName = form.module ? form.module + '「分组」' : '';
+    var formRelativePath = groupDirName ? path.join(groupDirName, formDirName) : formDirName;
+    var componentListPath = path.resolve(projectRoot, formRelativePath, '组件ID清单.md');
+
+    // v2.11.0: 如果带「分组」后缀的路径找不到，尝试查找不带后缀的旧分组目录（向后兼容）
+    if (!fs.existsSync(componentListPath) && form.module) {
+      var oldGroupDir = path.join(projectRoot, form.module);
+      if (fs.existsSync(oldGroupDir)) {
+        componentListPath = path.join(oldGroupDir, formDirName, '组件ID清单.md');
+      }
     }
 
-    // 处理子表及其字段
-    if (form.subTables && Array.isArray(form.subTables)) {
-      form.subTables.forEach(function(subTable) {
-        mainIndex++;
-        var tableDisplayIndex = mainIndex;
-        fields.push({
-          index: String(tableDisplayIndex),
-          componentType: '子表单',
-          fieldName: subTable.name,
-          fieldId: subTable.fieldId || ('tableField_' + subTable.name)
-        });
+    var componentFields = parseComponentIdListFromFile(componentListPath);
 
-        if (subTable.fields && Array.isArray(subTable.fields)) {
-          subTable.fields.forEach(function(field, subIndex) {
-            var componentType = typeMap[field.type] || 'TextField';
-            fields.push({
-              index: String(tableDisplayIndex) + '.' + String(subIndex + 1),
-              componentType: componentType,
-              fieldName: field.name,
-              fieldId: field.id || ('field_' + field.name + '_' + String(tableDisplayIndex) + '.' + String(subIndex + 1))
-            });
-          });
-        }
+    if (componentFields && componentFields.length > 0) {
+      // 使用组件ID清单中的完整字段数据
+      componentFields.forEach(function(f) {
+        fields.push({
+          index: f.index,
+          componentType: f.componentType,
+          fieldName: f.fieldName,
+          fieldId: f.fieldId
+        });
       });
+    } else {
+      // 降级：仅使用字段清单中的主表字段
+      var mainIndex = 0;
+
+      // 处理主表字段
+      if (form.fields && Array.isArray(form.fields)) {
+        form.fields.forEach(function(field) {
+          // 跳过统计行
+          if (field.name === '主表字段' || field.name === '子表字段') return;
+          mainIndex++;
+          var componentType = typeMap[field.type] || 'TextField';
+          fields.push({
+            index: String(mainIndex),
+            componentType: componentType,
+            fieldName: field.name,
+            fieldId: field.id || ('field_' + field.name + '_' + String(mainIndex).padStart(2, '0'))
+          });
+        });
+      }
+
+      // 处理子表及其字段
+      if (form.subTables && Array.isArray(form.subTables)) {
+        form.subTables.forEach(function(subTable) {
+          mainIndex++;
+          var tableDisplayIndex = mainIndex;
+          fields.push({
+            index: String(tableDisplayIndex),
+            componentType: '子表单',
+            fieldName: subTable.name,
+            fieldId: subTable.fieldId || ('tableField_' + subTable.name)
+          });
+
+          if (subTable.fields && Array.isArray(subTable.fields)) {
+            subTable.fields.forEach(function(field, subIndex) {
+              var componentType = typeMap[field.type] || 'TextField';
+              fields.push({
+                index: String(tableDisplayIndex) + '.' + String(subIndex + 1),
+                componentType: componentType,
+                fieldName: field.name,
+                fieldId: field.id || ('field_' + field.name + '_' + String(tableDisplayIndex) + '.' + String(subIndex + 1))
+              });
+            });
+          }
+        });
+      }
     }
 
     if (fields.length > 0) {
       formConfigData[form.name] = {
         formName: form.name,
         formUuid: form.uuid || '',
-        fields: fields
+        fields: fields,
+        group: (form.module && form.module !== '-' && form.module !== '—') ? form.module : ''
       };
     }
   });
@@ -1973,7 +2134,7 @@ function generateFormConfigDataJs(allForms, outputDir) {
     '评分': 'RateField'
   };
 
-  // 表单直接放在项目根目录下，不再使用模块子目录
+  // v2.10.1: 表单按分组目录组织，组件ID清单路径需包含分组前缀
 
   const formConfigData = {};
 
@@ -2009,12 +2170,13 @@ function generateFormConfigDataJs(allForms, outputDir) {
           
           // 解析子表名称和 fieldId，格式如："分派任务详情 (tableField_mlvyrixo)" 或 "子表单 (tableField\\_molm11hq)"
           const subTableMatch = subTableFullName.match(/^(.+?)\s*\((tableField(?:\\_)?[^)]+)\)$/);
+          let subTableFieldId;
           if (subTableMatch) {
             currentSubTableName = subTableMatch[1].trim();  // 纯子表名称
-            var subTableFieldId = subTableMatch[2].trim().replace(/\\_/g, '_');  // fieldId，将 \_ 替换为 _
+            subTableFieldId = subTableMatch[2].trim().replace(/\\_/g, '_');  // fieldId，将 \_ 替换为 _
           } else {
             currentSubTableName = subTableFullName;
-            var subTableFieldId = 'tableField_' + subTableFullName;
+            subTableFieldId = 'tableField_' + subTableFullName;
           }
           
           mainIndex++;  // 子表容器占用一个主表序号
@@ -2075,14 +2237,52 @@ function generateFormConfigDataJs(allForms, outputDir) {
     projectRoot = path.resolve(outputDir, '..', '..');
   }
 
+  // v2.10.1: 查找带编号的分组目录（如 02基础信息）
+  function findFormDirectoryWithNumberPrefix(baseDir, moduleName) {
+    if (!fs.existsSync(baseDir)) return null;
+
+    // 1. 先尝试直接路径
+    var directPath = path.join(baseDir, moduleName);
+    if (fs.existsSync(directPath)) return directPath;
+
+    // 2. 查找带编号的目录（如 02基础信息）
+    var items = fs.readdirSync(baseDir, { withFileTypes: true });
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (!item.isDirectory()) continue;
+      var dirName = item.name;
+      // 跳过特殊目录
+      if (dirName === '01需求梳理' || dirName.startsWith('.') || dirName === 'temp-file') continue;
+      // 去掉编号后匹配（如 02基础信息 → 基础信息）
+      var nameWithoutNumber = dirName.replace(/^\d+/, '');
+      if (nameWithoutNumber === moduleName) {
+        return path.join(baseDir, dirName);
+      }
+    }
+
+    return null;
+  }
+
   allForms.forEach(function(form) {
     var fields = [];
 
     // 先尝试从组件ID清单.md获取完整字段数据（含子表子字段）
+    // v2.11.0: 分组目录加「分组」后缀，与表单目录结构对齐
     var typeStr = form.type === 'process' ? '流程表单' : '普通表单';
     var formDirName = form.name + '「' + typeStr + '」';
-    // 表单直接放在项目根目录下
-    var componentListPath = path.resolve(projectRoot, formDirName, '组件ID清单.md');
+    // v2.11.0: 分组目录加「分组」后缀
+    var groupDirName = form.module ? form.module + '「分组」' : '';
+    var formRelativePath = groupDirName ? path.join(groupDirName, formDirName) : formDirName;
+    var componentListPath = path.resolve(projectRoot, formRelativePath, '组件ID清单.md');
+
+    // v2.11.0: 如果带「分组」后缀的路径找不到，尝试查找不带后缀的旧分组目录（向后兼容）
+    if (!fs.existsSync(componentListPath) && form.module) {
+      var oldGroupDir = path.join(projectRoot, form.module);
+      if (fs.existsSync(oldGroupDir)) {
+        componentListPath = path.join(oldGroupDir, formDirName, '组件ID清单.md');
+      }
+    }
+
     var componentFields = parseComponentIdListFromFile(componentListPath);
 
     if (componentFields && componentFields.length > 0) {
@@ -2154,7 +2354,8 @@ function generateFormConfigDataJs(allForms, outputDir) {
       formConfigData[form.name] = {
         formName: form.name,
         formUuid: form.uuid || '',
-        fields: fields
+        fields: fields,
+        group: (form.module && form.module !== '-' && form.module !== '—') ? form.module : ''
       };
     }
   });
@@ -2206,11 +2407,15 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC'
 .sidebar { width: 208px; background: #fafafa; border-right: 1px solid #e8e8e8; position: fixed; top: 48px; bottom: 0; left: 0; overflow-y: auto; z-index: 100; }
 .menu { padding: 0; }
 .menu-group { margin-bottom: 4px; }
-.menu-group-title { padding: 12px 16px 8px; font-size: 12px; color: #8c8c8c; text-transform: none; font-weight: 400; }
+.menu-group-title { padding: 12px 16px 8px; font-size: 12px; color: #8c8c8c; text-transform: none; font-weight: 400; cursor: pointer; user-select: none; display: flex; align-items: center; gap: 4px; }
+.menu-group-title:hover { color: #595959; }
+.menu-group-arrow { display: inline-block; width: 12px; font-size: 10px; color: #8c8c8c; text-align: center; }
+.menu-group-icon { font-size: 14px; }
+.menu-group-items { overflow: hidden; }
 .menu-item { display: block; padding: 10px 16px 10px 32px; color: #595959; text-decoration: none; transition: all 0.3s; position: relative; font-size: 14px; border-left: 3px solid transparent; }
 .menu-item:hover { background: #e6f7ff; color: #1890ff; }
 .menu-item.active { background: #e6f7ff; color: #1890ff; border-left-color: #1890ff; }
-.menu-item.process::before { content: '▸'; position: absolute; left: 16px; color: #52c41a; font-size: 10px; }
+.menu-icon { margin-right: 6px; font-size: 12px; }
 .guide-menu-item { border-left: 3px solid #fa8c16; }
 .guide-menu-item:hover { border-left-color: #fa8c16; }
 .guide-menu-item.active { border-left-color: #fa8c16; background: #fff7e6; color: #d46b08; }
@@ -2727,11 +2932,37 @@ async function syncForm(formName) {
       throw new Error('同步服务未启动');
     }
     
+    // 【v2.7.2 修复】传入 projectDir 确保同步到正确的应用
+    // 从当前页面URL计算项目目录，避免多个应用有相同表单名时匹配错误
+    let projectDir = '';
+    const pathname = window.location.pathname;
+    const isFileProtocol = window.location.protocol === 'file:';
+    const pathParts = pathname.split('/').filter(p => p);
+    
+    if (isFileProtocol) {
+      // file协议: 从后向前查找项目目录名（匹配 xxx数字 格式）
+      for (let i = pathParts.length - 1; i >= 0; i--) {
+        const part = pathParts[i];
+        if (/^[^/]+\d+$/.test(part)) {
+          projectDir = part;
+          break;
+        }
+      }
+    } else {
+      // HTTP协议: 项目目录名是第一个路径段
+      if (pathParts.length > 0) {
+        projectDir = pathParts[0];
+      }
+    }
+    
     // 调用本地同步服务
     const response = await fetch(\`\${SYNC_SERVICE_URL}/sync-form\`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ formName: formName }),
+      body: JSON.stringify({ 
+        formName: formName,
+        projectDir: projectDir  // 【关键】传入项目目录，确保同步到正确的应用
+      }),
       signal: AbortSignal.timeout(60000) // 60秒超时
     });
     
@@ -2985,15 +3216,81 @@ function renderMenu(containerId, linkPrefix) {
   const container = document.getElementById(containerId);
   if (!container || typeof FormConfig === 'undefined') return;
 
-  const formNames = Object.keys(FormConfig.staticConfigData);
-  let html = '';
-  // 【开发引导】作为第一个菜单项
-  html += '<a href="' + linkPrefix + 'guide.html" class="menu-item guide-menu-item" data-form="__guide__">📋 开发引导</a>';
-  for (const name of formNames) {
-    const encodedName = encodeURIComponent(name);
-    html += '<a href="' + linkPrefix + 'list.html?form=' + encodedName + '" class="menu-item" data-form="' + name + '">' + name + '</a>';
+  // 1. 分离无分组表单和有分组表单（保序）
+  const noGroupForms = [];
+  const groupOrder = [];
+  const groupMap = {};
+  for (const name of Object.keys(FormConfig.staticConfigData)) {
+    const cfg = FormConfig.staticConfigData[name];
+    // 防御性检查：'-'/—' 是 markdown 无值占位符，视为无分组
+    const g = (cfg && cfg.group && cfg.group !== '-' && cfg.group !== '—' && cfg.group.trim()) ? cfg.group.trim() : '';
+    if (!g) {
+      // 无分组表单直接放入扁平列表
+      noGroupForms.push(name);
+    } else {
+      if (!groupMap[g]) { groupMap[g] = []; groupOrder.push(g); }
+      groupMap[g].push(name);
+    }
   }
+
+  let html = '';
+  // 2. 开发引导作为独立首项
+  html += '<a href="' + linkPrefix + 'guide.html" class="menu-item guide-menu-item" data-form="__guide__">📋 开发引导</a>';
+
+  // 3. 输出无分组表单（扁平显示，带表单图标）
+  for (const name of noGroupForms) {
+    const encodedName = encodeURIComponent(name);
+    const icon = getFormIcon(name);
+    html += '<a href="' + linkPrefix + 'list.html?form=' + encodedName + '" class="menu-item" data-form="' + name + '"><span class="menu-icon">' + icon + '</span>' + name + '</a>';
+  }
+
+  // 4. 按分组输出，每组一个可折叠的 .menu-group 块（默认收起，状态用 localStorage 持久化）
+  for (const g of groupOrder) {
+    // 读取持久化状态（默认收起），用 try-catch 防止 file:// 协议下 localStorage 不可用
+    var isExpanded = false;
+    try { isExpanded = localStorage.getItem('menu_group_' + g) === '1'; } catch (e) {} // 有意忽略：浏览器环境 localStorage 可能不可用
+    var arrow = isExpanded ? '▼' : '▶';
+    var displayStyle = isExpanded ? '' : ' style="display: none;"';
+    html += '<div class="menu-group">';
+    // 用 data-group 属性传递分组名，避免 onclick 字符串转义问题
+    html += '<div class="menu-group-title" onclick="toggleGroup(this)" data-group="' + g + '">';
+    html += '<span class="menu-group-arrow">' + arrow + '</span>';
+    html += '<span class="menu-group-icon">📁</span>';
+    html += '<span class="menu-group-name">' + g + '</span>';
+    html += '</div>';
+    html += '<div class="menu-group-items"' + displayStyle + '>';
+    for (const name of groupMap[g]) {
+      const encodedName = encodeURIComponent(name);
+      const icon = getFormIcon(name);
+      html += '<a href="' + linkPrefix + 'list.html?form=' + encodedName + '" class="menu-item" data-form="' + name + '"><span class="menu-icon">' + icon + '</span>' + name + '</a>';
+    }
+    html += '</div></div>';
+  }
+
   container.innerHTML = html;
+}
+
+// 根据表单类型返回图标：📄 普通表单 / 🔄 流程表单
+function getFormIcon(formName) {
+  const path = (typeof FormConfig !== 'undefined' && FormConfig.formPaths[formName]) || '';
+  return path.indexOf('「流程表单」') !== -1 ? '🔄' : '📄';
+}
+
+// 分组折叠/展开（▼ 展开 / ▶ 收起 切换，状态持久化到 localStorage）
+function toggleGroup(titleEl) {
+  var itemsEl = titleEl.nextElementSibling;
+  var arrowEl = titleEl.querySelector('.menu-group-arrow');
+  // 从 data-group 属性读取分组名，避免 onclick 字符串转义
+  var groupName = titleEl.getAttribute('data-group') || '';
+  if (itemsEl.style.display === 'none') {
+    itemsEl.style.display = '';
+    arrowEl.textContent = '▼';
+    try { localStorage.setItem('menu_group_' + groupName, '1'); } catch (e) {} // 有意忽略：浏览器环境 localStorage 可能不可用
+  } else {
+    itemsEl.style.display = 'none';
+    arrowEl.textContent = '▶';
+    try { localStorage.setItem('menu_group_' + groupName, '0'); } catch (e) {} // 有意忽略：浏览器环境 localStorage 可能不可用
+  }
 }
 
 // index.html 专用菜单渲染
@@ -3021,13 +3318,14 @@ function renderQuickLinks() {
   for (const name of formNames) {
     const encodedName = encodeURIComponent(name);
     const config = FormConfig.staticConfigData[name];
-    const hasSubTable = config.fields && config.fields.some(f => f.componentType === '子表单' || f.componentType === 'TableField');
+    const hasSubTable = config && config.fields && config.fields.some(f => f.componentType === '子表单' || f.componentType === 'TableField');
     const typeDesc = hasSubTable ? '普通表单（含子表）' : '普通表单';
+    const groupName = (config && config.group) ? config.group : '业务表单';
     html += '<a href="templates/list.html?form=' + encodedName + '" class="link-card">' +
       '<div class="link-icon">📄</div>' +
       '<div class="link-content">' +
       '<h4>' + name + '</h4>' +
-      '<p>业务表单 - ' + typeDesc + '</p>' +
+      '<p>' + groupName + ' - ' + typeDesc + '</p>' +
       '</div></a>';
   }
   linkGrid.innerHTML = html;
@@ -3431,4 +3729,6 @@ async function generateFormConfigOnly(markdownPath, outputDir) {
   console.log('============================================================\n');
 }
 
-main();
+if (require.main === module) {
+  main();
+}

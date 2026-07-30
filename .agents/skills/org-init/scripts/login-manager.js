@@ -33,6 +33,9 @@ const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
 
+// Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
+const coreUtils = require('../../../../lib/core/utils');
+
 // Windows 平台设置 UTF-8 代码页，解决中文乱码
 if (process.platform === 'win32') {
   try {
@@ -143,17 +146,11 @@ async function extractValidBaseUrl(page) {
 
 /**
  * 加载 Cookie 数据
+ * Phase 6: 委托给 lib/core/utils.loadCookieData（统一实现）
  * @returns {Object|null} Cookie 数据对象或 null
  */
 function loadCookieData() {
-  try {
-    if (!fs.existsSync(COOKIE_FILE)) return null;
-    const data = JSON.parse(fs.readFileSync(COOKIE_FILE, 'utf-8'));
-    return data;
-  } catch (e) {
-    console.error('  加载 Cookie 失败:', e.message);
-    return null;
-  }
+  return coreUtils.loadCookieData(PROJECT_ROOT, DEFAULT_BASE_URL);
 }
 
 /**
@@ -424,6 +421,71 @@ async function handleLoginFlow(page, config = {}) {
 // ==================== 主接口 ====================
 
 /**
+ * 从组织设置页面抓取组织名称和 Corp ID
+ * 注意：宜搭页面持续有后台请求，不能用 networkidle 等待（会一直等到超时），
+ * 必须用 domcontentloaded + 等待"组织名称"文本渲染完成
+ * 页面结构为标签与值分行显示（如 "组织名称\n云途数字技术"），按行提取
+ * @param {Object} page - Playwright 页面对象
+ * @param {string} baseUrl - 组织域名
+ * @returns {Promise<{corpName: string|null, corpId: string|null}>}
+ */
+async function fetchOrgInfoFromSettings(page, baseUrl) {
+  const info = { corpName: null, corpId: null };
+  const settingsUrl = `${baseUrl}/platformManage/basicInfo`;
+  console.log('    📄 访问:', settingsUrl);
+  await page.goto(settingsUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  // SPA 渲染需要时间，等待"组织名称"文本出现
+  try {
+    await page.waitForFunction(
+      () => (document.body.innerText || '').includes('组织名称'),
+      { timeout: 15000 }
+    );
+  } catch (e) {
+    console.log('    ⚠️ 等待"组织名称"渲染超时，尝试直接提取');
+  }
+  const currentUrl = page.url();
+  if (currentUrl.includes('error') || currentUrl.includes('login')) {
+    console.log('    ⚠️ 组织设置页面加载失败，当前URL:', currentUrl);
+    return info;
+  }
+  const extracted = await page.evaluate(() => {
+    const result = { corpName: null, corpId: null };
+    const rawText = document.body.innerText || '';
+    const lines = rawText.split('\n').map(l => l.trim()).filter(l => l);
+    // 标签与值分行：取标签行的下一行作为值
+    const nameLabels = ['组织名称', '企业名称', '公司名称'];
+    const nameIdx = lines.findIndex(l => nameLabels.includes(l));
+    if (nameIdx >= 0 && lines[nameIdx + 1] && !nameLabels.includes(lines[nameIdx + 1])) {
+      result.corpName = lines[nameIdx + 1];
+    }
+    // 兼容同行冒号格式（旧版页面）
+    if (!result.corpName) {
+      const m = rawText.match(/(?:组织名称|企业名称|公司名称)\s*[：:]\s*([^\n]+)/);
+      if (m && m[1].trim()) result.corpName = m[1].trim();
+    }
+    // Corp ID：标签行的下一行
+    const idIdx = lines.findIndex(l => /^corp\s*_?\s*id$/i.test(l));
+    if (idIdx >= 0 && lines[idIdx + 1] && /^[a-zA-Z0-9_-]+$/.test(lines[idIdx + 1])) {
+      result.corpId = lines[idIdx + 1];
+    }
+    if (!result.corpId) {
+      const m = rawText.match(/corp\s*_?\s*id\s*[：:]\s*([a-zA-Z0-9_-]+)/i);
+      if (m && m[1].trim()) result.corpId = m[1].trim();
+    }
+    return result;
+  });
+  if (extracted.corpName) {
+    info.corpName = extracted.corpName;
+    console.log('    ✅ 从设置页面获取到组织名称:', info.corpName);
+  }
+  if (extracted.corpId) {
+    info.corpId = extracted.corpId;
+    console.log('    ✅ 从设置页面获取到 Corp ID:', info.corpId);
+  }
+  return info;
+}
+
+/**
  * 确保拥有有效的登录态
  * 会自动验证现有 Cookie，如果无效则触发登录流程
  * 
@@ -473,12 +535,34 @@ async function ensureLogin(options = {}) {
                  bodyText.includes('表单设计') || bodyText.includes('组件库');
         });
         
-        await browser.close();
-        
         if (isLoggedIn) {
           console.log('  ✅ Cookie 有效，无需重新登录');
+          // 登录态里组织名称缺失/无效时，趁浏览器可用补抓一次并回写（无需重新登录）
+          const savedPrefix = savedBaseUrl.replace('https://', '').replace('.aliwork.com', '');
+          const savedCorpName = (existingData.login_user?.corpName || '').trim();
+          if (!savedCorpName || savedCorpName === '未知' || savedCorpName === savedPrefix) {
+            console.log('  🔍 登录态中组织名称缺失，补抓组织信息...');
+            try {
+              const fetched = await fetchOrgInfoFromSettings(page, savedBaseUrl);
+              if (fetched.corpName) {
+                existingData.login_user = existingData.login_user || {};
+                existingData.login_user.corpName = fetched.corpName;
+                if (fetched.corpId && !existingData.corp_id) {
+                  existingData.corp_id = fetched.corpId;
+                }
+                saveCookieData(existingData);
+                console.log('  ✅ 已补抓组织名称并更新登录态:', fetched.corpName);
+              } else {
+                console.log('  ⚠️ 补抓组织名称失败，保持现状');
+              }
+            } catch (e) {
+              console.log('  ⚠️ 补抓组织信息失败:', e.message);
+            }
+          }
+          await browser.close();
           return existingData;
         } else {
+          await browser.close();
           console.log('  ⚠️ Cookie 已失效，需要重新登录');
         }
       } catch (e) {
@@ -549,7 +633,7 @@ async function ensureLogin(options = {}) {
       console.error('     2. 宜搭服务器响应超时');
       try {
         console.error('  📍 当前URL:', page.url());
-      } catch(e) {}
+      } catch(e) {} // 有意忽略：页面可能已关闭，page.url() 会抛异常
       throw new Error('页面加载失败: ' + navError.message);
     }
     
@@ -600,123 +684,12 @@ async function ensureLogin(options = {}) {
     // 【第一重保险】访问组织设置页面获取信息
     console.log('\n  🔍 第1步：访问组织设置页面获取信息...');
     try {
-      const settingsUrl = `${baseUrl}/platformManage/basicInfo`;
-      console.log('    📄 访问:', settingsUrl);
-      await page.goto(settingsUrl, { waitUntil: 'networkidle', timeout: 30000 });
-      await page.waitForTimeout(3000);
-      
-      // 检查是否成功加载（不是错误页面）
-      const currentUrl = page.url();
-      if (!currentUrl.includes('error') && !currentUrl.includes('login')) {
-        console.log('    ✅ 成功加载组织设置页面');
-        
-        // 从组织设置页面提取信息
-        const settingsInfo = await page.evaluate(() => {
-          const info = {
-            corpName: null,
-            corpId: null
-          };
-          
-          // 获取页面所有文本内容
-          const bodyText = document.body.innerText || '';
-          
-          // 方法1: 从整个页面文本中提取
-          const orgNamePatterns = [
-            /组织名称\s*[：:]\s*([^\n]+)/,
-            /企业名称\s*[：:]\s*([^\n]+)/,
-            /公司名称\s*[：:]\s*([^\n]+)/
-          ];
-          
-          for (const pattern of orgNamePatterns) {
-            const match = bodyText.match(pattern);
-            if (match && match[1].trim()) {
-              info.corpName = match[1].trim();
-              break;
-            }
-          }
-          
-          // Corp ID 匹配 - 支持多种格式
-          const corpIdPatterns = [
-            /Corp ID\s*[：:]\s*([a-zA-Z0-9]+)/i,
-            /corp_id\s*[：:]\s*([a-zA-Z0-9]+)/i,
-            /CorpID\s*[：:]\s*([a-zA-Z0-9]+)/i,
-            /corpId\s*[：:]\s*([a-zA-Z0-9]+)/i,
-            /企业ID\s*[：:]\s*([a-zA-Z0-9]+)/i,
-            /组织ID\s*[：:]\s*([a-zA-Z0-9]+)/i
-          ];
-          
-          for (const pattern of corpIdPatterns) {
-            const match = bodyText.match(pattern);
-            if (match && match[1].trim()) {
-              info.corpId = match[1].trim();
-              break;
-            }
-          }
-          
-          // 调试：输出包含 "corp" 的文本行
-          const corpLines = bodyText.split('\n').filter(line => 
-            line.toLowerCase().includes('corp') || 
-            line.toLowerCase().includes('企业id') ||
-            line.toLowerCase().includes('组织id')
-          );
-          if (corpLines.length > 0) {
-            console.log('    📝 页面中包含 corp 的文本:', corpLines.slice(0, 3));
-          }
-          
-          // 方法2: 从 label + value 结构的元素中提取
-          const allElements = document.querySelectorAll('*');
-          allElements.forEach(el => {
-            const text = el.innerText || '';
-            
-            // 查找包含"组织名称"的元素
-            if (!info.corpName && (text === '组织名称' || text === '企业名称')) {
-              const parent = el.parentElement;
-              if (parent) {
-                const parentText = parent.innerText || '';
-                const valueMatch = parentText.replace(text, '').match(/[:：]?\s*([^\n]+)/);
-                if (valueMatch && valueMatch[1].trim() && valueMatch[1].trim() !== text) {
-                  info.corpName = valueMatch[1].trim();
-                }
-                
-                // 尝试获取下一个兄弟元素
-                if (!info.corpName) {
-                  const nextEl = parent.nextElementSibling;
-                  if (nextEl) {
-                    const nextText = nextEl.innerText || '';
-                    if (nextText && nextText !== text) {
-                      info.corpName = nextText.trim();
-                    }
-                  }
-                }
-              }
-            }
-            
-            // 查找包含"Corp ID"的元素
-            if (!info.corpId && text.toLowerCase().includes('corp id')) {
-              const parent = el.parentElement;
-              if (parent) {
-                const parentText = parent.innerText || '';
-                const valueMatch = parentText.replace(/corp id/i, '').match(/[:：]?\s*([a-zA-Z0-9]+)/i);
-                if (valueMatch && valueMatch[1].trim()) {
-                  info.corpId = valueMatch[1].trim();
-                }
-              }
-            }
-          });
-          
-          return info;
-        });
-        
-        if (settingsInfo.corpName) {
-          orgInfo.corpName = settingsInfo.corpName;
-          console.log('    ✅ 从设置页面获取到组织名称:', orgInfo.corpName);
-        }
-        if (settingsInfo.corpId) {
-          orgInfo.corpId = settingsInfo.corpId;
-          console.log('    ✅ 从设置页面获取到 Corp ID:', orgInfo.corpId);
-        }
-      } else {
-        console.log('    ⚠️ 组织设置页面加载失败，当前URL:', currentUrl);
+      const settingsInfo = await fetchOrgInfoFromSettings(page, baseUrl);
+      if (settingsInfo.corpName) {
+        orgInfo.corpName = settingsInfo.corpName;
+      }
+      if (settingsInfo.corpId) {
+        orgInfo.corpId = settingsInfo.corpId;
       }
     } catch (e) {
       console.log('    ⚠️ 访问组织设置页面失败:', e.message);
@@ -728,8 +701,8 @@ async function ensureLogin(options = {}) {
       try {
         const workbenchUrl = `${baseUrl}/workPlatform`;
         console.log('    📄 访问:', workbenchUrl);
-        await page.goto(workbenchUrl, { waitUntil: 'networkidle', timeout: 30000 });
-        await page.waitForTimeout(3000);
+        await page.goto(workbenchUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+        await page.waitForTimeout(5000);
         
         // 从工作台页面提取组织名称
         const workbenchInfo = await page.evaluate(() => {
@@ -802,7 +775,7 @@ async function ensureLogin(options = {}) {
     }
     
     console.log('\n  📋 组织信息获取结果:');
-    console.log('    - 组织名称:', orgInfo.corpName || '未获取（将使用域名前缀）');
+    console.log('    - 组织名称:', orgInfo.corpName || '未获取（将记为"未知"，保留配置文件原值）');
     console.log('    - Corp ID:', orgInfo.corpId || '未获取（将从Cookie获取）');
     
     // 从 cookies 中提取 corp_id（如果之前没有获取到或获取到的是无效值）
@@ -866,13 +839,17 @@ async function ensureLogin(options = {}) {
     }
     
     // 保存登录态
+    // 注意：抓取失败时不能用域名前缀兜底，否则下游会把域名前缀当成真实组织名称写入配置文件
+    if (!corpName) {
+      console.log('\n  ⚠️ 三重保险均未获取到组织名称，将记录为"未知"（不会覆盖配置文件中已有的组织名称）');
+    }
     const loginState = {
       cookies,
       base_url: baseUrl,
       corp_id: corpId,
       login_user: {
         userName: '未知',  // 暂时不获取用户名，专注于组织信息
-        corpName: corpName || domainPrefix // 优先使用获取的组织名称，否则使用域名前缀
+        corpName: corpName || '未知' // 抓取失败时记为"未知"，由 init-org 保留原配置值，绝不用域名前缀兜底
       }
     };
     
@@ -880,7 +857,7 @@ async function ensureLogin(options = {}) {
     
     console.log('\n✅ 登录流程完成！');
     console.log(`  当前页面: ${baseUrl}`);
-    console.log(`  组织名称: ${corpName || domainPrefix}`);
+    console.log(`  组织名称: ${corpName || '未获取到'}`);
     console.log(`  Corp ID: ${corpId || '未获取'}`);
     
     await browser.close();

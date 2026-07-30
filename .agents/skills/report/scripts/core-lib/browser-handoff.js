@@ -29,7 +29,7 @@ function isBrowserHandoffEnvironment() {
 }
 
 function shouldAttachBrowserHandoff(mode) {
-  if (process.env.OPENYIDA_NO_BROWSER_HANDOFF) {
+  if (process.env.YEQIU_YIDA_NO_BROWSER_HANDOFF) {
     return false;
   }
   if (mode === false) {

@@ -4,7 +4,7 @@
  * append.js - 向已有报表追加图表
  *
  * 用法：
- *   openyida append-chart <appType> <reportId> <图表定义JSON或文件路径>
+ *   yeqiu-yida append-chart <appType> <reportId> <图表定义JSON或文件路径>
  *
  * 关键规律（从 scripts/append-*.js 学习）：
  *   - GET Schema 用 /alibaba/web/ 路径
@@ -77,8 +77,8 @@ function parseArgs(args) {
   const openOption = parseOpenOption(args || []);
   const filteredArgs = openOption.args;
   if (!filteredArgs || filteredArgs.length < 3) {
-    warn('用法: openyida append-chart <appType> <reportId> <图表定义JSON或文件路径>');
-    warn('示例: openyida append-chart APP_XXX REPORT-XXX charts.json');
+    warn('用法: yeqiu-yida append-chart <appType> <reportId> <图表定义JSON或文件路径>');
+    warn('示例: yeqiu-yida append-chart APP_XXX REPORT-XXX charts.json');
     warn('');
     warn('图表定义格式（数组）：');
     warn('[{"type":"bar","title":"柱状图","cubeCode":"FORM_XXX","xField":{...},"yField":[...]}]');
@@ -183,7 +183,7 @@ async function main(args) {
   warn('\n[Step 1] 读取登录态...');
   const cookieData = loadCookieData();
   if (!cookieData) {
-    warn('未找到登录缓存，请先执行 openyida login');
+    warn('未找到登录缓存，请先执行 yeqiu-yida login');
     process.exit(1);
   }
   const { csrf_token: csrfToken, cookies } = cookieData;
@@ -207,7 +207,7 @@ async function main(args) {
   });
   if (hasConfigError) {
     warn('\n❌ 图表配置存在错误，请修正后重试。');
-    warn('提示：使用 openyida get-schema <appType> <formUuid> 获取表单字段信息。');
+    warn('提示：使用 yeqiu-yida get-schema <appType> <formUuid> 获取表单字段信息。');
     process.exit(1);
   }
 

@@ -1,4 +1,4 @@
-﻿---
+---
 name: project-creator
 description: 宜搭项目创建工具，用于初始化标准化的宜搭应用项目目录结构。当用户说"创建一个项目"、"初始化项目"、"新建XXX系统"、"我要做XXX管理"时，必须立即调用此Skill。只创建目录结构，绝不生成表单。
 ---
@@ -6,11 +6,8 @@ description: 宜搭项目创建工具，用于初始化标准化的宜搭应用�
 ## 🔴 硬规则（绝对不可违反）
 
 ### 通用硬规则
-1. **禁止通过API修改已有应用的表单字段内容** — 公式、代码、字段增删改只能复制粘贴（规则25）
-2. **应用ID和表单UUID必须填真实值** — 从系统配置清单.md读取，严禁占位符（规则24）
-3. **写入文件前必须校验** — 运行 `node scripts/ai-validator.js check-before-write <文件路径>` 确认不覆盖已有文件
-4. **写入文件后必须校验** — 运行 `node scripts/ai-validator.js check-after-write <文件路径>` 确认内容合规
-5. **Cookie必须使用根目录** — 严禁 process.cwd()，必须用 PROJECT_ROOT（规则26）
+
+> 本区块 1-5 条通用硬规则统一维护于 [../通用硬规则.md](../通用硬规则.md)（单一来源，避免多点复制导致规则漂移），执行前必须阅读并严格遵守。
 
 ### 专属硬规则
 1. **只创建目录结构绝不生成表单** — 本Skill只初始化目录，不创建任何宜搭表单
@@ -52,7 +49,7 @@ description: 宜搭项目创建工具，用于初始化标准化的宜搭应用�
 - **自动读取应用ID**：从「组织及应用信息.md」自动匹配并填入应用ID
 - 统一创建系统配置清单（自动填入已知的应用ID和CorpId）
 - 项目开发提示词.md 位于根目录，所有项目共用
-- 后续通过 `yida-config-sync` 技能同步宜搭应用信息
+- 后续通过 `config-sync` 技能同步宜搭应用信息
 - 适合所有项目场景（新项目或已有项目）
 - 支持AI智能分组（同步时自动分类表单到2-3个分组）
 
@@ -129,14 +126,14 @@ description: 宜搭项目创建工具，用于初始化标准化的宜搭应用�
 
 ```bash
 # 统一同步（推荐）- 同步应用ID、表单UUID、组件ID、表结构
-node .agents/skills/yida-config-sync/scripts/sync_all_configs.js "项目名称/01需求梳理/字段清单.md" "APP_XXX"
+node .agents/skills/config-sync/scripts/sync_all_configs.js "项目名称/01需求梳理/字段清单.md" "APP_XXX"
 
 # 或分步同步
 # 步骤1：同步系统配置清单
-node .agents/skills/yida-config-sync/scripts/sync_config.js --appId "APP_XXX" --output "项目名称"
+node .agents/skills/config-sync/scripts/sync_config.js --appId "APP_XXX" --output "项目名称"
 
 # 步骤2：同步表单结构及组件ID
-node .agents/skills/yida-config-sync/scripts/sync_form_schemas.js "项目名称/01需求梳理/字段清单.md" "APP_XXX"
+node .agents/skills/config-sync/scripts/sync_form_schemas.js "项目名称/01需求梳理/字段清单.md" "APP_XXX"
 ```
 
 同步内容：

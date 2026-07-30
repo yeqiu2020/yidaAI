@@ -12,6 +12,8 @@
 4. **有意图的留白**：充足的间距比堆砌元素更专业
 5. **避免 AI 平庸美学**：不要千篇一律的灰白配色 + 无衬线字体 + 圆角卡片
 
+> **视觉方向选择**：编写页面前必须先完成 [6 步视觉决策](visual-decision-guide.md)，从 5 套方向模板（商务专业/活力科技/温暖人文/极简效率/品牌定制）中选择一套，确保页面有明确视觉个性。
+
 ---
 
 ## 色彩系统
@@ -274,6 +276,40 @@ empty: {
   fontSize: '14px',
 },
 ```
+
+---
+
+## 原生控件 focus 边框重置（开启 Tailwind preflight 后建议做）
+
+开启 Tailwind `preflight` 后，`input` / `textarea` / `select` 及自定义下拉触发器在**聚焦时**会出现浏览器默认的黑色 / 粗边框（focus ring），与页面主题不一致。仅靠单个样式对象里的 `outline: 'none'` 不足以覆盖所有控件，建议在 `didMount` 里一次性注入一段控件 reset，兜住 focus 边框、`appearance`、`font-weight` 和阴影：
+
+```javascript
+export function injectControlReset() {
+  if (document.getElementById('cp-control-reset')) { return; }
+  var style = document.createElement('style');
+  style.id = 'cp-control-reset';
+  style.innerHTML = [
+    '.cp-page input,.cp-page textarea,.cp-page select,.cp-page .cp-select-trigger{',
+    '  appearance:none;-webkit-appearance:none;font-family:inherit;font-weight:400;',
+    '  outline:none!important;box-shadow:none;border:1px solid #D0D5DD;border-radius:6px;background:#fff;',
+    '}',
+    '.cp-page input:focus,.cp-page textarea:focus,.cp-page select:focus,.cp-page .cp-select-trigger:focus{',
+    '  border-color:var(--color-brand1-6,#2F6FED)!important;outline:none!important;',
+    '  box-shadow:0 0 0 3px rgba(47,111,237,.14)!important;',
+    '}',
+  ].join('');
+  document.head.appendChild(style);
+}
+
+// didMount 中调用一次；页面根容器加 className="cp-page"
+export function didMount() {
+  this.injectControlReset();
+  this.ensureTailwind();
+  this.loadData();
+}
+```
+
+> 页面根节点需带 `cp-page` 作用域类，避免样式外汄影响宿主页面；多页面切换时 reset 的 style id 建议页面专属，不要检测到全局 id 就跳过注入。
 
 ---
 

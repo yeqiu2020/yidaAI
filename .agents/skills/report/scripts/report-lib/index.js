@@ -142,10 +142,10 @@ function parseArgs(cliArgs) {
   const argv = openOption.args;
   if (argv.length < 3) {
     warn(
-      '用法: openyida create-report <appType> "<报表名称>" <图表定义JSON或文件路径>',
+      '用法: yeqiu-yida create-report <appType> "<报表名称>" <图表定义JSON或文件路径>',
     );
     warn(
-      '示例: openyida create-report APP_XXX "销售报表" charts.json',
+      '示例: yeqiu-yida create-report APP_XXX "销售报表" charts.json',
     );
     process.exit(1);
   }
@@ -365,7 +365,7 @@ async function main(args) {
   });
   if (hasConfigError) {
     warn('\n❌ 图表配置存在错误，请修正后重试。');
-    warn('提示：使用 openyida get-schema <appType> <formUuid> 获取表单字段信息。');
+    warn('提示：使用 yeqiu-yida get-schema <appType> <formUuid> 获取表单字段信息。');
     process.exit(1);
   }
   if (filters.length > 0) {

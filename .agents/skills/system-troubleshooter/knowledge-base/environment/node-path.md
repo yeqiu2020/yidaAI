@@ -1,4 +1,4 @@
-# Node.js 环境变量问题
+﻿# Node.js 环境变量问题
 
 ## 问题描述
 
@@ -50,8 +50,8 @@ execSync(`"${nodeCmd}" "${scriptPath}"`, { encoding: 'utf-8' });
 ```
 
 **已修复的 Skill：**
-- `yida-config-sync/scripts/sync_form_list_playwright.js`
-- `yida-config-sync/scripts/sync_form_schemas.js`
+- `config-sync/scripts/sync_form_list_playwright.js`
+- `config-sync/scripts/sync_form_schemas.js`
 
 ## 预防措施
 
@@ -70,4 +70,4 @@ execSync(`"${nodeCmd}" "${scriptPath}"`, { encoding: 'utf-8' });
 ## 参考
 
 - 问题发现时间：2026-04-18
-- 修复版本：yida-config-sync v3.8.1
+- 修复版本：config-sync v3.8.1

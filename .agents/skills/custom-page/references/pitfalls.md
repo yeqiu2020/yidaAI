@@ -427,6 +427,7 @@ page.on('pageerror', function(err) {
 | 页面空白但无报错 | Schema 结构错误 | P-11 |
 | 页面空白且 `getSchemaWithAllNavs` 返回 500 | `formType` 用了 `'page'` 而非 `'display'` | P-13 |
 | Jsx 组件不渲染 | render 格式错误 | P-07 |
+| 删除/确认操作点击无反应、无报错 | `confirm()` 被 iframe 阻止 | P-18 |
 
 ### 3. 验证发布结果
 
@@ -692,3 +693,54 @@ this.utils.yida.searchFormDatas(params)
 - 如需调试，只打印 `length`、`id` 等简单值
 - 调试代码应放在 `.then()` 之外或确保不会抛异常
 - 如果页面数据加载失败但 API 无报错，检查 `.then()` 中是否有异常代码
+
+---
+
+## 🟠 P-18：`confirm()` / `alert()` 在 iframe 中被阻止，删除等操作静默中断
+
+**发现日期**：2026-07-24
+**严重程度**：🟠 严重
+**表现**：点击删除/确认按钮无任何反应，控制台无报错，操作也没执行
+
+**根因分析**：
+
+自定义页面运行在宜搭的 iframe 内。浏览器安全策略会阻止跨源 iframe 弹出原生 `window.confirm()` / `window.alert()`。被阻止时 `confirm()` 直接返回 `false`（或整段中断），导致 `if (confirm(...))` 分支永远不进，删除逻辑静默失效，且不产生控制台错误——极难排查。
+
+**错误写法**：
+```javascript
+// ❌ 原生 confirm 在 iframe 中被阻止，返回 false，删除永远不执行
+export function onDeleteClick(record) {
+  if (confirm('确定删除吗？')) {
+    this.utils.yida.deleteFormData({ formInstId: record.formInstId });
+  }
+}
+```
+
+**正确写法**：改用平台弹窗 `this.utils.dialog` 的 `onOk` 回调（注意 renderJsx 范式下先 `var self = this`，回调内用 `self`）：
+```javascript
+// ✅ 用 this.utils.dialog 承接二次确认，onOk 中执行删除
+export function onDeleteClick(record) {
+  var self = this;
+  this.utils.dialog({
+    type: 'confirm',
+    title: '确认删除',
+    content: '删除后无法恢复，是否继续？',
+    onOk: function () {
+      self.utils.yida
+        .deleteFormData({ formInstId: record.formInstId })
+        .then(function () {
+          self.utils.toast({ title: '删除成功', type: 'success' });
+          self.loadData();
+        })
+        .catch(function (err) {
+          self.utils.toast({ title: '删除失败：' + (err && err.message), type: 'error' });
+        });
+    },
+  });
+}
+```
+
+**自检规则**：
+- 自定义页面中严禁使用原生 `confirm()` / `alert()` / `prompt()`
+- 二次确认统一用 `this.utils.dialog({ type: 'confirm', onOk })`，轻提示用 `this.utils.toast`
+- 删除等操作点击无反应且控制台无报错时，首先怀疑是否用了原生 `confirm()`

@@ -79,7 +79,7 @@ module.exports = {
     group_utility: 'Werkzeuge',
     cmd_commands: 'Maschinenlesbares Command Manifest ausgeben',
     cmd_a2a: 'Lokalen schreibgeschützten A2A-Adapter starten oder Agent Card ausgeben',
-    cmd_bridge: 'Lokalen OpenYida Web-Bridge-Dienst starten',
+    cmd_bridge: 'Lokalen Yeqiu-Yida Web-Bridge-Dienst starten',
     cmd_copy: 'project-Arbeitsverzeichnis kopieren',
     cmd_sample: 'Codebeispiele/Vorlagen ausgeben',
     cmd_doctor: 'Umgebungsdiagnose & automatische Reparatur',
@@ -100,21 +100,21 @@ module.exports = {
 
   // ── bin/yida.js ────────────────────────────────────
   cli: {
-    integration_help: 'Verwendung: openyida integration <create|list|enable|disable> ...',
+    integration_help: 'Verwendung: yeqiu-yida integration <create|list|enable|disable> ...',
     integration_unknown: 'Unbekannter integration-Unterbefehl: {0}',
-    integration_help_hint: 'Führen Sie openyida integration --help aus, um verfügbare Unterbefehle anzuzeigen',
-    integration_list_usage: 'Verwendung: openyida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
-    integration_list_example: 'Beispiel: openyida integration list APP_XXX --form-uuid FORM-XXX --json',
-    integration_enable_usage: 'Verwendung: openyida integration enable <appType> <formUuid> <processCode>',
-    integration_enable_example: 'Beispiel: openyida integration enable APP_XXX FORM-XXX LPROC-XXX',
-    integration_disable_usage: 'Verwendung: openyida integration disable <appType> <formUuid> <processCode>',
-    integration_disable_example: 'Beispiel: openyida integration disable APP_XXX FORM-XXX LPROC-XXX',
-    compile_usage: 'Verwendung: openyida compile <sourceFile>',
-    compile_example: 'Beispiel: openyida compile pages/src/home.oyd.jsx',
-    check_page_usage: 'Usage: openyida check-page <sourceFile> [--compat] [--json]',
-    check_page_example: 'Example: openyida check-page pages/src/home.oyd.jsx --json',
-    generate_page_usage: 'Usage: openyida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/openyida/page-specs/home.json] [--compile]',
-    generate_page_example: 'Example: openyida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
+    integration_help_hint: 'Führen Sie yeqiu-yida integration --help aus, um verfügbare Unterbefehle anzuzeigen',
+    integration_list_usage: 'Verwendung: yeqiu-yida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
+    integration_list_example: 'Beispiel: yeqiu-yida integration list APP_XXX --form-uuid FORM-XXX --json',
+    integration_enable_usage: 'Verwendung: yeqiu-yida integration enable <appType> <formUuid> <processCode>',
+    integration_enable_example: 'Beispiel: yeqiu-yida integration enable APP_XXX FORM-XXX LPROC-XXX',
+    integration_disable_usage: 'Verwendung: yeqiu-yida integration disable <appType> <formUuid> <processCode>',
+    integration_disable_example: 'Beispiel: yeqiu-yida integration disable APP_XXX FORM-XXX LPROC-XXX',
+    compile_usage: 'Verwendung: yeqiu-yida compile <sourceFile>',
+    compile_example: 'Beispiel: yeqiu-yida compile pages/src/home.oyd.jsx',
+    check_page_usage: 'Usage: yeqiu-yida check-page <sourceFile> [--compat] [--json]',
+    check_page_example: 'Example: yeqiu-yida check-page pages/src/home.oyd.jsx --json',
+    generate_page_usage: 'Usage: yeqiu-yida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/yeqiu-yida/page-specs/home.json] [--compile]',
+    generate_page_example: 'Example: yeqiu-yida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
   },
 
   // ── lib/integration/integration-check.js ─────────
@@ -143,9 +143,9 @@ module.exports = {
     summary: 'Check complete: {0} apps, {1} automations, {2} with abnormal logs',
     apps_failed: '{0} app(s) failed to check. See JSON output or error summary for details.',
     no_logs: 'No abnormal execution logs found.',
-    usage: 'openyida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
-    example: 'openyida integration check APP_XXX --output project/output/automation-errors.xlsx',
-    missing_app: 'Missing appType. Usage: openyida integration check <appType...>',
+    usage: 'yeqiu-yida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
+    example: 'yeqiu-yida integration check APP_XXX --output project/output/automation-errors.xlsx',
+    missing_app: 'Missing appType. Usage: yeqiu-yida integration check <appType...>',
     banner_title: 'Check integration automation abnormal logs',
     status_filter: 'Execution status filter: {0}',
     checking_app: 'Checking app: {0}',
@@ -156,7 +156,7 @@ module.exports = {
 
   // ── lib/env.js ─────────────────────────────────────
   env: {
-    title: '  openyida env - KI-Tool-Umgebungserkennung',
+    title: '  yeqiu-yida env - KI-Tool-Umgebungserkennung',
     detecting: '  KI-Tool-Umgebung wird erkannt...',
     tool_label: '  KI-Tool:       {0}',
     login_label: '  Anmeldestatus: {0}',
@@ -175,7 +175,7 @@ module.exports = {
     starting_qr: '  QR-Code-Anmeldung wird gestartet...',
     success: '✅ Anmeldung erfolgreich!',
     failed: '❌ Anmeldung fehlgeschlagen: {0}',
-    usage: 'Verwendung: openyida login',
+    usage: 'Verwendung: yeqiu-yida login',
   },
 
   // ── lib/logout.js ───────────────────────────────────
@@ -188,8 +188,8 @@ module.exports = {
 
   // ── lib/create-app.js ───────────────────────────────
   create_app: {
-    usage: 'Verwendung: openyida create-app "<App-Name>" oder openyida create-app --name "<App-Name>" [--desc "..."] [--theme deepBlue]',
-    example: 'Beispiel: openyida create-app --name "Meine App" --desc "App-Beschreibung" --theme deepBlue',
+    usage: 'Verwendung: yeqiu-yida create-app "<App-Name>" oder yeqiu-yida create-app --name "<App-Name>" [--desc "..."] [--theme deepBlue]',
+    example: 'Beispiel: yeqiu-yida create-app --name "Meine App" --desc "App-Beschreibung" --theme deepBlue',
     title: '  create-app - Yida-App-Erstellungstool',
     app_name: '\n  App-Name: {0}',
     app_desc: '  Beschreibung: {0}',
@@ -205,7 +205,7 @@ module.exports = {
 
   // ── lib/create-form.js ──────────────────────────────
   create_form: {
-    usage: 'Verwendung: openyida create-form <appType> <Seitenname> [Schema-JSON]',
+    usage: 'Verwendung: yeqiu-yida create-form <appType> <Seitenname> [Schema-JSON]',
     title: '  create-form - Yida-Formularseiten-Erstellungs-/Aktualisierungstool',
     app_id: '\n  App-ID:       {0}',
     page_name: '  Seitenname:   {0}',
@@ -220,7 +220,7 @@ module.exports = {
     data_exists_impact: '     - Verlust oder Beschädigung historischer Daten\n     - Anomalien im Prozessstatus\n     - Dateninkonsistenz',
     data_exists_abort: '  ❌ Änderung abgebrochen. Fügen Sie --force hinzu, um fortzufahren.',
     data_exists_confirm_message: 'Dieses Formular hat {0} vorhandene Datensätze. Eine Strukturänderung kann bestehende Daten beeinflussen. Fügen Sie --force zur Bestätigung hinzu.',
-    data_exists_force_hint: 'Verwendung: openyida create-form update <appType> <formUuid> <changesJson> --force',
+    data_exists_force_hint: 'Verwendung: yeqiu-yida create-form update <appType> <formUuid> <changesJson> --force',
     data_exists_force_proceed: '  ⚠️  --force Modus: Bestätigung übersprungen, erzwungene Strukturänderung mit {0} vorhandenen Datensätzen',
     data_check_empty: '  ✅ Formular hat keine Daten, Änderung sicher möglich',
     data_check_failed: '  ⚠️  Datenprüfung fehlgeschlagen, Änderung wird fortgesetzt',
@@ -228,8 +228,8 @@ module.exports = {
 
   // ── lib/create-page.js ──────────────────────────────
   create_page: {
-    usage: 'Verwendung: openyida create-page <appType> <Seitenname> [--mode dashboard]',
-    example: 'Beispiel: openyida create-page APP_XXX "Dashboard" --mode dashboard',
+    usage: 'Verwendung: yeqiu-yida create-page <appType> <Seitenname> [--mode dashboard]',
+    example: 'Beispiel: yeqiu-yida create-page APP_XXX "Dashboard" --mode dashboard',
     title: '  create-page - Yida-Benutzerdefinierte-Seiten-Erstellungstool',
     app_id: '\n  App-ID:       {0}',
     page_name: '  Seitenname:   {0}',
@@ -247,7 +247,7 @@ module.exports = {
 
   // ── lib/get-schema.js ───────────────────────────────
   get_schema: {
-    usage: 'Verwendung: openyida get-schema <appType> <formUuid>',
+    usage: 'Verwendung: yeqiu-yida get-schema <appType> <formUuid>',
     title: '  get-schema - Yida-Formular-Schema-Abruftool',
     app_id: '\n  App-ID:        {0}',
     form_uuid: '  Formular-UUID: {0}',
@@ -260,7 +260,7 @@ module.exports = {
   // ── lib/check-update.js ─────────────────────────────
   check_update: {
     new_version: '\n🎉 Neue Version verfügbar: {0} → {1}',
-    update_cmd: '   Aktualisierung: npm install -g openyida',
+    update_cmd: '   Aktualisierung: npm install -g yeqiu-yida',
     check_failed: 'Versionsüberprüfung fehlgeschlagen: {0}',
   },
 
@@ -270,10 +270,10 @@ module.exports = {
     fetch_failed: 'Neueste Version konnte nicht abgerufen werden. Bitte Netzwerkverbindung prüfen',
     already_latest: 'Bereits auf dem neuesten Stand ({0}), kein Update erforderlich',
     found_new_version: 'Neue Version gefunden: {0} (aktuell: {1})',
-    installing: 'openyida@latest wird installiert...',
+    installing: 'yeqiu-yida@latest wird installiert...',
     success: 'Update erfolgreich! Aktuelle Version: {0}',
     install_failed: 'Update fehlgeschlagen: {0}',
-    manual_hint: 'Bitte manuell ausführen: npm install -g openyida@latest',
+    manual_hint: 'Bitte manuell ausführen: npm install -g yeqiu-yida@latest',
     available: 'Update verfügbar',
     up_to_date: 'aktuell',
     label_install: 'Install',
@@ -281,12 +281,12 @@ module.exports = {
     label_version: 'Version',
     label_update: 'Update',
     done: 'Update abgeschlossen!',
-    done_hint: 'Führen Sie openyida --version aus, um die neue Version zu bestätigen',
+    done_hint: 'Führen Sie yeqiu-yida --version aus, um die neue Version zu bestätigen',
   },
 
   // ── lib/export-app.js ───────────────────────────────
   export_app: {
-    usage: 'Verwendung: openyida export-app <appType>',
+    usage: 'Verwendung: yeqiu-yida export-app <appType>',
     title: '  export-app - Yida-App-Exporttool',
     app_id: '\n  App-ID: {0}',
     step_export: '\n📦 App wird exportiert...',
@@ -297,7 +297,7 @@ module.exports = {
 
   // ── lib/import-app.js ───────────────────────────────
   import_app: {
-    usage: 'Verwendung: openyida import-app <Dateipfad>',
+    usage: 'Verwendung: yeqiu-yida import-app <Dateipfad>',
     title: '  import-app - Yida-App-Importtool',
     file_path: '\n  Dateipfad: {0}',
     step_import: '\n📥 App wird importiert...',
@@ -308,7 +308,7 @@ module.exports = {
 
   // ── lib/get-page-config.js ──────────────────────────
   get_page_config: {
-    usage: 'Verwendung: openyida get-page-config <appType> <formUuid>',
+    usage: 'Verwendung: yeqiu-yida get-page-config <appType> <formUuid>',
     title: '  get-page-config - Yida-Seitenkonfigurationsabruftool',
     app_id: '\n  App-ID:        {0}',
     form_uuid: '  Formular-UUID: {0}',
@@ -320,7 +320,7 @@ module.exports = {
 
   // ── lib/save-share-config.js ────────────────────────
   save_share_config: {
-    usage: 'Verwendung: openyida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
+    usage: 'Verwendung: yeqiu-yida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
     title: '  save-share-config - Yida-Öffentlicher-Zugang-Konfigurationsspeichertool',
     app_id: '\n  App-ID:        {0}',
     form_uuid: '  Formular-UUID: {0}',
@@ -346,7 +346,7 @@ module.exports = {
 
   // ── lib/update-form-config.js ──────────────────────
   update_form_config: {
-    usage: 'Verwendung: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    usage: 'Verwendung: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
     title: '  update-form-config - Yida-Formularkonfigurationsaktualisierungstool',
     app_id: '\n  App-ID:        {0}',
     form_uuid: '  Formular-UUID: {0}',
@@ -363,7 +363,7 @@ module.exports = {
 
   // ── lib/verify-short-url.js ────────────────────────
   verify_short_url: {
-    usage: 'Verwendung: openyida verify-short-url <appType> <formUuid> <url>',
+    usage: 'Verwendung: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
     title: '  verify-short-url - Yida-URL-Überprüfungstool',
     app_id: '\n  App-ID:        {0}',
     form_uuid: '  Formular-UUID: {0}',
@@ -385,19 +385,19 @@ module.exports = {
 
   // ── lib/copy.js ────────────────────────────────────
   copy: {
-    title: '  openyida copy - Yida-Arbeitsverzeichnis initialisieren',
+    title: '  yeqiu-yida copy - Yida-Arbeitsverzeichnis initialisieren',
     package_root: '\n📦 Paketstamm: {0}',
     dest_root: '🤖 Zielverzeichnis: {0}',
     dest_empty_flatten: '📂 Zielverzeichnis ist leer, project/-Inhalte werden direkt hineinkopiert (kein project/-Unterverzeichnis)',
     force_mode: '⚠️  --force-Modus: Zielverzeichnis wird vor dem Kopieren geleert',
-    no_package: '\n❌ openyida-Paketverzeichnis nicht gefunden',
-    no_package_hint1: '   Stellen Sie sicher, dass openyida global installiert ist:',
-    no_package_hint2: '   npm install -g openyida',
+    no_package: '\n❌ yeqiu-yida-Paketverzeichnis nicht gefunden',
+    no_package_hint1: '   Stellen Sie sicher, dass yeqiu-yida global installiert ist:',
+    no_package_hint2: '   npm install -g yeqiu-yida',
     no_active_tool: '\n❌ Keine aktive KI-Tool-Umgebung erkannt',
     supported_tools: '   Unterstützte Tools: Wukong, Codex, OpenCode, Claude Code, Aone Copilot, Cursor, Qoder',
     current_result: '\n   Aktuelle Erkennungsergebnisse:',
-    force_hint: '\n   Um in das aktuelle Verzeichnis zu kopieren:\n   openyida copy --force',
-    force_cmd: '   openyida copy --force',
+    force_hint: '\n   Um in das aktuelle Verzeichnis zu kopieren:\n   yeqiu-yida copy --force',
+    force_cmd: '   yeqiu-yida copy --force',
     copying_label: '\n📂 {0} wird kopiert...',
     creating_symlink: '\n📂 yida-skills/-Symlink wird erstellt...',
     file_copied: '    Kopiert: {0}',
@@ -429,7 +429,7 @@ module.exports = {
     available_templates: 'Available templates: {0}',
     template_not_found: 'Template file not found: {0}',
     done: 'Page generated: {0}',
-    hint: 'Next run openyida compile <file>, or pass --compile to compile immediately.',
+    hint: 'Next run yeqiu-yida compile <file>, or pass --compile to compile immediately.',
     success: 'Page generation complete',
   },
   publish: {
@@ -479,7 +479,7 @@ module.exports = {
     target_not_found: 'Publish target was not found in app navigation: {0}',
     target_type_invalid: 'Publish target is not a custom display page: {0} current type is {1}',
     target_type_hint: 'The current target "{0}" does not look like a custom page (type: {1}). Do not publish JSX to data forms or process forms.',
-    target_list_hint: 'Run openyida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
+    target_list_hint: 'Run yeqiu-yida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
     target_force_hint: 'Append --force only when you intentionally bypass this guard; it overwrites the target Schema and should be used only for a known custom page.',
     step_compile: '\n📦 Step 1: Quellcode kompilieren und Schema erstellen\n',
     reading_source: '[1/4] {0}-Quellcode wird gelesen...',
@@ -505,8 +505,8 @@ module.exports = {
     health_check_failed: '  ⚠️  Health check failed: HTTP {0} {1}',
     exception: '\n❌ Veröffentlichungsfehler: {0}',
     source_not_found: '❌ Quelldatei nicht gefunden: {0}',
-    usage: 'Verwendung: openyida publish <Quelldatei> <appType> <formUuid> [--health-check]',
-    example: 'Beispiel: openyida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
+    usage: 'Verwendung: yeqiu-yida publish <Quelldatei> <appType> <formUuid> [--health-check]',
+    example: 'Beispiel: yeqiu-yida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
   },
 
   // ── lib/qr-login.js ────────────────────────────────
@@ -540,9 +540,9 @@ module.exports = {
 
   // ── scripts/postinstall.js ─────────────────────────
   postinstall: {
-    welcome_title: '  🎉 Willkommen bei OpenYida!                                  ',
+    welcome_title: '  🎉 Willkommen bei Yeqiu-Yida!                                  ',
     install_success: '  ✅ Installation abgeschlossen! {0} Yida KI-Entwicklungstool ist bereit.',
-    update_success: '  ✅ Update abgeschlossen! {0} OpenYida wurde auf die neueste Version aktualisiert.',
+    update_success: '  ✅ Update abgeschlossen! {0} Yeqiu-Yida wurde auf die neueste Version aktualisiert.',
     ai_mode_title: '  🚀 KI-Gesprächsmodus',
     ai_mode_desc: '  In Codex / Claude Code / Aone Copilot / Cursor direkt chatten:',
     prompt1: "  📋  'Erstelle mir ein Anwesenheitsverwaltungssystem mit Yida'",
@@ -552,21 +552,21 @@ module.exports = {
     steps_title: '  📖 Erste Schritte',
     step1: '  {0}Step 1{1}  KI-Coding-Tool öffnen (Codex / Claude Code / Cursor usw.)',
     step2: '  {0}Step 2{1}  Gewünschte App in natürlicher Sprache beschreiben',
-    step3: '  {0}Step 3{1}  KI führt automatisch openyida-Befehle aus',
+    step3: '  {0}Step 3{1}  KI führt automatisch yeqiu-yida-Befehle aus',
     step4: '  {0}Step 4{1}  Yida-App-Link erhalten 🎉',
     commands_title: '  ⚡ Schnellbefehle',
-    cmd_env: '  {0}openyida env{1}      {2}# KI-Tool-Umgebung und Anmeldestatus erkennen{3}',
-    cmd_login: '  {0}openyida login{1}    {2}# Bei Yida anmelden{3}',
-    cmd_help: '  {0}openyida --help{1}   {2}# Alle Befehle anzeigen{3}',
-    footer1: '  📚 Dokumentation: https://github.com/openyida/openyida',
-    footer2: '  💬 Community: OpenYida-Community auf DingTalk beitreten',
+    cmd_env: '  {0}yeqiu-yida env{1}      {2}# KI-Tool-Umgebung und Anmeldestatus erkennen{3}',
+    cmd_login: '  {0}yeqiu-yida login{1}    {2}# Bei Yida anmelden{3}',
+    cmd_help: '  {0}yeqiu-yida --help{1}   {2}# Alle Befehle anzeigen{3}',
+    footer1: '  📚 Dokumentation: https://github.com/yeqiu-yida/yeqiu-yida',
+    footer2: '  💬 Community: Yeqiu-Yida-Community auf DingTalk beitreten',
   },
 
   // ── lib/cdn-*.js ───────────────────────────────────
   cdn: {
     config_load_error: 'CDN-Konfiguration konnte nicht geladen werden: {0}',
     config_saved: '✅ CDN-Konfiguration gespeichert in: {0}',
-    config_usage: 'Verwendung: openyida cdn-config [Optionen]',
+    config_usage: 'Verwendung: yeqiu-yida cdn-config [Optionen]',
     config_file_path: '📄 Konfigurationsdatei: {0}',
     config_section_aliyun: '🔐 Alibaba Cloud-Anmeldedaten',
     config_section_cdn: '🌐 CDN-Konfiguration',
@@ -592,7 +592,7 @@ module.exports = {
     upload_no_files: '❌ Bitte Bilddateien zum Hochladen angeben',
     config_incomplete: '❌ CDN-Konfiguration unvollständig',
     missing_fields: '   Fehlende Felder: {0}',
-    run_config_init: '   Bitte zuerst ausführen: openyida cdn-config --init',
+    run_config_init: '   Bitte zuerst ausführen: yeqiu-yida cdn-config --init',
     no_config: '❌ CDN-Konfiguration nicht gefunden',
     oss_sdk_required: '❌ ali-oss SDK fehlt',
     run_npm_install: '   Ausführen: npm install {0}',
@@ -626,15 +626,15 @@ module.exports = {
   flashNote: {
     toPrd: {
       title: '📋 DingTalk Flash-Notiz zu PRD',
-      help_usage: 'Verwendung: openyida flash-to-prd --file <Pfad> [--name <Projektname>]',
-      help_usage2: '            openyida flash-to-prd --name <Projektname>  (von stdin lesen)',
+      help_usage: 'Verwendung: yeqiu-yida flash-to-prd --file <Pfad> [--name <Projektname>]',
+      help_usage2: '            yeqiu-yida flash-to-prd --name <Projektname>  (von stdin lesen)',
       help_args_title: 'Argumente:',
       help_arg_file: '  --file, -f <Pfad>       Flash-Notiz-Dateipfad (.txt / .md)',
       help_arg_name: '  --name, -n <Name>       Projektname (optional, automatisch extrahiert)',
       help_arg_max_tokens: '  --max-tokens <Anzahl>   Max. AI-Ausgabe-Tokens (Standard 8000)',
       help_examples_title: 'Beispiele:',
-      help_example1: '  openyida flash-to-prd --file ./meeting-notes.txt --name "Geraeteinspektion"',
-      help_example2: '  cat meeting.txt | openyida flash-to-prd --name "Geraeteinspektion"',
+      help_example1: '  yeqiu-yida flash-to-prd --file ./meeting-notes.txt --name "Geraeteinspektion"',
+      help_example2: '  cat meeting.txt | yeqiu-yida flash-to-prd --name "Geraeteinspektion"',
       step_read: '[Schritt 1] Flash-Notiz-Inhalt wird gelesen...',
       file_not_found: 'Datei nicht gefunden: {0}',
       no_input: 'Kein Flash-Notiz-Inhalt angegeben. Verwenden Sie --file oder leiten Sie Inhalt ueber stdin weiter.',
@@ -669,11 +669,11 @@ module.exports = {
     },
   },
   codex_login: {
-    title: '  openyida login {0} - {1} Login Mode',
+    title: '  yeqiu-yida login {0} - {1} Login Mode',
     not_codex: 'Current environment is not detected as Codex / Qoder / Wukong; returning an in-app browser login handoff only.',
     no_playwright: '{0} mode does not require Playwright or a separate Chromium install.',
-    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use openyida login --browser for Yida login cookies.',
-    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use openyida login --browser when CLI cookies are required.',
+    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use yeqiu-yida login --browser for Yida login cookies.',
+    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use yeqiu-yida login --browser when CLI cookies are required.',
     handoff_message: '{0} in-app Browser cannot export Yida login cookies. Run fallback_command when CLI cookies are required.',
     cache_available: 'Existing CLI Cookie cache is available; no browser login needed.',
   },

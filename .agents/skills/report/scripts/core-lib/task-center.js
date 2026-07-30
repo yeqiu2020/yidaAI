@@ -2,7 +2,7 @@
  * task-center.js - 宜搭全局任务中心命令
  *
  * 用法：
- *   openyida task-center <type> [参数]
+ *   yeqiu-yida task-center <type> [参数]
  *
  * 支持的任务类型：
  *   todo       - 待办任务
@@ -33,14 +33,14 @@ const TASK_TYPE_MAP = {
   proxy: 'getSubmitAgentInCorp',
 };
 
-const USAGE = `openyida task-center - 宜搭全局任务中心
+const USAGE = `yeqiu-yida task-center - 宜搭全局任务中心
 
 Usage:
-  openyida task-center todo [--page N] [--size N] [--keyword TEXT]
-  openyida task-center created [--page N] [--size N] [--keyword TEXT] [--no-detail]
-  openyida task-center done [--page N] [--size N] [--keyword TEXT]
-  openyida task-center cc [--page N] [--size N] [--keyword TEXT]
-  openyida task-center proxy [--page N] [--size N] [--keyword TEXT]
+  yeqiu-yida task-center todo [--page N] [--size N] [--keyword TEXT]
+  yeqiu-yida task-center created [--page N] [--size N] [--keyword TEXT] [--no-detail]
+  yeqiu-yida task-center done [--page N] [--size N] [--keyword TEXT]
+  yeqiu-yida task-center cc [--page N] [--size N] [--keyword TEXT]
+  yeqiu-yida task-center proxy [--page N] [--size N] [--keyword TEXT]
 
 任务类型：
   todo       - 待办任务（需要我处理的）

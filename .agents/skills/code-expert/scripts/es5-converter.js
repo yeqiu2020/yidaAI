@@ -399,8 +399,8 @@ class ES5Converter {
         var typeName = CONVERSION_RULES[type] ? CONVERSION_RULES[type].name : type;
         lines.push('');
         lines.push('▸ ' + typeName + ' (' + items.length + '处)');
-        for (var i = 0; i < items.length && i < 5; i++) {
-          lines.push('  - ' + items[i].description);
+        for (let j = 0; j < items.length && j < 5; j++) {
+          lines.push('  - ' + items[j].description);
         }
         if (items.length > 5) {
           lines.push('  - ...还有 ' + (items.length - 5) + ' 处');

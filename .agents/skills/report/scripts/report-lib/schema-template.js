@@ -3,7 +3,7 @@
  * 组件库：//g.alicdn.com/code/npm/@ali/vc-yida-report/1.0.101/pc.js
  *
  * 使用方式：
- *   const { buildSchema } = require('./build-yida-report-schema');
+ *   const { buildSchema } = require('./build-report-schema');
  *   const schema = buildSchema.lineChart({ cubeCode: 'xxx', fieldList: ['date', 'value'] });
  *   console.log(JSON.stringify(schema, null, 2));
  */

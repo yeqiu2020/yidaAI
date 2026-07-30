@@ -8,7 +8,7 @@ const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
-// 可能的 Node.js 安装路径
+// 可能的 Node.js 安装路径（Phase 6: Windows 默认安装路径，非业务硬编码）
 const NODE_PATHS = [
   'C:\\Program Files\\nodejs\\node.exe',
   'C:\\Program Files (x86)\\nodejs\\node.exe',
@@ -36,7 +36,7 @@ function findNodePath() {
     }
   }
 
-  // 尝试从环境变量查找
+  // 尝试从环境变量查找（Phase 6: Windows 系统环境变量默认值，非业务硬编码）
   const programFiles = process.env['ProgramFiles'] || 'C:\\Program Files';
   const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
   

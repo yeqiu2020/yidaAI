@@ -2,9 +2,9 @@
  * batch.js - 批量命令编排（一次登录，多条命令复用 Cookie 缓存）
  *
  * 用法：
- *   openyida batch <commands-file>                 # 从文件读取，每行一条命令
- *   openyida batch --commands "cmd1 ; cmd2 ; cmd3" # 内联模式，分号分隔
- *   openyida batch --commands "cmd1" "cmd2" "cmd3"  # 内联模式，多参数
+ *   yeqiu-yida batch <commands-file>                 # 从文件读取，每行一条命令
+ *   yeqiu-yida batch --commands "cmd1 ; cmd2 ; cmd3" # 内联模式，分号分隔
+ *   yeqiu-yida batch --commands "cmd1" "cmd2" "cmd3"  # 内联模式，多参数
  *
  * 可选：
  *   --stop-on-error    遇到第一条失败命令即停止（默认继续执行）
@@ -190,8 +190,8 @@ async function run(args) {
   } else {
     const { error } = require('./chalk');
     error(
-      '用法: openyida batch <commands-file> 或 openyida batch --commands "cmd1 ; cmd2"',
-      { hint: '示例: openyida batch tasks.txt --json --quiet' }
+      '用法: yeqiu-yida batch <commands-file> 或 yeqiu-yida batch --commands "cmd1 ; cmd2"',
+      { hint: '示例: yeqiu-yida batch tasks.txt --json --quiet' }
     );
     return;
   }
@@ -235,8 +235,8 @@ async function run(args) {
     const commandLine = commands[i];
     const tokens = parseCommandLine(commandLine);
 
-    // 跳过 'openyida' 前缀（用户可能写了完整命令）
-    if (tokens[0] === 'openyida') {
+    // 跳过 'yeqiu-yida' 前缀（用户可能写了完整命令）
+    if (tokens[0] === 'yeqiu-yida') {
       tokens.shift();
     }
 

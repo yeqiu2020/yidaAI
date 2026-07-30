@@ -219,7 +219,7 @@ cubeCode:  FORM_AB4ACB9DD12C470D82047E05CDC19166CJSU  ← 连字符替换为下�
 ### 方法1：通过表单 Schema 获取
 
 ```bash
-node .agents/skills/yida-get-schema/scripts/get-schema.js <appType> <formUuid>
+node .agents/skills/get-schema/scripts/get-schema.js <appType> <formUuid>
 ```
 
 从返回的 Schema 中提取各字段的 `fieldId` 和类型。
@@ -228,9 +228,9 @@ node .agents/skills/yida-get-schema/scripts/get-schema.js <appType> <formUuid>
 
 在宜搭表单设计器中，点击字段查看属性，获取 `fieldCode` 和字段类型。
 
-### 方法3：通过 yida-config-sync 同步
+### 方法3：通过 config-sync 同步
 
-使用 `yida-config-sync` 技能同步应用配置，自动获取所有字段ID。
+使用 `config-sync` 技能同步应用配置，自动获取所有字段ID。
 
 ---
 

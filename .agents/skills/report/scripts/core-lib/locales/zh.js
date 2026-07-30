@@ -1,5 +1,6 @@
 /**
  * zh.js - 中文翻译
+ * 项目归属：yeqiu-yida（作者：叶秋）
  */
 'use strict';
 
@@ -82,7 +83,7 @@ module.exports = {
     group_utility: '工具',
     cmd_commands: '输出机器可读命令清单',
     cmd_a2a: '启动本地只读 A2A Adapter 或输出 Agent Card',
-    cmd_bridge: '启动 OpenYida 本地网页桥接服务',
+    cmd_bridge: '启动 Yeqiu-Yida 本地网页桥接服务',
     cmd_copy: '复制 project 工作目录',
     cmd_sample: '输出代码示例/模板',
     cmd_doctor: '环境诊断与自动修复',
@@ -105,10 +106,10 @@ module.exports = {
   // ── bin/yida.js ────────────────────────────────────
   cli: {
     help: `
-openyida - 宜搭命令行工具
+yeqiu-yida - 宜搭命令行工具
 
 用法：
-  openyida <命令> [参数...]（别名：yida）
+  yeqiu-yida <命令> [参数...]（别名：yida）
 
 命令：
   env                                                          检测当前 AI 工具环境和登录态
@@ -178,102 +179,102 @@ openyida - 宜搭命令行工具
   cdn-refresh [选项]                                           刷新 CDN 缓存
 
 示例：
-  openyida login
-  openyida logout
-  openyida create-app "考勤管理"
-  openyida create-app "考勤管理" "员工考勤系统" "xian-daka" "#00B853" "deepBlue" "dark" "slide"
-  openyida create-app "党建管理" "党员管理系统" "xian-zhengfu" "#FF4D4F" "red" "light" "ver"
-  openyida create-page APP_XXX "游戏主页"
-  openyida create-form create APP_XXX "员工信息" .cache/openyida/forms/employee-fields.json
-  openyida create-form update APP_XXX FORM-XXX '[{"action":"add","field":{"type":"TextField","label":"备注"}}]'
-  openyida list-forms APP_XXX
-  openyida list-forms APP_XXX --keyword 客户
-  openyida get-schema APP_XXX FORM-XXX
-  openyida get-schema APP_XXX --all --output-dir .cache/schemas
-  openyida formula evaluate 'IF(GT(#{numberField_total}, 100), "高", "低")' --schema .cache/schema.json
-  openyida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX
-  openyida verify-short-url APP_XXX FORM-XXX /o/myapp
-  openyida save-share-config APP_XXX FORM-XXX /o/myapp y n
-  openyida get-page-config APP_XXX FORM-XXX
-  openyida update-form-config APP_XXX FORM-XXX false "页面标题"
-  openyida data query form APP_XXX FORM-XXX --page 1 --size 20
-  openyida dws contact user search --keyword "悟空"
-  openyida dws calendar event list
-  openyida dws todo task create --title "任务"
-  openyida create-report APP_XXX "销售报表" .cache/openyida/reports/charts.json
-  openyida append-chart APP_XXX REPORT-XXX .cache/openyida/reports/charts.json
-  openyida configure-process APP_XXX FORM-YYY .cache/openyida/process/process-def.json
-  openyida create-process APP_XXX "订单处理表" .cache/openyida/process/fields.json .cache/openyida/process/process-def.json
-  openyida create-process APP_XXX --formUuid FORM-YYY .cache/openyida/process/process-def.json
-  openyida export APP_XXX
-  openyida export APP_XXX ./my-app-backup.json
-  openyida import ./yida-export.json
-  openyida import ./yida-export.json "质量追溯系统（生产环境）"
-  openyida doctor                                 完整诊断
-  openyida doctor --fix                           诊断并自动修复
-  openyida doctor --production --app APP_XXX      线上应用诊断
-  openyida doctor --monitor                       实时监控
-  openyida doctor --report markdown               生成 Markdown 报告
-  openyida doctor --create-ticket                 创建工单
-  openyida doctor --create-voc                    创建 VOC
-  openyida doctor --auto-submit                   自动判断并提交
-  openyida export-conversation                    导出当前对话记录
-  openyida export-conversation -o output.md       指定输出路径
-  openyida export-conversation --list             列出可用对话
+  yeqiu-yida login
+  yeqiu-yida logout
+  yeqiu-yida create-app "考勤管理"
+  yeqiu-yida create-app "考勤管理" "员工考勤系统" "xian-daka" "#00B853" "deepBlue" "dark" "slide"
+  yeqiu-yida create-app "党建管理" "党员管理系统" "xian-zhengfu" "#FF4D4F" "red" "light" "ver"
+  yeqiu-yida create-page APP_XXX "游戏主页"
+  yeqiu-yida create-form create APP_XXX "员工信息" .cache/yeqiu-yida/forms/employee-fields.json
+  yeqiu-yida create-form update APP_XXX FORM-XXX '[{"action":"add","field":{"type":"TextField","label":"备注"}}]'
+  yeqiu-yida list-forms APP_XXX
+  yeqiu-yida list-forms APP_XXX --keyword 客户
+  yeqiu-yida get-schema APP_XXX FORM-XXX
+  yeqiu-yida get-schema APP_XXX --all --output-dir .cache/schemas
+  yeqiu-yida formula evaluate 'IF(GT(#{numberField_total}, 100), "高", "低")' --schema .cache/schema.json
+  yeqiu-yida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX
+  yeqiu-yida verify-short-url APP_XXX FORM-XXX /o/myapp
+  yeqiu-yida save-share-config APP_XXX FORM-XXX /o/myapp y n
+  yeqiu-yida get-page-config APP_XXX FORM-XXX
+  yeqiu-yida update-form-config APP_XXX FORM-XXX false "页面标题"
+  yeqiu-yida data query form APP_XXX FORM-XXX --page 1 --size 20
+  yeqiu-yida dws contact user search --keyword "悟空"
+  yeqiu-yida dws calendar event list
+  yeqiu-yida dws todo task create --title "任务"
+  yeqiu-yida create-report APP_XXX "销售报表" .cache/yeqiu-yida/reports/charts.json
+  yeqiu-yida append-chart APP_XXX REPORT-XXX .cache/yeqiu-yida/reports/charts.json
+  yeqiu-yida configure-process APP_XXX FORM-YYY .cache/yeqiu-yida/process/process-def.json
+  yeqiu-yida create-process APP_XXX "订单处理表" .cache/yeqiu-yida/process/fields.json .cache/yeqiu-yida/process/process-def.json
+  yeqiu-yida create-process APP_XXX --formUuid FORM-YYY .cache/yeqiu-yida/process/process-def.json
+  yeqiu-yida export APP_XXX
+  yeqiu-yida export APP_XXX ./my-app-backup.json
+  yeqiu-yida import ./yida-export.json
+  yeqiu-yida import ./yida-export.json "质量追溯系统（生产环境）"
+  yeqiu-yida doctor                                 完整诊断
+  yeqiu-yida doctor --fix                           诊断并自动修复
+  yeqiu-yida doctor --production --app APP_XXX      线上应用诊断
+  yeqiu-yida doctor --monitor                       实时监控
+  yeqiu-yida doctor --report markdown               生成 Markdown 报告
+  yeqiu-yida doctor --create-ticket                 创建工单
+  yeqiu-yida doctor --create-voc                    创建 VOC
+  yeqiu-yida doctor --auto-submit                   自动判断并提交
+  yeqiu-yida export-conversation                    导出当前对话记录
+  yeqiu-yida export-conversation -o output.md       指定输出路径
+  yeqiu-yida export-conversation --list             列出可用对话
 `,
     unknown_command: '未知命令: {0}',
-    run_help: '运行 openyida --help 查看帮助',
-    integration_help: '用法: openyida integration <create|list|enable|disable|check> ...',
+    run_help: '运行 yeqiu-yida --help 查看帮助',
+    integration_help: '用法: yeqiu-yida integration <create|list|enable|disable|check> ...',
     integration_unknown: '未知的 integration 子命令: {0}',
-    integration_help_hint: '使用 openyida integration --help 查看可用子命令',
-    integration_list_usage: '用法: openyida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
-    integration_list_example: '示例: openyida integration list APP_XXX --form-uuid FORM-XXX --json',
-    integration_enable_usage: '用法: openyida integration enable <appType> <formUuid> <processCode>',
-    integration_enable_example: '示例: openyida integration enable APP_XXX FORM-XXX LPROC-XXX',
-    integration_disable_usage: '用法: openyida integration disable <appType> <formUuid> <processCode>',
-    integration_disable_example: '示例: openyida integration disable APP_XXX FORM-XXX LPROC-XXX',
-    compile_usage: '用法: openyida compile <源文件路径>',
-    compile_example: '示例: openyida compile pages/src/home.oyd.jsx',
-    check_page_usage: '用法: openyida check-page <源文件路径> [--compat] [--json]',
-    check_page_example: '示例: openyida check-page pages/src/home.oyd.jsx --json',
-    generate_page_usage: '用法: openyida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/openyida/page-specs/home.json] [--compile]',
-    generate_page_example: '示例: openyida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
-    build_page_usage: '用法: openyida build-page <源文件路径> [--output pages/build/page.yida.jsx|--write] [--json]',
-    build_page_example: '示例: openyida build-page pages/src/dashboard.oyd.jsx --output pages/build/dashboard.yida.jsx',
-    publish_usage: '用法: openyida publish <源文件路径> <appType> <formUuid> [--health-check]',
-    publish_example: '示例: openyida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX --health-check',
-    formula_usage: '用法: openyida formula evaluate <公式或文件> [--schema schema.json] [--json] [--strict]',
-    formula_example: '示例: openyida formula evaluate \'IF(GT(#{numberField_total}, 100), "高", "低")\' --schema .cache/schema.json',
-    verify_usage: '用法: openyida verify-short-url <appType> <formUuid> <url>',
-    verify_example: '示例: openyida verify-short-url APP_XXX FORM-XXX /o/myapp',
-    share_usage: '用法: openyida save-share-config <appType> <formUuid> <url> <isOpen> [openAuth]',
-    share_example: '示例: openyida save-share-config APP_XXX FORM-XXX /o/myapp y n',
-    page_config_usage: '用法: openyida get-page-config <appType> <formUuid>',
-    page_config_example: '示例: openyida get-page-config APP_XXX FORM-XXX',
-    form_config_usage: '用法: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
-    form_config_example: '示例: openyida update-form-config APP_XXX FORM-XXX false "页面标题"',
-    update_app_usage: '用法: openyida update-app <appType> --name "新名称" [--desc "描述"] [--icon "图标"]',
-    update_app_example: '示例: openyida update-app APP_XXX --name "新应用名称" --desc "新描述"',
-    export_usage: '用法: openyida export <appType> [output]',
-    export_example1: '示例: openyida export APP_XXX',
-    export_example2: '      openyida export APP_XXX ./my-app-backup.json',
-    import_usage: '用法: openyida import <file> [name]',
-    import_example1: '示例: openyida import ./yida-export.json',
-    import_example2: '      openyida import ./yida-export.json "质量追溯系统（生产环境）"',
-    configure_process_usage: '用法: openyida configure-process <appType> <formUuid> <processDefinitionFile> [processCode]',
-    configure_process_example: '示例: openyida configure-process "APP_XXX" "FORM-YYY" .cache/openyida/process/process-definition.json',
-    create_process_usage: '用法: openyida create-process <appType> <formTitle> <fieldsJsonFile> <processDefinitionFile>\n      openyida create-process <appType> --formUuid <formUuid> <processDefinitionFile>',
-    create_process_example: '示例: openyida create-process "APP_XXX" "订单处理表" .cache/openyida/process/fields.json .cache/openyida/process/process-definition.json',
-    process_usage: '用法: openyida process <子命令>\n\n子命令:\n  preview <appType> <processInstanceId> [--output <path>]  预览流程实例（生成可视化流程图）',
-    process_preview_usage: '用法: openyida process preview <appType> <processInstanceId> [--output <path>]',
-    process_preview_example: '示例: openyida process preview APP_XXX proc-inst-id-xxx',
-    get_permission_usage: '用法: openyida get-permission <appType> <formUuid>',
-    get_permission_example: '示例: openyida get-permission APP_XXX FORM-XXX',
-    save_permission_usage: '用法: openyida save-permission <appType> <formUuid> [--data-permission <json>] [--action-permission <json>]',
-    save_permission_example: "示例: openyida save-permission APP_XXX FORM-XXX --data-permission '{\"role\":\"DEFAULT\",\"dataRange\":\"SELF\"}'",
+    integration_help_hint: '使用 yeqiu-yida integration --help 查看可用子命令',
+    integration_list_usage: '用法: yeqiu-yida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
+    integration_list_example: '示例: yeqiu-yida integration list APP_XXX --form-uuid FORM-XXX --json',
+    integration_enable_usage: '用法: yeqiu-yida integration enable <appType> <formUuid> <processCode>',
+    integration_enable_example: '示例: yeqiu-yida integration enable APP_XXX FORM-XXX LPROC-XXX',
+    integration_disable_usage: '用法: yeqiu-yida integration disable <appType> <formUuid> <processCode>',
+    integration_disable_example: '示例: yeqiu-yida integration disable APP_XXX FORM-XXX LPROC-XXX',
+    compile_usage: '用法: yeqiu-yida compile <源文件路径>',
+    compile_example: '示例: yeqiu-yida compile pages/src/home.oyd.jsx',
+    check_page_usage: '用法: yeqiu-yida check-page <源文件路径> [--compat] [--json]',
+    check_page_example: '示例: yeqiu-yida check-page pages/src/home.oyd.jsx --json',
+    generate_page_usage: '用法: yeqiu-yida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/yeqiu-yida/page-specs/home.json] [--compile]',
+    generate_page_example: '示例: yeqiu-yida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
+    build_page_usage: '用法: yeqiu-yida build-page <源文件路径> [--output pages/build/page.yida.jsx|--write] [--json]',
+    build_page_example: '示例: yeqiu-yida build-page pages/src/dashboard.oyd.jsx --output pages/build/dashboard.yida.jsx',
+    publish_usage: '用法: yeqiu-yida publish <源文件路径> <appType> <formUuid> [--health-check]',
+    publish_example: '示例: yeqiu-yida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX --health-check',
+    formula_usage: '用法: yeqiu-yida formula evaluate <公式或文件> [--schema schema.json] [--json] [--strict]',
+    formula_example: '示例: yeqiu-yida formula evaluate \'IF(GT(#{numberField_total}, 100), "高", "低")\' --schema .cache/schema.json',
+    verify_usage: '用法: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
+    verify_example: '示例: yeqiu-yida verify-short-url APP_XXX FORM-XXX /o/myapp',
+    share_usage: '用法: yeqiu-yida save-share-config <appType> <formUuid> <url> <isOpen> [openAuth]',
+    share_example: '示例: yeqiu-yida save-share-config APP_XXX FORM-XXX /o/myapp y n',
+    page_config_usage: '用法: yeqiu-yida get-page-config <appType> <formUuid>',
+    page_config_example: '示例: yeqiu-yida get-page-config APP_XXX FORM-XXX',
+    form_config_usage: '用法: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    form_config_example: '示例: yeqiu-yida update-form-config APP_XXX FORM-XXX false "页面标题"',
+    update_app_usage: '用法: yeqiu-yida update-app <appType> --name "新名称" [--desc "描述"] [--icon "图标"]',
+    update_app_example: '示例: yeqiu-yida update-app APP_XXX --name "新应用名称" --desc "新描述"',
+    export_usage: '用法: yeqiu-yida export <appType> [output]',
+    export_example1: '示例: yeqiu-yida export APP_XXX',
+    export_example2: '      yeqiu-yida export APP_XXX ./my-app-backup.json',
+    import_usage: '用法: yeqiu-yida import <file> [name]',
+    import_example1: '示例: yeqiu-yida import ./yida-export.json',
+    import_example2: '      yeqiu-yida import ./yida-export.json "质量追溯系统（生产环境）"',
+    configure_process_usage: '用法: yeqiu-yida configure-process <appType> <formUuid> <processDefinitionFile> [processCode]',
+    configure_process_example: '示例: yeqiu-yida configure-process "APP_XXX" "FORM-YYY" .cache/yeqiu-yida/process/process-definition.json',
+    create_process_usage: '用法: yeqiu-yida create-process <appType> <formTitle> <fieldsJsonFile> <processDefinitionFile>\n      yeqiu-yida create-process <appType> --formUuid <formUuid> <processDefinitionFile>',
+    create_process_example: '示例: yeqiu-yida create-process "APP_XXX" "订单处理表" .cache/yeqiu-yida/process/fields.json .cache/yeqiu-yida/process/process-definition.json',
+    process_usage: '用法: yeqiu-yida process <子命令>\n\n子命令:\n  preview <appType> <processInstanceId> [--output <path>]  预览流程实例（生成可视化流程图）',
+    process_preview_usage: '用法: yeqiu-yida process preview <appType> <processInstanceId> [--output <path>]',
+    process_preview_example: '示例: yeqiu-yida process preview APP_XXX proc-inst-id-xxx',
+    get_permission_usage: '用法: yeqiu-yida get-permission <appType> <formUuid>',
+    get_permission_example: '示例: yeqiu-yida get-permission APP_XXX FORM-XXX',
+    save_permission_usage: '用法: yeqiu-yida save-permission <appType> <formUuid> [--data-permission <json>] [--action-permission <json>]',
+    save_permission_example: "示例: yeqiu-yida save-permission APP_XXX FORM-XXX --data-permission '{\"role\":\"DEFAULT\",\"dataRange\":\"SELF\"}'",
     exec_failed: '\n❌ 执行失败: {0}',
-    first_run_title: '  🤖 OpenYida - AI 问答模式已开启！                         ',
-    first_run_welcome: '  {0}欢迎首次使用 OpenYida！{1} 以下是快速上手指南：',
+    first_run_title: '  🤖 Yeqiu-Yida - AI 问答模式已开启！                         ',
+    first_run_welcome: '  {0}欢迎首次使用 Yeqiu-Yida！{1} 以下是快速上手指南：',
     first_run_way1_title: '  📝 方式一：直接描述需求',
     first_run_way1_desc: '  在 AI 工具对话框中，直接告诉 AI 你想要什么：',
     first_run_prompt1: '  「帮我用宜搭创建一个考勤管理系统」',
@@ -284,12 +285,12 @@ openyida - 宜搭命令行工具
     first_run_examples_title: '  📋 示例应用',
     first_run_examples: '  薪资计算器    • 生日祝福小程序    • 企业宣传页',
     first_run_tips_title: '  🔧 首次使用建议',
-    first_run_tip1: '  1. 运行 {0}openyida env{1}   检测环境和登录态',
-    first_run_tip2: '  2. 运行 {0}openyida login{1} 登录宜搭账号',
+    first_run_tip1: '  1. 运行 {0}yeqiu-yida env{1}   检测环境和登录态',
+    first_run_tip2: '  2. 运行 {0}yeqiu-yida login{1} 登录宜搭账号',
     first_run_tip3: '  3. 在 AI 工具中直接对话，描述你想要的应用 🚀',
     first_run_footer1: '  支持的 AI 工具：Codex / Claude Code / Aone Copilot / Cursor / OpenCode',
-    first_run_footer2: '  📚 文档：https://github.com/openyida/openyida',
-    first_run_footer3: '  （此引导仅首次运行时显示，运行 openyida --help 查看所有命令）',
+    first_run_footer2: '  📚 文档：https://github.com/yeqiu-yida/yeqiu-yida',
+    first_run_footer3: '  （此引导仅首次运行时显示，运行 yeqiu-yida --help 查看所有命令）',
   },
 
   // ── lib/integration/integration-check.js ─────────
@@ -318,9 +319,9 @@ openyida - 宜搭命令行工具
     summary: '检查完成：{0} 个应用，{1} 条自动化，{2} 条存在异常日志',
     apps_failed: '有 {0} 个应用检查失败，详见 JSON 输出或错误摘要。',
     no_logs: '未发现执行异常日志。',
-    usage: 'openyida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
-    example: 'openyida integration check APP_XXX --output project/output/自动化异常.xlsx',
-    missing_app: '缺少 appType。用法：openyida integration check <appType...>',
+    usage: 'yeqiu-yida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
+    example: 'yeqiu-yida integration check APP_XXX --output project/output/自动化异常.xlsx',
+    missing_app: '缺少 appType。用法：yeqiu-yida integration check <appType...>',
     banner_title: '检查集成自动化异常日志',
     status_filter: '执行状态筛选：{0}',
     checking_app: '检查应用：{0}',
@@ -331,7 +332,7 @@ openyida - 宜搭命令行工具
 
   // ── lib/env.js ─────────────────────────────────────
   env: {
-    title: '  openyida env - 环境检测',
+    title: '  yeqiu-yida env - 环境检测',
     system_info: '\n📋 系统信息',
     os: '  操作系统:   {0} ({1})',
     node: '  Node.js:    {0}',
@@ -355,22 +356,22 @@ openyida - 宜搭命令行工具
     corp_id_label: '  组织 ID:    {0}',
     user_id_label: '  用户 ID:    {0}',
     csrf_label: '  csrf_token: {0}...',
-    not_logged_in: '  状态:       ❌ 未登录（运行 openyida login 进行登录）',
+    not_logged_in: '  状态:       ❌ 未登录（运行 yeqiu-yida login 进行登录）',
     unknown: '(未知)',
   },
 
   // ── lib/login.js ───────────────────────────────────
   login: {
-    title: '  openyida login - 宜搭登录工具',
-    logout_title: '  openyida logout - 宜搭退出登录工具',
+    title: '  yeqiu-yida login - 宜搭登录工具',
+    logout_title: '  yeqiu-yida logout - 宜搭退出登录工具',
     cookie_file_label: '\n  Cookie 文件: {0}',
     logout_success: '  ✅ 已清空 Cookie，登录态已失效。',
-    logout_hint: '  下次调用 openyida login 时将重新触发扫码登录。',
+    logout_hint: '  下次调用 yeqiu-yida login 时将重新触发扫码登录。',
     logout_no_file: '  ℹ️  Cookie 文件不存在，无需清空。',
     using_cache: '🔍 检测到本地 Cookie，直接使用...',
     csrf_ok: '  ✅ csrf_token: {0}...',
     corp_id_ok: '  ✅ corpId: {0}',
-    no_playwright: '\n❌ 本地浏览器登录会优先使用 Chrome/Edge/Chromium CDP；当前 CDP 不可用且未找到 Playwright 兜底。默认请使用 openyida login 或 openyida login --qr；如确需本地浏览器登录，请先安装：',
+    no_playwright: '\n❌ 本地浏览器登录会优先使用 Chrome/Edge/Chromium CDP；当前 CDP 不可用且未找到 Playwright 兜底。默认请使用 yeqiu-yida login 或 yeqiu-yida login --qr；如确需本地浏览器登录，请先安装：',
     playwright_install1: '   npm install -g playwright',
     playwright_install2: '   npx playwright install chromium',
     browser_opening: '\n🔐 正在打开浏览器，请扫码登录...',
@@ -388,11 +389,11 @@ openyida - 宜搭命令行工具
 
   // ── lib/auth.js ────────────────────────────────────
   auth: {
-    status_title: '  openyida auth status - 登录状态查询',
+    status_title: '  yeqiu-yida auth status - 登录状态查询',
     not_logged_in: '  状态:       ❌ 未登录',
-    login_hint: '  提示:       运行 openyida auth login 进行登录',
+    login_hint: '  提示:       运行 yeqiu-yida auth login 进行登录',
     no_csrf_token: '  状态:       ❌ 登录态无效（无 csrf_token）',
-    relogin_hint: '  提示:       运行 openyida auth login 重新登录',
+    relogin_hint: '  提示:       运行 yeqiu-yida auth login 重新登录',
     logged_in: '  状态:       ✅ 已登录',
     base_url_label: '  域名:       {0}',
     corp_id_label: '  组织 ID:    {0}',
@@ -413,12 +414,12 @@ openyida - 宜搭命令行工具
 
   // ── lib/org.js ─────────────────────────────────────
   org: {
-    list_title: '  openyida org list - 组织列表',
+    list_title: '  yeqiu-yida org list - 组织列表',
     no_corp_id: '  ❌ 无法获取当前组织 ID，请先登录',
     current_org: '当前组织',
     current: '当前',
     no_organizations: '  ⚠️  暂无组织信息',
-    switch_title: '  openyida org switch - 组织切换',
+    switch_title: '  yeqiu-yida org switch - 组织切换',
     switch_from: '  当前组织: {0}',
     switch_to: '  目标组织: {0}',
     already_in_org: '  ✅ 已在目标组织中，无需切换',
@@ -434,16 +435,16 @@ openyida - 宜搭命令行工具
     only_one_org: '  ⚠️  只有一个组织，无需切换',
     select_prompt: '\n  请选择要切换的组织：',
     use_corp_id_hint: '\n  💡 提示：使用 --corp-id 参数指定目标组织',
-    no_login: '❌ 未登录，请先运行 openyida login',
+    no_login: '❌ 未登录，请先运行 yeqiu-yida login',
     switched_org: '切换后的组织',
     unknown: '未知',
   },
 
   // ── lib/create-app.js ──────────────────────────────
   create_app: {
-    title: '  openyida create-app - 宜搭应用创建工具',
-    usage: '用法: openyida create-app "<appName>" [description] [icon] [iconColor] [themeColor] 或 openyida create-app --name "<appName>" [--desc "..."] [--theme deepBlue]',
-    example: '示例: openyida create-app --name "考勤管理" --desc "员工考勤打卡系统" --theme deepBlue',
+    title: '  yeqiu-yida create-app - 宜搭应用创建工具',
+    usage: '用法: yeqiu-yida create-app "<appName>" [description] [icon] [iconColor] [themeColor] 或 yeqiu-yida create-app --name "<appName>" [--desc "..."] [--theme deepBlue]',
+    example: '示例: yeqiu-yida create-app --name "考勤管理" --desc "员工考勤打卡系统" --theme deepBlue',
     available_icons: '\n可用图标:',
     icons_list: '  xian-xinwen, xian-zhengfu, xian-yingyong, xian-xueshimao, xian-qiye,\n  xian-danju, xian-shichang, xian-jingli, xian-falv, xian-baogao,\n  huoche, xian-shenbao, xian-diqiu, xian-qiche, xian-feiji,\n  xian-diannao, xian-gongzuozheng, xian-gouwuche, xian-xinyongka,\n  xian-huodong, xian-jiangbei, xian-liucheng, xian-chaxun, xian-daka',
     available_colors: '\n可用颜色:',
@@ -468,9 +469,9 @@ openyida - 宜搭命令行工具
 
   // ── lib/create-page.js ─────────────────────────────
   create_page: {
-    title: '  openyida create-page - 宜搭自定义页面创建工具',
-    usage: '用法: openyida create-page <appType> "<pageName>" [--mode dashboard]',
-    example: '示例: openyida create-page "APP_XXX" "驾驶舱" --mode dashboard',
+    title: '  yeqiu-yida create-page - 宜搭自定义页面创建工具',
+    usage: '用法: yeqiu-yida create-page <appType> "<pageName>" [--mode dashboard]',
+    example: '示例: yeqiu-yida create-page "APP_XXX" "驾驶舱" --mode dashboard',
     app_id: '  应用 ID:  {0}',
     page_name: '  页面名称: {0}',
     step_create: '\n📄 Step 2: 创建自定义页面\n',
@@ -488,9 +489,9 @@ openyida - 宜搭命令行工具
 
   // ── lib/get-schema.js ──────────────────────────────
   get_schema: {
-    title: '  openyida get-schema - 宜搭表单 Schema 获取工具',
-    usage: '用法: openyida get-schema <appType> <formUuid> 或 openyida get-schema <appType> --all [--output-dir <dir>]',
-    example: '示例: openyida get-schema "APP_XXX" "FORM-XXX"；openyida get-schema "APP_XXX" --all --output-dir .cache/schemas',
+    title: '  yeqiu-yida get-schema - 宜搭表单 Schema 获取工具',
+    usage: '用法: yeqiu-yida get-schema <appType> <formUuid> 或 yeqiu-yida get-schema <appType> --all [--output-dir <dir>]',
+    example: '示例: yeqiu-yida get-schema "APP_XXX" "FORM-XXX"；yeqiu-yida get-schema "APP_XXX" --all --output-dir .cache/schemas',
     app_id: '  应用 ID:    {0}',
     form_uuid: '  表单 UUID:  {0}',
     step_get: '\n📄 Step 2: 获取表单 Schema',
@@ -501,9 +502,9 @@ openyida - 宜搭命令行工具
 
   list_forms: {
     title: '  yidacli list-forms - 应用表单/页面列表查询工具',
-    usage: '用法: openyida list-forms <appType> [--keyword <关键词>]',
-    example1: '示例: openyida list-forms APP_XXX',
-    example2: '      openyida list-forms APP_XXX --keyword 客户',
+    usage: '用法: yeqiu-yida list-forms <appType> [--keyword <关键词>]',
+    example1: '示例: yeqiu-yida list-forms APP_XXX',
+    example2: '      yeqiu-yida list-forms APP_XXX --keyword 客户',
     app_id: '  应用 ID:  {0}',
     keyword: '  关键词:   {0}',
     step_get: '\n📋 步骤 2: 获取应用下的表单/页面列表',
@@ -580,13 +581,13 @@ openyida - 宜搭命令行工具
     schema_ok_config_failed: '  Schema 已保存，但配置更新失败',
     schema_saved_config_failed: '  Schema 已保存，但配置更新失败',
     error: '\n❌ 错误: {0}',
-    usage_create: '用法: openyida create-form create <appType> <formTitle> <fieldsJsonFile>',
-    example_create: '示例：openyida create-form create "APP_XXX" "员工信息登记" .cache/openyida/forms/employee-fields.json',
-    usage_update: '用法: openyida create-form update <appType> <formUuid> <changesJsonOrFile>',
-    example_update: '示例：openyida create-form update "APP_XXX" "FORM-YYY" \'[{"action":"add","field":{"type":"TextField","label":"备注"}}]\'',
+    usage_create: '用法: yeqiu-yida create-form create <appType> <formTitle> <fieldsJsonFile>',
+    example_create: '示例：yeqiu-yida create-form create "APP_XXX" "员工信息登记" .cache/yeqiu-yida/forms/employee-fields.json',
+    usage_update: '用法: yeqiu-yida create-form update <appType> <formUuid> <changesJsonOrFile>',
+    example_update: '示例：yeqiu-yida create-form update "APP_XXX" "FORM-YYY" \'[{"action":"add","field":{"type":"TextField","label":"备注"}}]\'',
     usage_label: '用法:',
-    usage_create_short: '  创建: openyida create-form create <appType> <formTitle> <fieldsJsonFile>',
-    usage_update_short: '  更新: openyida create-form update <appType> <formUuid> <changesJsonOrFile>',
+    usage_create_short: '  创建: yeqiu-yida create-form create <appType> <formTitle> <fieldsJsonFile>',
+    usage_update_short: '  更新: yeqiu-yida create-form update <appType> <formUuid> <changesJsonOrFile>',
     example_label: '\n示例:',
     fields_file_not_found: '  ❌ 字段定义文件不存在: ',
     fields_format_invalid: '字段定义格式不正确',
@@ -629,7 +630,7 @@ openyida - 宜搭命令行工具
     data_exists_impact: '     - 历史数据丢失或损坏\n     - 流程状态异常\n     - 数据不一致',
     data_exists_abort: '  ❌ 已中止修改。如需强制执行，请添加 --force 参数。',
     data_exists_confirm_message: '该表单已有 {0} 条数据，修改结构可能影响已有数据。请添加 --force 参数确认执行。',
-    data_exists_force_hint: '用法: openyida create-form update <appType> <formUuid> <changesJson> --force',
+    data_exists_force_hint: '用法: yeqiu-yida create-form update <appType> <formUuid> <changesJson> --force',
     data_exists_force_proceed: '  ⚠️  --force 模式：跳过确认，强制修改已有 {0} 条数据的表单结构',
     data_check_empty: '  ✅ 表单暂无数据，可安全修改',
     data_check_failed: '  ⚠️  数据量检查失败，继续执行修改',
@@ -663,10 +664,10 @@ openyida - 宜搭命令行工具
 
   // ── lib/export-app.js ──────────────────────────────
   export: {
-    usage: '用法: openyida export <appType> [output]',
-    example1: '示例: openyida export APP_XXXXXXXXXXXXX',
-    example2: '      openyida export APP_XXXXXXXXXXXXX ./my-app-backup.json',
-    title: '  openyida export - 宜搭应用导出工具',
+    usage: '用法: yeqiu-yida export <appType> [output]',
+    example1: '示例: yeqiu-yida export APP_XXXXXXXXXXXXX',
+    example2: '      yeqiu-yida export APP_XXXXXXXXXXXXX ./my-app-backup.json',
+    title: '  yeqiu-yida export - 宜搭应用导出工具',
     app_id: '\n  应用 ID:  {0}',
     output_file: '  输出文件: {0}',
     step_get_forms: '\n📋 Step 2: 获取应用表单列表',
@@ -685,17 +686,17 @@ openyida - 宜搭命令行工具
   },
 
   // ── lib/import-app.js ──────────────────────────────
-  import_example2: '      openyida import ./yida-export.json "质量追溯系统（生产环境）"',
+  import_example2: '      yeqiu-yida import ./yida-export.json "质量追溯系统（生产环境）"',
   exec_failed: '\n❌ 执行失败: {0}',
-  auth_usage: '用法: openyida auth <status|login|refresh|logout>',
-  auth_example: '示例:\n  openyida auth status         # 查看登录状态\n  openyida auth login          # 执行登录\n  openyida auth login --codex  # Codex 内置浏览器登录\n  openyida auth refresh        # 刷新登录态\n  openyida auth logout         # 退出登录',
-  org_usage: '用法: openyida org <list|switch>',
-  org_example: '示例:\n  openyida org list                    # 列出可访问的组织\n  openyida org switch --corp-id dingXXX  # 切换到指定组织',
-  title: '  openyida import - 宜搭应用导入工具',
+  auth_usage: '用法: yeqiu-yida auth <status|login|refresh|logout>',
+  auth_example: '示例:\n  yeqiu-yida auth status         # 查看登录状态\n  yeqiu-yida auth login          # 执行登录\n  yeqiu-yida auth login --codex  # Codex 内置浏览器登录\n  yeqiu-yida auth refresh        # 刷新登录态\n  yeqiu-yida auth logout         # 退出登录',
+  org_usage: '用法: yeqiu-yida org <list|switch>',
+  org_example: '示例:\n  yeqiu-yida org list                    # 列出可访问的组织\n  yeqiu-yida org switch --corp-id dingXXX  # 切换到指定组织',
+  title: '  yeqiu-yida import - 宜搭应用导入工具',
   // ── lib/get-page-config.js ─────────────────────────
   get_page_config: {
-    usage: '用法: openyida get-page-config <appType> <formUuid>',
-    example: '示例: openyida get-page-config APP_XXX FORM-XXX',
+    usage: '用法: yeqiu-yida get-page-config <appType> <formUuid>',
+    example: '示例: yeqiu-yida get-page-config APP_XXX FORM-XXX',
     title: '  get-page-config - 宜搭页面配置查询工具',
     app_id: '\n  应用 ID:    {0}',
     form_uuid: '  表单 UUID:  {0}',
@@ -710,8 +711,8 @@ openyida - 宜搭命令行工具
 
   // ── lib/save-share-config.js ───────────────────────
   save_share_config: {
-    usage: '用法: openyida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
-    example: '示例: openyida save-share-config "APP_XXX" "FORM-XXX" "/o/xxx" "y" "n"',
+    usage: '用法: yeqiu-yida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
+    example: '示例: yeqiu-yida save-share-config "APP_XXX" "FORM-XXX" "/o/xxx" "y" "n"',
     is_open_hint: '  isOpen: y=开启公开访问, n=关闭公开访问',
     open_auth_hint: '  openAuth: y=需要授权, n=不需要授权（默认）',
     title: '  save-share-config - 宜搭公开访问配置保存工具',
@@ -738,8 +739,8 @@ openyida - 宜搭命令行工具
 
   // ── lib/update-app.js ─────────────────────────────
   update_app: {
-    usage: '用法: openyida update-app <appType> --name "新名称" [--desc "描述"] [--icon "图标"] [--icon-color "颜色"]',
-    example: '示例: openyida update-app APP_XXX --name "新应用名称" --desc "新描述"',
+    usage: '用法: yeqiu-yida update-app <appType> --name "新名称" [--desc "描述"] [--icon "图标"] [--icon-color "颜色"]',
+    example: '示例: yeqiu-yida update-app APP_XXX --name "新应用名称" --desc "新描述"',
     options: '选项:\n  --name, -n      应用名称（必填或至少一个更新字段）\n  --desc, -d      应用描述\n  --icon          图标名称（如: xian-yingyong）\n  --icon-color    图标颜色（默认: #0089FF）',
     missing_app_type: '错误: 缺少 appType 参数',
     missing_update_field: '错误: 至少需要指定一个更新字段（--name, --desc, --icon）',
@@ -790,16 +791,16 @@ openyida - 宜搭命令行工具
     process_def_not_found: '流程定义文件不存在',
     done: '流程表单创建完成',
     url: '访问地址',
-    usage: '用法: openyida create-process <appType> <formTitle> <fieldsJsonFile> <processDefinitionFile>',
-    usage2: '      openyida create-process <appType> --formUuid <formUuid> <processDefinitionFile>',
-    example: '示例: openyida create-process "APP_XXX" "订单处理表" .cache/openyida/process/fields.json .cache/openyida/process/process-definition.json',
-    example2: '      openyida create-process "APP_XXX" --formUuid FORM-YYY .cache/openyida/process/process-definition.json',
+    usage: '用法: yeqiu-yida create-process <appType> <formTitle> <fieldsJsonFile> <processDefinitionFile>',
+    usage2: '      yeqiu-yida create-process <appType> --formUuid <formUuid> <processDefinitionFile>',
+    example: '示例: yeqiu-yida create-process "APP_XXX" "订单处理表" .cache/yeqiu-yida/process/fields.json .cache/yeqiu-yida/process/process-definition.json',
+    example2: '      yeqiu-yida create-process "APP_XXX" --formUuid FORM-YYY .cache/yeqiu-yida/process/process-definition.json',
   },
 
   // ── lib/update-form-config.js ──────────────────────
   update_form_config: {
-    usage: '用法: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
-    example: '示例: openyida update-form-config "APP_XXX" "FORM_XXX" "false" "我的页面"',
+    usage: '用法: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    example: '示例: yeqiu-yida update-form-config "APP_XXX" "FORM_XXX" "false" "我的页面"',
     params_label: '参数说明:',
     param_is_render_nav: '  isRenderNav: true=显示顶部导航, false=隐藏顶部导航',
     param_title: '  title: 页面标题（必填）',
@@ -819,8 +820,8 @@ openyida - 宜搭命令行工具
 
   // ── lib/verify-short-url.js ────────────────────────
   verify_short_url: {
-    usage: '用法: openyida verify-short-url <appType> <formUuid> <url>',
-    example: '示例: openyida verify-short-url "APP_XXX" "FORM-XXX" "/o/aaa"',
+    usage: '用法: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
+    example: '示例: yeqiu-yida verify-short-url "APP_XXX" "FORM-XXX" "/o/aaa"',
     formats_label: '  支持两种格式：',
     format_open: '    /o/xxx - 公开访问（对外）',
     format_share: '    /s/xxx - 组织内分享（对内）',
@@ -846,21 +847,21 @@ openyida - 宜搭命令行工具
   },
   // ── lib/copy.js ────────────────────────────────────
   copy: {
-    title: '  openyida copy - 初始化宜搭工作目录',
+    title: '  yeqiu-yida copy - 初始化宜搭工作目录',
     package_root: '\n📦 包根目录: {0}',
     dest_base: '🤖 目标根目录: {0}',
     dest_root: '🤖 目标根目录: {0}',
     dest_empty_flatten: '📂 目标目录为空，将 project/ 内容直接铺入（不创建 project/ 子目录）',
     force_mode: '⚠️  --force 模式：目标目录将被清空后重新复制',
-    no_package: '\n❌ 未找到 openyida 安装包目录',
-    no_package_hint1: '   请确认 openyida 已正确全局安装：',
-    no_package_hint2: '   npm install -g openyida',
+    no_package: '\n❌ 未找到 yeqiu-yida 安装包目录',
+    no_package_hint1: '   请确认 yeqiu-yida 已正确全局安装：',
+    no_package_hint2: '   npm install -g yeqiu-yida',
     no_ai_tool: '\n❌ 未检测到活跃的 AI 工具环境\n   支持的工具：悟空、Codex、OpenCode、Claude Code、Aone Copilot、Cursor、Qoder\n\n   当前检测结果：',
     no_active_tool: '\n❌ 未检测到活跃的 AI 工具环境',
     supported_tools: '   支持的工具：悟空、Codex、OpenCode、Claude Code、Aone Copilot、Cursor、Qoder',
     current_result: '\n   当前检测结果：',
-    force_hint: '\n   如需强制复制到当前目录，请运行：\n   openyida copy --force',
-    force_cmd: '   openyida copy --force',
+    force_hint: '\n   如需强制复制到当前目录，请运行：\n   yeqiu-yida copy --force',
+    force_cmd: '   yeqiu-yida copy --force',
     copying: '    复制: {0}',
     copying_label: '\n📂 复制 {0}...',
     creating_symlink: '\n📂 创建 yida-skills/ 软链接...',
@@ -888,7 +889,7 @@ openyida - 宜搭命令行工具
 
   // ── lib/check-update.js ────────────────────────────
   check_update: {
-    new_version: '\n💡 发现新版本 {0}（当前 {1}）\n   运行以下命令更新：\n   npm install -g openyida@latest\n',
+    new_version: '\n💡 发现新版本 {0}（当前 {1}）\n   运行以下命令更新：\n   npm install -g yeqiu-yida@latest\n',
   },
 
   // ── lib/update.js ──────────────────────────────────
@@ -897,10 +898,10 @@ openyida - 宜搭命令行工具
     fetch_failed: '无法获取最新版本信息，请检查网络连接',
     already_latest: '当前已是最新版本（{0}），无需更新',
     found_new_version: '发现新版本 {0}（当前 {1}）',
-    installing: '正在安装 openyida@latest...',
+    installing: '正在安装 yeqiu-yida@latest...',
     success: '更新成功！当前版本：{0}',
     install_failed: '更新失败：{0}',
-    manual_hint: '请尝试手动执行：npm install -g openyida@latest',
+    manual_hint: '请尝试手动执行：npm install -g yeqiu-yida@latest',
     available: '有可用更新',
     up_to_date: '已是最新',
     label_install: 'Install',
@@ -908,7 +909,7 @@ openyida - 宜搭命令行工具
     label_version: 'Version',
     label_update: 'Update',
     done: '更新完成！',
-    done_hint: '运行 openyida --version 确认新版本',
+    done_hint: '运行 yeqiu-yida --version 确认新版本',
   },
 
   // ── lib/publish.js ─────────────────────────────────
@@ -919,7 +920,7 @@ openyida - 宜搭命令行工具
     available_templates: '可用模板：{0}',
     template_not_found: '模板文件不存在：{0}',
     done: '页面已生成：{0}',
-    hint: '建议继续运行 openyida compile <file> 或使用 --compile 直接编译校验。',
+    hint: '建议继续运行 yeqiu-yida compile <file> 或使用 --compile 直接编译校验。',
     success: '页面生成完成',
   },
   build_page: {
@@ -979,7 +980,7 @@ openyida - 宜搭命令行工具
     target_not_found: '未在应用导航中找到发布目标：{0}',
     target_type_invalid: '发布目标不是自定义展示页面：{0} 当前类型为 {1}',
     target_type_hint: '当前目标「{0}」看起来不是自定义页面（类型：{1}）。请不要把 JSX 发布到数据表或流程表单。',
-    target_list_hint: '可先运行 openyida list-forms {0} --keyword <页面名>，选择 formType=display 的自定义页面 formUuid。',
+    target_list_hint: '可先运行 yeqiu-yida list-forms {0} --keyword <页面名>，选择 formType=display 的自定义页面 formUuid。',
     target_force_hint: '确认要绕过保护时可追加 --force；这会覆盖目标 Schema，请只在明确知道目标是自定义页面时使用。',
     step_compile: '\n📦 Step 1: 编译源码 & 构建 Schema\n',
     reading_source: '[1/4] 读取 {0} 源码...',
@@ -1024,8 +1025,8 @@ openyida - 宜搭命令行工具
     exception: '\n❌ 发布异常: {0}',
     error: '\n❌ 发布异常: {0}',
     source_not_found: '❌ 源文件不存在：{0}',
-    usage: '用法: openyida publish <源文件路径> <appType> <formUuid> [--health-check]',
-    example: '示例：openyida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
+    usage: '用法: yeqiu-yida publish <源文件路径> <appType> <formUuid> [--health-check]',
+    example: '示例：yeqiu-yida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
   },
 
   // ── lib/qr-login.js ────────────────────────────────
@@ -1072,9 +1073,9 @@ openyida - 宜搭命令行工具
 
   // ── scripts/postinstall.js ─────────────────────────
   postinstall: {
-    welcome_title: '  🎉 欢迎使用 OpenYida！                                    ',
+    welcome_title: '  🎉 欢迎使用 Yeqiu-Yida（叶秋）！                                    ',
     install_success: '  ✅ 安装成功！{0} 宜搭 AI 应用开发工具已就绪。',
-    update_success: '  ✅ 更新成功！{0} OpenYida 已升级到最新版本。',
+    update_success: '  ✅ 更新成功！{0} Yeqiu-Yida 已升级到最新版本。',
     ai_mode_title: '  🚀 开启 AI 问答模式',
     ai_mode_desc: '  在 Codex / Claude Code / Aone Copilot / Cursor 等 AI 工具中直接对话：',
     prompt1: '  📋  「帮我用宜搭创建一个考勤管理系统」',
@@ -1084,14 +1085,14 @@ openyida - 宜搭命令行工具
     steps_title: '  📖 基础使用步骤',
     step1: '  {0}Step 1{1}  打开你的 AI 编程工具（Codex / Claude Code / Cursor 等）',
     step2: '  {0}Step 2{1}  直接用自然语言描述你想要的应用',
-    step3: '  {0}Step 3{1}  AI 自动调用 openyida 命令完成创建和发布',
+    step3: '  {0}Step 3{1}  AI 自动调用 yeqiu-yida 命令完成创建和发布',
     step4: '  {0}Step 4{1}  获得可访问的宜搭应用链接 🎉',
     commands_title: '  ⚡ 快捷命令',
-    cmd_env: '  {0}openyida env{1}      {2}# 检测当前 AI 工具环境和登录态{3}',
-    cmd_login: '  {0}openyida login{1}    {2}# 登录宜搭账号{3}',
-    cmd_help: '  {0}openyida --help{1}   {2}# 查看所有命令{3}',
-    footer1: '  📚 文档：https://github.com/openyida/openyida',
-    footer2: '  💬 社区：钉钉扫码加入 OpenYida 社区',
+    cmd_env: '  {0}yeqiu-yida env{1}      {2}# 检测当前 AI 工具环境和登录态{3}',
+    cmd_login: '  {0}yeqiu-yida login{1}    {2}# 登录宜搭账号{3}',
+    cmd_help: '  {0}yeqiu-yida --help{1}   {2}# 查看所有命令{3}',
+    footer1: '  📚 文档：https://github.com/yeqiu-yida/yeqiu-yida',
+    footer2: '  💬 社区：钉钉扫码加入 Yeqiu-Yida 社区',
   },
 
   // ── lib/conversation/export-conversation.js ────────
@@ -1134,12 +1135,12 @@ openyida - 宜搭命令行工具
     // 配置管理
     config_load_error: '加载 CDN 配置失败: {0}',
     config_saved: '✅ CDN 配置已保存到: {0}',
-    config_usage: '用法: openyida cdn-config [选项]',
+    config_usage: '用法: yeqiu-yida cdn-config [选项]',
     config_examples: `
 示例:
-  openyida cdn-config --init
-  openyida cdn-config --show
-  openyida cdn-config --set-domain cdn.example.com`,
+  yeqiu-yida cdn-config --init
+  yeqiu-yida cdn-config --show
+  yeqiu-yida cdn-config --set-domain cdn.example.com`,
     config_options: `
 选项:
   --init                初始化配置（交互式）
@@ -1186,7 +1187,7 @@ openyida - 宜搭命令行工具
     config_opt_path: '设置上传目录前缀',
 
     // 上传
-    upload_usage: '用法: openyida cdn-upload <图片路径> [选项]',
+    upload_usage: '用法: yeqiu-yida cdn-upload <图片路径> [选项]',
     upload_examples: `
 示例:
   yida cdn-upload ./image.png
@@ -1206,7 +1207,7 @@ openyida - 宜搭命令行工具
     upload_no_files: '❌ 请指定要上传的图片文件',
     config_incomplete: '❌ CDN 配置不完整',
     missing_fields: '   缺少字段: {0}',
-    run_config_init: '   请先运行: openyida cdn-config --init',
+    run_config_init: '   请先运行: yeqiu-yida cdn-config --init',
     no_config: '❌ 未找到 CDN 配置',
     oss_sdk_required: '❌ 缺少 ali-oss SDK',
     run_npm_install: '   请运行: npm install {0}',
@@ -1222,7 +1223,7 @@ openyida - 宜搭命令行工具
     upload_error: '❌ 上传失败: {0}',
 
     // 刷新
-    refresh_usage: '用法: openyida cdn-refresh [选项]',
+    refresh_usage: '用法: yeqiu-yida cdn-refresh [选项]',
     refresh_examples: `
 示例:
   yida cdn-refresh --urls "https://cdn.example.com/image.png"
@@ -1258,15 +1259,15 @@ openyida - 宜搭命令行工具
   flashNote: {
     toPrd: {
       title: '📋 钉钉闪记转 PRD',
-      help_usage: '用法：openyida flash-to-prd --file <闪记文件路径> [--name <项目名>]',
-      help_usage2: '      openyida flash-to-prd --name <项目名>  （从标准输入读取）',
+      help_usage: '用法：yeqiu-yida flash-to-prd --file <闪记文件路径> [--name <项目名>]',
+      help_usage2: '      yeqiu-yida flash-to-prd --name <项目名>  （从标准输入读取）',
       help_args_title: '参数：',
       help_arg_file: '  --file, -f <路径>       闪记文本文件路径（支持 .txt / .md）',
       help_arg_name: '  --name, -n <名称>       项目名称（可选，默认从闪记内容中自动提取）',
       help_arg_max_tokens: '  --max-tokens <数量>     AI 最大输出 token 数（默认 8000）',
       help_examples_title: '示例：',
-      help_example1: '  openyida flash-to-prd --file ./meeting-notes.txt --name "设备巡检系统"',
-      help_example2: '  cat meeting.txt | openyida flash-to-prd --name "设备巡检系统"',
+      help_example1: '  yeqiu-yida flash-to-prd --file ./meeting-notes.txt --name "设备巡检系统"',
+      help_example2: '  cat meeting.txt | yeqiu-yida flash-to-prd --name "设备巡检系统"',
       step_read: '[Step 1] 读取闪记内容...',
       file_not_found: '文件不存在：{0}',
       no_input: '未提供闪记内容。请使用 --file 指定文件，或通过管道传入内容。',
@@ -1303,9 +1304,9 @@ openyida - 宜搭命令行工具
 
   // ── lib/process/preview-process.js ─────────────────
   preview_process: {
-    usage: '用法: openyida process preview <appType> <processInstanceId> [--output <path>]',
-    example: '示例: openyida process preview APP_XXX proc-inst-id-xxx',
-    no_login: '❌ 无法获取有效登录态，请先运行 openyida login',
+    usage: '用法: yeqiu-yida process preview <appType> <processInstanceId> [--output <path>]',
+    example: '示例: yeqiu-yida process preview APP_XXX proc-inst-id-xxx',
+    no_login: '❌ 无法获取有效登录态，请先运行 yeqiu-yida login',
     fetch_instance_failed: '获取流程实例详情失败',
     fetch_records_warning: '获取审批记录失败，将仅展示基础流程图',
     fetching: '正在获取流程实例 {0} ...',
@@ -1321,7 +1322,7 @@ openyida - 宜搭命令行工具
 
   // ── db-index ────────────────────────────────────────────
   db_index: {
-    usage: '用法: openyida db-index [选项]',
+    usage: '用法: yeqiu-yida db-index [选项]',
     commands: '命令:',
     cmd_form: '检测指定表单的索引情况',
     cmd_form_suggest: '获取索引建议',
@@ -1352,7 +1353,7 @@ openyida - 宜搭命令行工具
 
   // ── db-seq-fix ────────────────────────────────────────────
   db_seq_fix: {
-    usage: '用法: openyida db-seq-fix [选项]',
+    usage: '用法: yeqiu-yida db-seq-fix [选项]',
     commands: '命令:',
     cmd_check: '检查所有 Sequence 状态（默认）',
     cmd_fix: '自动修复有问题的 Sequence',
@@ -1379,15 +1380,15 @@ openyida - 宜搭命令行工具
     suggested: '建议起始值',
     fix_sql: '修复 SQL',
     summary_need_fix: '发现 {0} 个 Sequence 需要修复',
-    run_fix_hint: '运行 openyida db-seq-fix --fix 进行修复',
+    run_fix_hint: '运行 yeqiu-yida db-seq-fix --fix 进行修复',
     summary_ok: '所有 Sequence 状态正常',
   },
   codex_login: {
-    title: '  openyida login {0} - {1} 登录模式',
+    title: '  yeqiu-yida login {0} - {1} 登录模式',
     not_codex: '当前环境未检测为 Codex / Qoder / 悟空，仅返回内置浏览器登录 handoff。',
     no_playwright: '{0} 登录模式不需要安装 Playwright 或额外 Chromium。',
-    using_browser: '{0} 内置浏览器仅适合无需登录的页面预览；宜搭登录 Cookie 请使用 openyida login --browser。',
-    browser_handoff_hint: '{0} 内置浏览器不支持认证 Cookie 导出；如需 CLI Cookie，请使用 openyida login --browser。',
+    using_browser: '{0} 内置浏览器仅适合无需登录的页面预览；宜搭登录 Cookie 请使用 yeqiu-yida login --browser。',
+    browser_handoff_hint: '{0} 内置浏览器不支持认证 Cookie 导出；如需 CLI Cookie，请使用 yeqiu-yida login --browser。',
     handoff_message: '{0} 内置浏览器不能导出宜搭登录 Cookie；如需 CLI Cookie，请运行 fallback_command。',
     cache_available: '已存在可用的 CLI Cookie 缓存，无需重新打开浏览器登录。',
   },

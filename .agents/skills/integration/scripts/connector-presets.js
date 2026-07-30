@@ -96,9 +96,7 @@ function buildConnectorRulesFromInputs(inputsSchema, assignments) {
       innerBase.id = input.name;
       innerBase.parentId = '';
       innerBase.valueType = assign.valueType || 'processVar';
-      innerBase.value = assign.valueType === 'literal' && !Number.isNaN(Number(assign.value))
-        ? Number(assign.value)
-        : assign.value;
+      innerBase.value = normalizeAssignValue(input, assign);
       innerBase.ruleId = assign.ruleId || generateConnectorRuleId();
       innerBase.valueLabel = assign.valueLabel || input.label || input.name;
       base.rules = [innerBase];
@@ -111,6 +109,27 @@ function buildConnectorRulesFromInputs(inputsSchema, assignments) {
 
 function cloneInputSchema(input) {
   return JSON.parse(JSON.stringify(input));
+}
+
+// 人员/部门类入参（EmployeeField 等）的 literal 值必须是 [{id,name}] 数组：
+// 设计器保存序列化(qb函数)对这三类组件的 literal 值直接调 value.map(e=>e.id)，
+// 传字符串会抛 "t.map is not a function" 导致保存静默失败（2026-07-28 组合场景D实测）
+const MEMBER_COMPONENTS = ['EmployeeField', 'DepartmentField', 'DepartmentSelectField'];
+
+function normalizeAssignValue(input, assign) {
+  if (assign.valueType === 'literal' && MEMBER_COMPONENTS.includes(input.componentName)) {
+    if (Array.isArray(assign.value)) {
+      return assign.value.map((v) => (v && typeof v === 'object' ? v : { id: String(v), name: String(v) }));
+    }
+    return String(assign.value)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((id) => ({ id, name: id }));
+  }
+  return assign.valueType === 'literal' && !Number.isNaN(Number(assign.value))
+    ? Number(assign.value)
+    : assign.value;
 }
 
 function buildFallbackInputsFromAssignments(assignments) {

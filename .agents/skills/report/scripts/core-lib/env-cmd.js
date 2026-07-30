@@ -2,11 +2,11 @@
  * env-cmd.js - 多环境管理 CLI 子命令
  *
  * 子命令：
- *   openyida env list              列出所有环境及当前激活环境
- *   openyida env add <name>        交互式添加私有化环境配置
- *   openyida env switch <name>     切换当前激活环境
- *   openyida env remove <name>     移除环境配置（不可删除 public）
- *   openyida env show [name]       显示环境详细配置
+ *   yeqiu-yida env list              列出所有环境及当前激活环境
+ *   yeqiu-yida env add <name>        交互式添加私有化环境配置
+ *   yeqiu-yida env switch <name>     切换当前激活环境
+ *   yeqiu-yida env remove <name>     移除环境配置（不可删除 public）
+ *   yeqiu-yida env show [name]       显示环境详细配置
  */
 
 'use strict';
@@ -96,16 +96,16 @@ function isDingTalkWukongRunning() {
 }
 
 function detectSetupRecommendation() {
-  if (process.env.OPENYIDA_ENV) {
-    return resolveEnvNameAlias(process.env.OPENYIDA_ENV);
+  if (process.env.YEQIU_YIDA_ENV) {
+    return resolveEnvNameAlias(process.env.YEQIU_YIDA_ENV);
   }
-  if ((process.env.OPENYIDA_LOGIN_URL || '').includes('login.dingtalk.io')) {
+  if ((process.env.YEQIU_YIDA_LOGIN_URL || '').includes('login.dingtalk.io')) {
     return 'intl';
   }
-  if ((process.env.OPENYIDA_ENDPOINT || '').includes('yidaapps.com')) {
+  if ((process.env.YEQIU_YIDA_ENDPOINT || '').includes('yidaapps.com')) {
     return 'intl';
   }
-  if ((process.env.OPENYIDA_ENDPOINT || '').includes('alibaba-inc.com')) {
+  if ((process.env.YEQIU_YIDA_ENDPOINT || '').includes('alibaba-inc.com')) {
     return 'alibaba';
   }
   if (isDingTalkWukongRunning()) {
@@ -131,7 +131,7 @@ function switchToEnv(envName) {
 
   if (!config.environments[resolvedEnvName]) {
     warn(`${RED}错误：环境 "${envName}" 不存在${RESET}`);
-    warn(`使用 ${CYAN}openyida env list${RESET} 查看所有环境`);
+    warn(`使用 ${CYAN}yeqiu-yida env list${RESET} 查看所有环境`);
     process.exit(1);
   }
 
@@ -145,7 +145,7 @@ function switchToEnv(envName) {
   console.log(`  地址：${config.environments[resolvedEnvName].baseUrl}`);
   console.log(`  登录：${getLoginHost(config.environments[resolvedEnvName].loginUrl)}`);
   console.log('');
-  console.log(`${DIM}下一步：运行 openyida login；在悟空中可运行 openyida login --wukong${RESET}`);
+  console.log(`${DIM}下一步：运行 yeqiu-yida login；在悟空中可运行 yeqiu-yida login --wukong${RESET}`);
   console.log('');
 }
 
@@ -178,8 +178,8 @@ function cmdList() {
   }
 
   console.log('');
-  console.log(`${DIM}使用 openyida env setup 进入向导，或 openyida env switch <name> 切换环境${RESET}`);
-  console.log(`${DIM}使用 openyida env add <name> 添加私有化环境${RESET}`);
+  console.log(`${DIM}使用 yeqiu-yida env setup 进入向导，或 yeqiu-yida env switch <name> 切换环境${RESET}`);
+  console.log(`${DIM}使用 yeqiu-yida env add <name> 添加私有化环境${RESET}`);
   console.log('');
 }
 
@@ -194,7 +194,7 @@ function cmdShow(envName) {
 
   if (!envConfig) {
     warn(`${RED}错误：环境 "${targetName}" 不存在${RESET}`);
-    warn(`使用 ${CYAN}openyida env list${RESET} 查看所有环境`);
+    warn(`使用 ${CYAN}yeqiu-yida env list${RESET} 查看所有环境`);
     process.exit(1);
   }
 
@@ -225,7 +225,7 @@ function cmdShow(envName) {
 function cmdSwitch(envName) {
   if (!envName) {
     warn(`${RED}错误：请指定要切换的环境名称${RESET}`);
-    warn(`用法：${CYAN}openyida env switch <name>${RESET}`);
+    warn(`用法：${CYAN}yeqiu-yida env switch <name>${RESET}`);
     process.exit(1);
   }
 
@@ -234,7 +234,7 @@ function cmdSwitch(envName) {
 
   if (!config.environments[resolvedEnvName]) {
     warn(`${RED}错误：环境 "${envName}" 不存在${RESET}`);
-    warn(`使用 ${CYAN}openyida env list${RESET} 查看所有环境`);
+    warn(`使用 ${CYAN}yeqiu-yida env list${RESET} 查看所有环境`);
     process.exit(1);
   }
 
@@ -253,7 +253,7 @@ function cmdSwitch(envName) {
 function cmdRemove(envName) {
   if (!envName) {
     warn(`${RED}错误：请指定要移除的环境名称${RESET}`);
-    warn(`用法：${CYAN}openyida env remove <name>${RESET}`);
+    warn(`用法：${CYAN}yeqiu-yida env remove <name>${RESET}`);
     process.exit(1);
   }
 
@@ -294,8 +294,8 @@ function cmdRemove(envName) {
 async function cmdAdd(envName) {
   if (!envName) {
     warn(`${RED}错误：请指定环境名称${RESET}`);
-    warn(`用法：${CYAN}openyida env add <name>${RESET}`);
-    warn(`示例：${CYAN}openyida env add private-prod${RESET}`);
+    warn(`用法：${CYAN}yeqiu-yida env add <name>${RESET}`);
+    warn(`示例：${CYAN}yeqiu-yida env add private-prod${RESET}`);
     process.exit(1);
   }
 
@@ -380,8 +380,8 @@ async function cmdAdd(envName) {
   if (newEnvConfig.description) { console.log(`  描述：${newEnvConfig.description}`); }
   console.log('');
   console.log(`${YELLOW}下一步：切换到该环境并登录${RESET}`);
-  console.log(`  ${CYAN}openyida env switch ${envName}${RESET}`);
-  console.log(`  ${CYAN}openyida login --qr${RESET}`);
+  console.log(`  ${CYAN}yeqiu-yida env switch ${envName}${RESET}`);
+  console.log(`  ${CYAN}yeqiu-yida login --qr${RESET}`);
   console.log('');
 }
 
@@ -417,9 +417,9 @@ async function cmdSetup() {
   const defaultIndex = Math.max(0, options.findIndex((item) => item.key === recommendedEnv));
 
   console.log('');
-  console.log(`${BOLD}OpenYida 环境设置向导${RESET}`);
+  console.log(`${BOLD}Yeqiu-Yida 环境设置向导${RESET}`);
   console.log(`${'─'.repeat(50)}`);
-  console.log(`${DIM}请选择客户实际登录入口。可随时用 openyida env switch 切换。${RESET}`);
+  console.log(`${DIM}请选择客户实际登录入口。可随时用 yeqiu-yida env switch 切换。${RESET}`);
   console.log('');
 
   options.forEach((item, index) => {
@@ -459,10 +459,10 @@ async function cmdSetup() {
  */
 function showHelp() {
   console.log('');
-  console.log(`${BOLD}openyida env - 多环境管理${RESET}`);
+  console.log(`${BOLD}yeqiu-yida env - 多环境管理${RESET}`);
   console.log('');
   console.log(`${CYAN}用法：${RESET}`);
-  console.log('  openyida env <子命令> [参数]');
+  console.log('  yeqiu-yida env <子命令> [参数]');
   console.log('');
   console.log(`${CYAN}子命令：${RESET}`);
   console.log(`  ${GREEN}list${RESET}              列出所有环境及当前激活环境`);
@@ -473,18 +473,18 @@ function showHelp() {
   console.log(`  ${GREEN}show [name]${RESET}       显示环境详细配置`);
   console.log('');
   console.log(`${CYAN}示例：${RESET}`);
-  console.log(`  ${BLUE}openyida env list${RESET}                     查看所有环境`);
-  console.log(`  ${BLUE}openyida env setup${RESET}                    进入环境设置向导`);
-  console.log(`  ${BLUE}openyida env add private-prod${RESET}         添加私有化生产环境`);
-  console.log(`  ${BLUE}openyida env switch private-prod${RESET}      切换到私有化环境`);
-  console.log(`  ${BLUE}openyida env show private-prod${RESET}        查看环境详情`);
-  console.log(`  ${BLUE}openyida env remove private-prod${RESET}      删除私有化环境`);
+  console.log(`  ${BLUE}yeqiu-yida env list${RESET}                     查看所有环境`);
+  console.log(`  ${BLUE}yeqiu-yida env setup${RESET}                    进入环境设置向导`);
+  console.log(`  ${BLUE}yeqiu-yida env add private-prod${RESET}         添加私有化生产环境`);
+  console.log(`  ${BLUE}yeqiu-yida env switch private-prod${RESET}      切换到私有化环境`);
+  console.log(`  ${BLUE}yeqiu-yida env show private-prod${RESET}        查看环境详情`);
+  console.log(`  ${BLUE}yeqiu-yida env remove private-prod${RESET}      删除私有化环境`);
   console.log('');
   console.log(`${CYAN}环境变量（优先级高于配置文件）：${RESET}`);
-  console.log(`  ${YELLOW}OPENYIDA_ENDPOINT${RESET}=https://yida.company.com    强制指定宜搭地址`);
-  console.log(`  ${YELLOW}OPENYIDA_LOGIN_URL${RESET}=https://...                强制指定登录页`);
-  console.log(`  ${YELLOW}OPENYIDA_ENV${RESET}=private-prod                    快速切换环境（不修改配置文件）`);
-  console.log(`  ${YELLOW}OPENYIDA_DWS_ENDPOINT${RESET}=https://dws.company.com 私有化钉钉网关`);
+  console.log(`  ${YELLOW}YEQIU_YIDA_ENDPOINT${RESET}=https://yida.company.com    强制指定宜搭地址`);
+  console.log(`  ${YELLOW}YEQIU_YIDA_LOGIN_URL${RESET}=https://...                强制指定登录页`);
+  console.log(`  ${YELLOW}YEQIU_YIDA_ENV${RESET}=private-prod                    快速切换环境（不修改配置文件）`);
+  console.log(`  ${YELLOW}YEQIU_YIDA_DWS_ENDPOINT${RESET}=https://dws.company.com 私有化钉钉网关`);
   console.log('');
 }
 
@@ -537,7 +537,7 @@ async function run(args) {
 
     default:
       warn(`${RED}未知的 env 子命令：${subCommand}${RESET}`);
-      warn(`使用 ${CYAN}openyida env --help${RESET} 查看帮助`);
+      warn(`使用 ${CYAN}yeqiu-yida env --help${RESET} 查看帮助`);
       process.exit(1);
   }
 }

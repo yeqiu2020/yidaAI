@@ -3,13 +3,13 @@
  *
  * 支持公有云与私有化宜搭并存，通过环境配置文件管理多套端点和登录态。
  *
- * 配置文件：{projectRoot}/.cache/openyida-envs.json
+ * 配置文件：{projectRoot}/.cache/yeqiu-yida-envs.json
  * Cookie 隔离：.cache/cookies-{envName}.json
  *
  * 优先级（高 → 低）：
- *   1. 环境变量 OPENYIDA_ENDPOINT
- *   2. 环境变量 OPENYIDA_ENV 指定的环境配置
- *   3. 当前激活的环境配置（openyida-envs.json current 字段）
+ *   1. 环境变量 YEQIU_YIDA_ENDPOINT
+ *   2. 环境变量 YEQIU_YIDA_ENV 指定的环境配置
+ *   3. 当前激活的环境配置（yeqiu-yida-envs.json current 字段）
  *   4. cookieData.base_url（历史兼容）
  *   5. 默认公有云 https://www.aliwork.com
  *
@@ -37,7 +37,7 @@ const DINGTALK_LOGIN_ORIGIN = 'https://login.dingtalk.com';
 const DINGTALK_INTL_LOGIN_ORIGIN = 'https://login.dingtalk.io';
 const ALIBABA_INTERNAL_BASE_URL = 'https://yida-group.alibaba-inc.com';
 const ALIBABA_INTERNAL_LOGIN_URL = `${ALIBABA_INTERNAL_BASE_URL}/workPlatform`;
-const ENVS_CONFIG_FILE = 'openyida-envs.json';
+const ENVS_CONFIG_FILE = 'yeqiu-yida-envs.json';
 
 function normalizeUrlOrigin(value, fallback) {
   const raw = value || fallback;
@@ -413,13 +413,13 @@ function saveEnvsConfig(config, projectRoot) {
 
 /**
  * 获取当前激活的环境配置对象。
- * 优先级：OPENYIDA_ENV 环境变量 > config.current > 'public'
+ * 优先级：YEQIU_YIDA_ENV 环境变量 > config.current > 'public'
  * @param {string} [projectRoot]
  * @returns {{ name: string, config: object }}
  */
 function getCurrentEnvConfig(projectRoot) {
   const envsConfig = loadEnvsConfig(projectRoot);
-  const envName = resolveEnvNameAlias(process.env.OPENYIDA_ENV || envsConfig.current || 'public');
+  const envName = resolveEnvNameAlias(process.env.YEQIU_YIDA_ENV || envsConfig.current || 'public');
   const envConfig = envsConfig.environments[envName] || envsConfig.environments.public || DEFAULT_PUBLIC_ENV;
 
   return { name: envName, config: envConfig };
@@ -467,7 +467,7 @@ function migrateOldCookieFile(projectRoot) {
 
 /**
  * 解析最终的 baseUrl，按优先级：
- *   1. OPENYIDA_ENDPOINT 环境变量
+ *   1. YEQIU_YIDA_ENDPOINT 环境变量
  *   2. 当前激活环境配置的 baseUrl
  *   3. cookieData.base_url（历史兼容）
  *   4. 默认公有云
@@ -477,8 +477,8 @@ function migrateOldCookieFile(projectRoot) {
  */
 function resolveEndpoint(cookieData, projectRoot) {
   // 优先级 1：环境变量强制指定
-  if (process.env.OPENYIDA_ENDPOINT) {
-    return normalizeBaseUrl(process.env.OPENYIDA_ENDPOINT, DEFAULT_BASE_URL);
+  if (process.env.YEQIU_YIDA_ENDPOINT) {
+    return normalizeBaseUrl(process.env.YEQIU_YIDA_ENDPOINT, DEFAULT_BASE_URL);
   }
 
   // 优先级 2：当前激活环境配置
@@ -505,19 +505,19 @@ function resolveEndpoint(cookieData, projectRoot) {
 
 /**
  * 解析最终的登录 URL，按优先级：
- *   1. OPENYIDA_LOGIN_URL 环境变量
+ *   1. YEQIU_YIDA_LOGIN_URL 环境变量
  *   2. 当前激活环境配置的 loginUrl
  *   3. 默认公有云登录 URL
  * @param {string} [projectRoot]
  * @returns {string}
  */
 function resolveLoginUrl(projectRoot) {
-  if (process.env.OPENYIDA_LOGIN_URL) {
-    return process.env.OPENYIDA_LOGIN_URL;
+  if (process.env.YEQIU_YIDA_LOGIN_URL) {
+    return process.env.YEQIU_YIDA_LOGIN_URL;
   }
 
-  if (process.env.OPENYIDA_ENDPOINT) {
-    return inferLoginUrlForBaseUrl(process.env.OPENYIDA_ENDPOINT);
+  if (process.env.YEQIU_YIDA_ENDPOINT) {
+    return inferLoginUrlForBaseUrl(process.env.YEQIU_YIDA_ENDPOINT);
   }
 
   const { config: envConfig } = getCurrentEnvConfig(projectRoot);

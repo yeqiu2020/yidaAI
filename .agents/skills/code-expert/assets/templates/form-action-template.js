@@ -3,7 +3,7 @@
  * 联系方式：15270209736
  * 来源：www.yidatrain.com
  * 表单动作代码模板
- * 版本号: v2.3.0
+ * 版本号: v2.4.0
  * 代码类型: formAction
  *
  * 使用说明:
@@ -18,12 +18,17 @@
  * - Promise 回调内使用 that 保存 this 引用
  * - 子表 onChange 必须加 isProcessing 锁，防止 setValue 触发死循环
  * - 跨表查询新增用 formDataJson，编辑用 updateFormDataJson
+ * - ⚠️ getFormDataById 不适用 checkApiSuccess！需单独判断 res.serialNo
+ * - ⚠️ listTableData 子表API关联字段key带 _id 后缀！需用 getAssociationValue
  */
 
 // ===== 通用工具函数（需要时保留）=====
 /**
  * 检查宜搭API调用是否成功
- * 支持: 新增(返回FINST-xxx字符串) / 编辑删除(返回null) / 查询(返回对象)
+ * 支持: 新增(返回FINST-xxx字符串) / 编辑删除(返回null) / searchFormDatas查询(返回对象)
+ * ⚠️ 不适用于 getFormDataById！该API返回扁平对象{serialNo,instValue,creator,...}
+ *   没有 success/data/result 字段，checkApiSuccess 会误判为失败！
+ *   需单独判断: if (!res || !res.serialNo) throw Error('查询失败')
  */
 function checkApiSuccess(res) {
   if (res === null || res === undefined) return true;
@@ -48,6 +53,22 @@ function formatAssociationField(value) {
   }
   if (typeof value === 'object') return [value];
   return [];
+}
+
+/**
+ * 从子表行数据中安全读取关联表单字段
+ * ⚠️ listTableData API 返回的关联字段key带 _id 后缀（如 associationFormField_xxx_id）
+ *    标准字段名（associationFormField_xxx）在该API中为空！
+ *    前端 getValue() 返回的字段名不带 _id，但子表API只有 _id 版本有数据！
+ */
+function getAssociationValue(row, fieldId) {
+  // 优先尝试 _id 后缀（listTableData API 返回格式）
+  var value = row[fieldId + '_id'];
+  if (value !== undefined && value !== null) {
+    return formatAssociationField(value);
+  }
+  // 兼容无后缀（前端 getValue 格式）
+  return formatAssociationField(row[fieldId]);
 }
 
 // ===== 配置参数 =====

@@ -42,7 +42,7 @@ function validateChartConfig(chart, chartIndex) {
   let hasError = false;
 
   if (!chart.cubeCode) {
-    warn(`⚠️  ${chartLabel}: 缺少 cubeCode（数据源），报表将无法查询数据。请通过 openyida get-schema 获取表单的 formUuid，将连字符替换为下划线作为 cubeCode。`);
+    warn(`⚠️  ${chartLabel}: 缺少 cubeCode（数据源），报表将无法查询数据。请通过 yeqiu-yida get-schema 获取表单的 formUuid，将连字符替换为下划线作为 cubeCode。`);
     hasError = true;
   }
 

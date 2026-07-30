@@ -207,7 +207,7 @@ function localizeCommand(entry, translate) {
     name: entry.name,
     path: entry.path,
     command: entry.command,
-    usage: `openyida ${entry.usage}`,
+    usage: `yeqiu-yida ${entry.usage}`,
     raw_usage: entry.usage,
     description: translate(entry.descriptionKey),
     description_key: entry.descriptionKey,
@@ -225,10 +225,10 @@ function buildCommandManifest(options = {}) {
 
   return {
     schema_version: 1,
-    name: 'openyida',
+    name: 'yeqiu-yida',
     version: options.version || null,
     aliases: ['yida'],
-    command_prefix: 'openyida',
+    command_prefix: 'yeqiu-yida',
     groups: COMMAND_GROUPS.map(group => ({
       id: group.id,
       title: translate(group.titleKey),

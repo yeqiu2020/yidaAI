@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 宜搭表单添加器 - 向已有应用添加单个表单
  * 版本: 1.3.1
  * 更新日期: 2026-04-19
@@ -39,15 +39,15 @@ if (process.platform === 'win32') {
 // ==================== 配置 ====================
 
 const SCRIPT_DIR = __dirname;
-const API_CLIENT_DIR = path.join(SCRIPT_DIR, '..', '..', 'yida-api-client', 'scripts');
+const API_CLIENT_DIR = path.join(SCRIPT_DIR, '..', '..', 'api-client', 'scripts');
 const LOGIN_SCRIPT = path.join(API_CLIENT_DIR, 'login_manager.js');
 const FORM_MANAGER = path.join(API_CLIENT_DIR, 'form_manager.js');
 
-// yida-config-sync 路径
-const CONFIG_SYNC_SCRIPT = path.join(SCRIPT_DIR, '..', '..', 'yida-config-sync', 'scripts', 'sync_form_schemas.js');
+// config-sync 路径
+const CONFIG_SYNC_SCRIPT = path.join(SCRIPT_DIR, '..', '..', 'config-sync', 'scripts', 'sync_form_schemas.js');
 
-// yida-get-schema 路径
-const GET_SCHEMA_SCRIPT = path.join(SCRIPT_DIR, '..', '..', 'yida-get-schema', 'scripts', 'sync-schema.js');
+// get-schema 路径
+const GET_SCHEMA_SCRIPT = path.join(SCRIPT_DIR, '..', '..', 'get-schema', 'scripts', 'sync-schema.js');
 
 // ==================== 工具函数 ====================
 
@@ -178,14 +178,16 @@ function parseFieldType(typeStr, description) {
     '日期': 'DateField',
     '日期时间': 'DateField',
     '单选': 'RadioField',
-    '复选': 'MultiSelectField',
+    '复选': 'CheckboxField',
     '下拉单选': 'SelectField',
+    '下拉多选': 'MultiSelectField',
     '下拉复选': 'MultiSelectField',
     '关联表单': 'AssociationFormField',
     '成员': 'EmployeeField',
     '部门': 'DepartmentSelectField',
     '附件': 'AttachmentField',
     '图片': 'ImageField',
+    '地址': 'AddressField',
     '流水号': 'SerialNumberField'
   };
 
@@ -208,9 +210,17 @@ function parseFieldType(typeStr, description) {
     if (assocMatch) config.associationForm = assocMatch[1].trim();
   }
 
-  if (type === '单选' || type === '复选' || type === '下拉单选' || type === '下拉复选') {
+  if (type === '单选' || type === '复选' || type === '下拉单选' || type === '下拉多选' || type === '下拉复选') {
     if (desc && desc !== '-' && !desc.includes('关联') && !desc.includes('公式')) {
       config.options = desc.split(/[\/、]/).map(opt => opt.trim()).filter(opt => opt);
+    }
+  }
+
+  // 解析流水号前缀（支持"前缀:CP"或"前缀：CP"格式）
+  if (type === '流水号') {
+    const prefixMatch = desc.match(/前缀[：:](\w+)/);
+    if (prefixMatch) {
+      config.serialPrefix = prefixMatch[1].trim();
     }
   }
 
@@ -342,7 +352,7 @@ function convertFieldsToApiFormat(fields, subTables = []) {
       if (field.unit) apiField.innerAfter = field.unit;
     }
 
-    if (field.type === 'SelectField' || field.type === 'MultiSelectField') {
+    if (field.type === 'SelectField' || field.type === 'MultiSelectField' || field.type === 'CheckboxField' || field.type === 'RadioField') {
       if (field.options && field.options.length > 0) {
         apiField.options = field.options;
       }
@@ -793,7 +803,9 @@ async function main() {
   console.log('\n============================================================\n');
 }
 
-main().catch(error => {
-  console.error('\n❌ 执行失败:', error.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error('\n❌ 执行失败:', error.message);
+    process.exit(1);
+  });
+}

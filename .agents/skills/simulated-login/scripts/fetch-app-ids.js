@@ -315,7 +315,9 @@ async function main() {
   console.log('='.repeat(80) + '\n');
 }
 
-main().catch(error => {
-  console.error('程序错误:', error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error('程序错误:', error);
+    process.exit(1);
+  });
+}

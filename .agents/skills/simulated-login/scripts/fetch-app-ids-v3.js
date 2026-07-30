@@ -4,7 +4,8 @@ const { chromium } = require("playwright");
 const fs = require("fs");
 const { loadCookies } = require("./login-manager");
 
-const ORG_CONFIG_FILE_MD = "d:/宜搭 AI 编程/宜搭 AI 助手 V1.4/组织及应用信息.md";
+// Phase 6: 消除硬编码绝对路径，改为命令行参数 + 相对路径 fallback
+const ORG_CONFIG_FILE_MD = process.argv[2] || require('path').join(__dirname, '..', '..', '..', '..', '组织及应用信息.md');
 const baseUrl = "https://qfhefh.aliwork.com";
 
 function updateAppIdInMarkdown(appName, appId) {

@@ -81,7 +81,7 @@ module.exports = {
     group_utility: 'ユーティリティ',
     cmd_commands: '機械可読コマンド manifest を出力',
     cmd_a2a: 'ローカル読み取り専用 A2A Adapter を起動、または Agent Card を出力',
-    cmd_bridge: 'OpenYida ローカル Web ブリッジサービスを起動',
+    cmd_bridge: 'Yeqiu-Yida ローカル Web ブリッジサービスを起動',
     cmd_copy: 'project 作業ディレクトリをコピー',
     cmd_sample: 'コードサンプル/テンプレートを出力',
     cmd_doctor: '環境診断と自動修復',
@@ -103,10 +103,10 @@ module.exports = {
   // ── bin/yida.js ────────────────────────────────────
   cli: {
     help: `
-openyida - Yida CLI ツール
+yeqiu-yida - Yida CLI ツール
 
 使用方法：
-  openyida <コマンド> [引数...]（エイリアス：yida）
+  yeqiu-yida <コマンド> [引数...]（エイリアス：yida）
 
 コマンド：
   env                                                          AI ツール環境とログイン状態を検出
@@ -173,79 +173,79 @@ openyida - Yida CLI ツール
   cdn-refresh [オプション]                                     CDN キャッシュを更新
 
 使用例：
-  openyida login
-  openyida logout
-  openyida create-app "勤怠管理"
-  openyida create-app "勤怠管理" "従業員勤怠システム" "xian-daka" "#00B853" "deepBlue" "dark" "slide"
-  openyida create-page APP_XXX "ゲームホーム"
-  openyida create-form create APP_XXX "従業員情報" .cache/openyida/forms/employee-fields.json
-  openyida create-form update APP_XXX FORM-XXX '[{"action":"add","field":{"type":"TextField","label":"備考"}}]'
-  openyida get-schema APP_XXX FORM-XXX
-  openyida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX
-  openyida verify-short-url APP_XXX FORM-XXX /o/myapp
-  openyida save-share-config APP_XXX FORM-XXX /o/myapp y n
-  openyida get-page-config APP_XXX FORM-XXX
-  openyida update-form-config APP_XXX FORM-XXX false "ページタイトル"
-  openyida data query form APP_XXX FORM-XXX --page 1 --size 20
-  openyida dws contact user search --keyword "wukong"
-  openyida create-report APP_XXX "売上レポート" .cache/openyida/reports/charts.json
-  openyida append-chart APP_XXX REPORT-XXX .cache/openyida/reports/charts.json
-  openyida configure-process APP_XXX FORM-YYY .cache/openyida/process/process-def.json
-  openyida create-process APP_XXX "注文処理フォーム" .cache/openyida/process/fields.json .cache/openyida/process/process-def.json
-  openyida export APP_XXX
-  openyida export APP_XXX ./my-app-backup.json
-  openyida import ./yida-export.json
-  openyida import ./yida-export.json "品質追跡システム（本番環境）"
-  openyida doctor                                 完全診断
-  openyida doctor --fix                           診断して自動修復
-  openyida doctor --production --app APP_XXX      本番アプリ診断
-  openyida export-conversation                    現在の会話をエクスポート
-  openyida export-conversation -o output.md       出力パスを指定
-  openyida export-conversation --list             利用可能な会話を一覧表示
-  openyida update                                 最新バージョンに更新
+  yeqiu-yida login
+  yeqiu-yida logout
+  yeqiu-yida create-app "勤怠管理"
+  yeqiu-yida create-app "勤怠管理" "従業員勤怠システム" "xian-daka" "#00B853" "deepBlue" "dark" "slide"
+  yeqiu-yida create-page APP_XXX "ゲームホーム"
+  yeqiu-yida create-form create APP_XXX "従業員情報" .cache/yeqiu-yida/forms/employee-fields.json
+  yeqiu-yida create-form update APP_XXX FORM-XXX '[{"action":"add","field":{"type":"TextField","label":"備考"}}]'
+  yeqiu-yida get-schema APP_XXX FORM-XXX
+  yeqiu-yida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX
+  yeqiu-yida verify-short-url APP_XXX FORM-XXX /o/myapp
+  yeqiu-yida save-share-config APP_XXX FORM-XXX /o/myapp y n
+  yeqiu-yida get-page-config APP_XXX FORM-XXX
+  yeqiu-yida update-form-config APP_XXX FORM-XXX false "ページタイトル"
+  yeqiu-yida data query form APP_XXX FORM-XXX --page 1 --size 20
+  yeqiu-yida dws contact user search --keyword "wukong"
+  yeqiu-yida create-report APP_XXX "売上レポート" .cache/yeqiu-yida/reports/charts.json
+  yeqiu-yida append-chart APP_XXX REPORT-XXX .cache/yeqiu-yida/reports/charts.json
+  yeqiu-yida configure-process APP_XXX FORM-YYY .cache/yeqiu-yida/process/process-def.json
+  yeqiu-yida create-process APP_XXX "注文処理フォーム" .cache/yeqiu-yida/process/fields.json .cache/yeqiu-yida/process/process-def.json
+  yeqiu-yida export APP_XXX
+  yeqiu-yida export APP_XXX ./my-app-backup.json
+  yeqiu-yida import ./yida-export.json
+  yeqiu-yida import ./yida-export.json "品質追跡システム（本番環境）"
+  yeqiu-yida doctor                                 完全診断
+  yeqiu-yida doctor --fix                           診断して自動修復
+  yeqiu-yida doctor --production --app APP_XXX      本番アプリ診断
+  yeqiu-yida export-conversation                    現在の会話をエクスポート
+  yeqiu-yida export-conversation -o output.md       出力パスを指定
+  yeqiu-yida export-conversation --list             利用可能な会話を一覧表示
+  yeqiu-yida update                                 最新バージョンに更新
 `,
     unknown_command: '不明なコマンド: {0}',
-    run_help: 'openyida --help を実行してヘルプを確認してください',
-    integration_help: '使用方法: openyida integration <create|list|enable|disable> ...',
+    run_help: 'yeqiu-yida --help を実行してヘルプを確認してください',
+    integration_help: '使用方法: yeqiu-yida integration <create|list|enable|disable> ...',
     integration_unknown: '不明な integration サブコマンド: {0}',
-    integration_help_hint: '利用可能なサブコマンドは openyida integration --help で確認してください',
-    integration_list_usage: '使用方法: openyida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
-    integration_list_example: '例: openyida integration list APP_XXX --form-uuid FORM-XXX --json',
-    integration_enable_usage: '使用方法: openyida integration enable <appType> <formUuid> <processCode>',
-    integration_enable_example: '例: openyida integration enable APP_XXX FORM-XXX LPROC-XXX',
-    integration_disable_usage: '使用方法: openyida integration disable <appType> <formUuid> <processCode>',
-    integration_disable_example: '例: openyida integration disable APP_XXX FORM-XXX LPROC-XXX',
-    compile_usage: '使用方法: openyida compile <ソースファイル>',
-    compile_example: '例: openyida compile pages/src/home.oyd.jsx',
-    check_page_usage: 'Usage: openyida check-page <sourceFile> [--compat] [--json]',
-    check_page_example: 'Example: openyida check-page pages/src/home.oyd.jsx --json',
-    generate_page_usage: 'Usage: openyida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/openyida/page-specs/home.json] [--compile]',
-    generate_page_example: 'Example: openyida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
-    publish_usage: '使用方法: openyida publish <ソースファイル> <appType> <formUuid> [--health-check]',
-    publish_example: '例: openyida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX --health-check',
-    verify_usage: '使用方法: openyida verify-short-url <appType> <formUuid> <url>',
-    verify_example: '例: openyida verify-short-url APP_XXX FORM-XXX /o/myapp',
-    share_usage: '使用方法: openyida save-share-config <appType> <formUuid> <url> <isOpen> [openAuth]',
-    share_example: '例: openyida save-share-config APP_XXX FORM-XXX /o/myapp y n',
-    page_config_usage: '使用方法: openyida get-page-config <appType> <formUuid>',
-    page_config_example: '例: openyida get-page-config APP_XXX FORM-XXX',
-    form_config_usage: '使用方法: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
-    form_config_example: '例: openyida update-form-config APP_XXX FORM-XXX false "ページタイトル"',
-    update_app_usage: '使用方法: openyida update-app <appType> --name "新しい名前" [--desc "説明"] [--icon "アイコン"]',
-    update_app_example: '例: openyida update-app APP_XXX --name "新しいアプリ名" --desc "新しい説明"',
-    export_usage: '使用方法: openyida export <appType> [output]',
-    export_example1: '例: openyida export APP_XXX',
-    export_example2: '    openyida export APP_XXX ./my-app-backup.json',
-    import_usage: '使用方法: openyida import <file> [name]',
-    import_example1: '例: openyida import ./yida-export.json',
-    import_example2: '    openyida import ./yida-export.json "品質追跡システム（本番環境）"',
+    integration_help_hint: '利用可能なサブコマンドは yeqiu-yida integration --help で確認してください',
+    integration_list_usage: '使用方法: yeqiu-yida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
+    integration_list_example: '例: yeqiu-yida integration list APP_XXX --form-uuid FORM-XXX --json',
+    integration_enable_usage: '使用方法: yeqiu-yida integration enable <appType> <formUuid> <processCode>',
+    integration_enable_example: '例: yeqiu-yida integration enable APP_XXX FORM-XXX LPROC-XXX',
+    integration_disable_usage: '使用方法: yeqiu-yida integration disable <appType> <formUuid> <processCode>',
+    integration_disable_example: '例: yeqiu-yida integration disable APP_XXX FORM-XXX LPROC-XXX',
+    compile_usage: '使用方法: yeqiu-yida compile <ソースファイル>',
+    compile_example: '例: yeqiu-yida compile pages/src/home.oyd.jsx',
+    check_page_usage: 'Usage: yeqiu-yida check-page <sourceFile> [--compat] [--json]',
+    check_page_example: 'Example: yeqiu-yida check-page pages/src/home.oyd.jsx --json',
+    generate_page_usage: 'Usage: yeqiu-yida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/yeqiu-yida/page-specs/home.json] [--compile]',
+    generate_page_example: 'Example: yeqiu-yida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
+    publish_usage: '使用方法: yeqiu-yida publish <ソースファイル> <appType> <formUuid> [--health-check]',
+    publish_example: '例: yeqiu-yida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX --health-check',
+    verify_usage: '使用方法: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
+    verify_example: '例: yeqiu-yida verify-short-url APP_XXX FORM-XXX /o/myapp',
+    share_usage: '使用方法: yeqiu-yida save-share-config <appType> <formUuid> <url> <isOpen> [openAuth]',
+    share_example: '例: yeqiu-yida save-share-config APP_XXX FORM-XXX /o/myapp y n',
+    page_config_usage: '使用方法: yeqiu-yida get-page-config <appType> <formUuid>',
+    page_config_example: '例: yeqiu-yida get-page-config APP_XXX FORM-XXX',
+    form_config_usage: '使用方法: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    form_config_example: '例: yeqiu-yida update-form-config APP_XXX FORM-XXX false "ページタイトル"',
+    update_app_usage: '使用方法: yeqiu-yida update-app <appType> --name "新しい名前" [--desc "説明"] [--icon "アイコン"]',
+    update_app_example: '例: yeqiu-yida update-app APP_XXX --name "新しいアプリ名" --desc "新しい説明"',
+    export_usage: '使用方法: yeqiu-yida export <appType> [output]',
+    export_example1: '例: yeqiu-yida export APP_XXX',
+    export_example2: '    yeqiu-yida export APP_XXX ./my-app-backup.json',
+    import_usage: '使用方法: yeqiu-yida import <file> [name]',
+    import_example1: '例: yeqiu-yida import ./yida-export.json',
+    import_example2: '    yeqiu-yida import ./yida-export.json "品質追跡システム（本番環境）"',
     exec_failed: '\n❌ 実行に失敗しました: {0}',
-    auth_usage: '使用方法: openyida auth <status|login|refresh|logout>',
-    auth_example: '例:\n  openyida auth status         # ログイン状態を確認\n  openyida auth login          # ログイン実行\n  openyida auth login --codex  # Codex browser login\n  openyida auth refresh        # ログイン状態を更新\n  openyida auth logout         # ログアウト',
-    org_usage: '使用方法: openyida org <list|switch>',
-    org_example: '例:\n  openyida org list                       # アクセス可能な組織一覧\n  openyida org switch --corp-id dingXXX   # 指定組織に切り替え',
-    first_run_title: '  🤖 OpenYida - AI 会話モードが有効になりました！                ',
-    first_run_welcome: '  {0}OpenYida へようこそ！{1} クイックスタートガイドをご覧ください：',
+    auth_usage: '使用方法: yeqiu-yida auth <status|login|refresh|logout>',
+    auth_example: '例:\n  yeqiu-yida auth status         # ログイン状態を確認\n  yeqiu-yida auth login          # ログイン実行\n  yeqiu-yida auth login --codex  # Codex browser login\n  yeqiu-yida auth refresh        # ログイン状態を更新\n  yeqiu-yida auth logout         # ログアウト',
+    org_usage: '使用方法: yeqiu-yida org <list|switch>',
+    org_example: '例:\n  yeqiu-yida org list                       # アクセス可能な組織一覧\n  yeqiu-yida org switch --corp-id dingXXX   # 指定組織に切り替え',
+    first_run_title: '  🤖 Yeqiu-Yida - AI 会話モードが有効になりました！                ',
+    first_run_welcome: '  {0}Yeqiu-Yida へようこそ！{1} クイックスタートガイドをご覧ください：',
     first_run_way1_title: '  📝 方法1：ニーズを直接説明する',
     first_run_way1_desc: '  AI ツールのチャットで、作りたいものを直接伝えてください：',
     first_run_prompt1: '  「Yida で勤怠管理システムを作ってください」',
@@ -256,12 +256,12 @@ openyida - Yida CLI ツール
     first_run_examples_title: '  📋 サンプルアプリ',
     first_run_examples: '  給与計算ツール    • 誕生日お祝いアプリ    • 企業ランディングページ',
     first_run_tips_title: '  🔧 はじめに',
-    first_run_tip1: '  1. {0}openyida env{1} を実行して環境とログイン状態を確認',
-    first_run_tip2: '  2. {0}openyida login{1} を実行してYida にログイン',
+    first_run_tip1: '  1. {0}yeqiu-yida env{1} を実行して環境とログイン状態を確認',
+    first_run_tip2: '  2. {0}yeqiu-yida login{1} を実行してYida にログイン',
     first_run_tip3: '  3. AI ツールで作りたいアプリを説明してください 🚀',
     first_run_footer1: '  対応 AI ツール：Codex / Claude Code / Aone Copilot / Cursor / OpenCode',
-    first_run_footer2: '  📚 ドキュメント：https://github.com/openyida/openyida',
-    first_run_footer3: '  （このガイドは初回起動時のみ表示されます。openyida --help で全コマンドを確認できます）',
+    first_run_footer2: '  📚 ドキュメント：https://github.com/yeqiu-yida/yeqiu-yida',
+    first_run_footer3: '  （このガイドは初回起動時のみ表示されます。yeqiu-yida --help で全コマンドを確認できます）',
   },
 
   // ── lib/integration/integration-check.js ─────────
@@ -290,9 +290,9 @@ openyida - Yida CLI ツール
     summary: 'Check complete: {0} apps, {1} automations, {2} with abnormal logs',
     apps_failed: '{0} app(s) failed to check. See JSON output or error summary for details.',
     no_logs: 'No abnormal execution logs found.',
-    usage: 'openyida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
-    example: 'openyida integration check APP_XXX --output project/output/automation-errors.xlsx',
-    missing_app: 'Missing appType. Usage: openyida integration check <appType...>',
+    usage: 'yeqiu-yida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
+    example: 'yeqiu-yida integration check APP_XXX --output project/output/automation-errors.xlsx',
+    missing_app: 'Missing appType. Usage: yeqiu-yida integration check <appType...>',
     banner_title: 'Check integration automation abnormal logs',
     status_filter: 'Execution status filter: {0}',
     checking_app: 'Checking app: {0}',
@@ -307,10 +307,10 @@ openyida - Yida CLI ツール
     fetch_failed: '最新バージョン情報を取得できませんでした。ネットワーク接続を確認してください',
     already_latest: 'すでに最新バージョン（{0}）です。更新は不要です',
     found_new_version: '新しいバージョンが見つかりました: {0}（現在: {1}）',
-    installing: 'openyida@latest をインストール中...',
+    installing: 'yeqiu-yida@latest をインストール中...',
     success: '更新成功！現在のバージョン: {0}',
     install_failed: '更新に失敗しました: {0}',
-    manual_hint: '手動で実行してください: npm install -g openyida@latest',
+    manual_hint: '手動で実行してください: npm install -g yeqiu-yida@latest',
     available: '更新あり',
     up_to_date: '最新',
     label_install: 'Install',
@@ -318,12 +318,12 @@ openyida - Yida CLI ツール
     label_version: 'Version',
     label_update: 'Update',
     done: '更新完了！',
-    done_hint: 'openyida --version で新しいバージョンを確認してください',
+    done_hint: 'yeqiu-yida --version で新しいバージョンを確認してください',
   },
 
   // ── lib/env.js ─────────────────────────────────────
   env: {
-    title: '  openyida env - 環境検出',
+    title: '  yeqiu-yida env - 環境検出',
     system_info: '\n📋 システム情報',
     os: '  OS:           {0} ({1})',
     node: '  Node.js:      {0}',
@@ -347,22 +347,22 @@ openyida - Yida CLI ツール
     corp_id_label: '  組織 ID:    {0}',
     user_id_label: '  ユーザー ID: {0}',
     csrf_label: '  csrf_token: {0}...',
-    not_logged_in: '  状態:       ❌ 未ログイン（openyida login を実行してログインしてください）',
+    not_logged_in: '  状態:       ❌ 未ログイン（yeqiu-yida login を実行してログインしてください）',
     unknown: '（不明）',
   },
 
   // ── lib/login.js ───────────────────────────────────
   login: {
-    title: '  openyida login - Yida ログインツール',
-    logout_title: '  openyida logout - Yida ログアウトツール',
+    title: '  yeqiu-yida login - Yida ログインツール',
+    logout_title: '  yeqiu-yida logout - Yida ログアウトツール',
     cookie_file_label: '\n  Cookie ファイル: {0}',
     logout_success: '  ✅ Cookie をクリアしました。ログインセッションが無効になりました。',
-    logout_hint: '  次回 openyida login を実行すると QR コードスキャンが開始されます。',
+    logout_hint: '  次回 yeqiu-yida login を実行すると QR コードスキャンが開始されます。',
     logout_no_file: '  ℹ️  Cookie ファイルが存在しません。クリア不要です。',
     using_cache: '🔍 ローカルの Cookie が見つかりました。直接使用します...',
     csrf_ok: '  ✅ csrf_token: {0}...',
     corp_id_ok: '  ✅ corpId: {0}',
-    no_playwright: '\n❌ ローカルブラウザログインは Chrome/Edge/Chromium CDP を優先します。現在 CDP が利用できず、Playwright フォールバックも見つかりません。通常は openyida login または openyida login --qr を使用してください。ローカルブラウザログインが必要な場合のみインストールしてください：',
+    no_playwright: '\n❌ ローカルブラウザログインは Chrome/Edge/Chromium CDP を優先します。現在 CDP が利用できず、Playwright フォールバックも見つかりません。通常は yeqiu-yida login または yeqiu-yida login --qr を使用してください。ローカルブラウザログインが必要な場合のみインストールしてください：',
     playwright_install1: '   npm install -g playwright',
     playwright_install2: '   npx playwright install chromium',
     browser_opening: '\n🔐 ブラウザを開いて QR コードログインを開始します...',
@@ -380,11 +380,11 @@ openyida - Yida CLI ツール
 
   // ── lib/auth.js ────────────────────────────────────
   auth: {
-    status_title: '  openyida auth status - ログイン状態照会',
+    status_title: '  yeqiu-yida auth status - ログイン状態照会',
     not_logged_in: '  状態:       ❌ 未ログイン',
-    login_hint: '  ヒント:     openyida auth login を実行してログインしてください',
+    login_hint: '  ヒント:     yeqiu-yida auth login を実行してログインしてください',
     no_csrf_token: '  状態:       ❌ ログイン状態が無効（csrf_token なし）',
-    relogin_hint: '  ヒント:     openyida auth login で再ログインしてください',
+    relogin_hint: '  ヒント:     yeqiu-yida auth login で再ログインしてください',
     logged_in: '  状態:       ✅ ログイン済み',
     base_url_label: '  ドメイン:   {0}',
     corp_id_label: '  組織 ID:    {0}',
@@ -405,12 +405,12 @@ openyida - Yida CLI ツール
 
   // ── lib/org.js ─────────────────────────────────────
   org: {
-    list_title: '  openyida org list - 組織一覧',
+    list_title: '  yeqiu-yida org list - 組織一覧',
     no_corp_id: '  ❌ 現在の組織 ID を取得できません、先にログインしてください',
     current_org: '現在の組織',
     current: '現在',
     no_organizations: '  ⚠️  組織情報がありません',
-    switch_title: '  openyida org switch - 組織切り替え',
+    switch_title: '  yeqiu-yida org switch - 組織切り替え',
     switch_from: '  現在の組織: {0}',
     switch_to: '  切り替え先: {0}',
     already_in_org: '  ✅ 既にターゲット組織にいます',
@@ -426,16 +426,16 @@ openyida - Yida CLI ツール
     only_one_org: '  ⚠️  利用可能な組織が1つしかありません',
     select_prompt: '\n  切り替える組織を選択:',
     use_corp_id_hint: '\n  💡 ヒント: --corp-id オプションでターゲット組織を指定',
-    no_login: '❌ 未ログイン、先に openyida login を実行してください',
+    no_login: '❌ 未ログイン、先に yeqiu-yida login を実行してください',
     switched_org: '切り替え後の組織',
     unknown: '不明',
   },
 
   // ── lib/create-app.js ──────────────────────────────
   create_app: {
-    title: '  openyida create-app - Yida アプリ作成ツール',
-    usage: 'Usage: openyida create-app "<appName>" [description] [icon] [iconColor] [themeColor] または openyida create-app --name "<appName>" [--desc "..."] [--theme deepBlue]',
-    example: '例: openyida create-app --name "勤怠管理" --desc "従業員勤怠システム" --theme deepBlue',
+    title: '  yeqiu-yida create-app - Yida アプリ作成ツール',
+    usage: 'Usage: yeqiu-yida create-app "<appName>" [description] [icon] [iconColor] [themeColor] または yeqiu-yida create-app --name "<appName>" [--desc "..."] [--theme deepBlue]',
+    example: '例: yeqiu-yida create-app --name "勤怠管理" --desc "従業員勤怠システム" --theme deepBlue',
     available_icons: '\n利用可能なアイコン:',
     icons_list: '  xian-xinwen, xian-zhengfu, xian-yingyong, xian-xueshimao, xian-qiye,\n  xian-danju, xian-shichang, xian-jingli, xian-falv, xian-baogao,\n  huoche, xian-shenbao, xian-diqiu, xian-qiche, xian-feiji,\n  xian-diannao, xian-gongzuozheng, xian-gouwuche, xian-xinyongka,\n  xian-huodong, xian-jiangbei, xian-liucheng, xian-chaxun, xian-daka',
     available_colors: '\n利用可能な色:',
@@ -460,9 +460,9 @@ openyida - Yida CLI ツール
 
   // ── lib/create-page.js ─────────────────────────────
   create_page: {
-    title: '  openyida create-page - Yida カスタムページ作成ツール',
-    usage: 'Usage: openyida create-page <appType> "<pageName>" [--mode dashboard]',
-    example: '例: openyida create-page "APP_XXX" "Dashboard" --mode dashboard',
+    title: '  yeqiu-yida create-page - Yida カスタムページ作成ツール',
+    usage: 'Usage: yeqiu-yida create-page <appType> "<pageName>" [--mode dashboard]',
+    example: '例: yeqiu-yida create-page "APP_XXX" "Dashboard" --mode dashboard',
     app_id: '  アプリ ID:   {0}',
     page_name: '  ページ名:   {0}',
     step_create: '\n📄 Step 2: カスタムページを作成\n',
@@ -480,9 +480,9 @@ openyida - Yida CLI ツール
 
   // ── lib/get-schema.js ──────────────────────────────
   get_schema: {
-    title: '  openyida get-schema - Yida フォーム Schema 取得ツール',
-    usage: 'Usage: openyida get-schema <appType> <formUuid>',
-    example: '例: openyida get-schema "APP_XXX" "FORM-XXX"',
+    title: '  yeqiu-yida get-schema - Yida フォーム Schema 取得ツール',
+    usage: 'Usage: yeqiu-yida get-schema <appType> <formUuid>',
+    example: '例: yeqiu-yida get-schema "APP_XXX" "FORM-XXX"',
     app_id: '  アプリ ID:    {0}',
     form_uuid: '  フォーム UUID: {0}',
     step_get: '\n📄 Step 2: フォーム Schema を取得',
@@ -556,13 +556,13 @@ openyida - Yida CLI ツール
     schema_ok_config_failed: '  Schema は保存されましたが、設定の更新に失敗しました',
     schema_saved_config_failed: '  Schema は保存されましたが、設定の更新に失敗しました',
     error: '\n❌ エラー: {0}',
-    usage_create: '使用方法: openyida create-form create <appType> <formTitle> <fieldsJsonFile>',
-    example_create: '例: openyida create-form create "APP_XXX" "従業員情報" .cache/openyida/forms/employee-fields.json',
-    usage_update: '使用方法: openyida create-form update <appType> <formUuid> <changesJsonOrFile>',
-    example_update: '例: openyida create-form update "APP_XXX" "FORM-YYY" \'[{"action":"add","field":{"type":"TextField","label":"備考"}}]\'',
+    usage_create: '使用方法: yeqiu-yida create-form create <appType> <formTitle> <fieldsJsonFile>',
+    example_create: '例: yeqiu-yida create-form create "APP_XXX" "従業員情報" .cache/yeqiu-yida/forms/employee-fields.json',
+    usage_update: '使用方法: yeqiu-yida create-form update <appType> <formUuid> <changesJsonOrFile>',
+    example_update: '例: yeqiu-yida create-form update "APP_XXX" "FORM-YYY" \'[{"action":"add","field":{"type":"TextField","label":"備考"}}]\'',
     usage_label: '使用方法:',
-    usage_create_short: '  作成: openyida create-form create <appType> <formTitle> <fieldsJsonFile>',
-    usage_update_short: '  更新: openyida create-form update <appType> <formUuid> <changesJsonOrFile>',
+    usage_create_short: '  作成: yeqiu-yida create-form create <appType> <formTitle> <fieldsJsonFile>',
+    usage_update_short: '  更新: yeqiu-yida create-form update <appType> <formUuid> <changesJsonOrFile>',
     example_label: '\n例:',
     fields_file_not_found: '  ❌ フィールド定義ファイルが見つかりません: ',
     fields_format_invalid: 'フィールド定義の形式が正しくありません',
@@ -605,7 +605,7 @@ openyida - Yida CLI ツール
     data_exists_impact: '     - 過去データの消失または破損\n     - プロセスステータスの異常\n     - データの不整合',
     data_exists_abort: '  ❌ 変更を中止しました。続行するには --force を追加してください。',
     data_exists_confirm_message: 'このフォームには {0} 件の既存レコードがあります。構造の変更は既存データに影響する可能性があります。確認するには --force を追加してください。',
-    data_exists_force_hint: '使用法: openyida create-form update <appType> <formUuid> <changesJson> --force',
+    data_exists_force_hint: '使用法: yeqiu-yida create-form update <appType> <formUuid> <changesJson> --force',
     data_exists_force_proceed: '  ⚠️  --force モード: 確認をスキップし、{0} 件の既存レコードがあるフォーム構造を強制変更',
     data_check_empty: '  ✅ フォームにデータがありません。安全に変更できます',
     data_check_failed: '  ⚠️  データ確認に失敗しました。変更を続行します',
@@ -639,10 +639,10 @@ openyida - Yida CLI ツール
 
   // ── lib/export-app.js ──────────────────────────────
   export: {
-    usage: '使用方法: openyida export <appType> [output]',
-    example1: '例: openyida export APP_XXXXXXXXXXXXX',
-    example2: '    openyida export APP_XXXXXXXXXXXXX ./my-app-backup.json',
-    title: '  openyida export - Yida アプリエクスポートツール',
+    usage: '使用方法: yeqiu-yida export <appType> [output]',
+    example1: '例: yeqiu-yida export APP_XXXXXXXXXXXXX',
+    example2: '    yeqiu-yida export APP_XXXXXXXXXXXXX ./my-app-backup.json',
+    title: '  yeqiu-yida export - Yida アプリエクスポートツール',
     app_id: '\n  アプリ ID:    {0}',
     output_file: '  出力ファイル: {0}',
     step_get_forms: '\n📋 Step 2: アプリのフォームリストを取得',
@@ -662,15 +662,15 @@ openyida - Yida CLI ツール
 
   // ── lib/import-app.js ──────────────────────────────
   import: {
-    usage: '使用方法: openyida import <file> [name]',
-    example1: '例: openyida import ./yida-export.json',
-    example2: '    openyida import ./yida-export.json "品質追跡システム（本番環境）"',
-    title: '  openyida import - Yida アプリインポートツール',
+    usage: '使用方法: yeqiu-yida import <file> [name]',
+    example1: '例: yeqiu-yida import ./yida-export.json',
+    example2: '    yeqiu-yida import ./yida-export.json "品質追跡システム（本番環境）"',
+    title: '  yeqiu-yida import - Yida アプリインポートツール',
     import_file: '\n  インポートファイル: {0}',
     step_read_file: '\n📂 Step 1: エクスポートファイルを読み込む',
     file_not_found: '  ❌ ファイルが見つかりません: {0}',
     parse_failed: '  ❌ エクスポートファイルの解析に失敗しました: {0}',
-    invalid_format: '  ❌ エクスポートファイルの形式が無効です。openyida export で生成してください。',
+    invalid_format: '  ❌ エクスポートファイルの形式が無効です。yeqiu-yida export で生成してください。',
     migration_suffix: '（移行済み）',
     read_ok: '  ✅ 読み込み成功、合計 {0} 個のフォーム',
     source_app_id: '  移行元アプリ ID: {0}',
@@ -698,15 +698,15 @@ openyida - Yida CLI ツール
     report_path: '  移行レポート:     {0}',
     notice_label: '\n  ⚠️  注意事項：',
     notice_association: '  - 関連フォーム（associationFormField）のクロスフォーム参照は移行レポートに基づいて手動で更新してください',
-    notice_custom_page: '  - カスタムページは openyida publish を使って個別に再公開してください',
+    notice_custom_page: '  - カスタムページは yeqiu-yida publish を使って個別に再公開してください',
     create_app_error: 'アプリの作成に失敗しました',
     create_form_error: 'フォームの作成に失敗しました',
   },
 
   // ── lib/get-page-config.js ─────────────────────────
   get_page_config: {
-    usage: '使用方法: openyida get-page-config <appType> <formUuid>',
-    example: '例: openyida get-page-config APP_XXX FORM-XXX',
+    usage: '使用方法: yeqiu-yida get-page-config <appType> <formUuid>',
+    example: '例: yeqiu-yida get-page-config APP_XXX FORM-XXX',
     title: '  get-page-config - Yida ページ設定照会ツール',
     app_id: '\n  アプリ ID:    {0}',
     form_uuid: '  フォーム UUID: {0}',
@@ -721,8 +721,8 @@ openyida - Yida CLI ツール
 
   // ── lib/save-share-config.js ───────────────────────
   save_share_config: {
-    usage: '使用方法: openyida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
-    example: '例: openyida save-share-config "APP_XXX" "FORM-XXX" "/o/xxx" "y" "n"',
+    usage: '使用方法: yeqiu-yida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
+    example: '例: yeqiu-yida save-share-config "APP_XXX" "FORM-XXX" "/o/xxx" "y" "n"',
     is_open_hint: '  isOpen: y=公開アクセスを有効化, n=公開アクセスを無効化',
     open_auth_hint: '  openAuth: y=認証が必要, n=認証不要（デフォルト）',
     title: '  save-share-config - Yida 公開アクセス設定保存ツール',
@@ -749,8 +749,8 @@ openyida - Yida CLI ツール
 
   // ── lib/update-form-config.js ──────────────────────
   update_form_config: {
-    usage: '使用方法: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
-    example: '例: openyida update-form-config "APP_XXX" "FORM_XXX" "false" "マイページ"',
+    usage: '使用方法: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    example: '例: yeqiu-yida update-form-config "APP_XXX" "FORM_XXX" "false" "マイページ"',
     params_label: 'パラメータ説明:',
     param_is_render_nav: '  isRenderNav: true=トップナビを表示, false=トップナビを非表示',
     param_title: '  title: ページタイトル（必須）',
@@ -770,8 +770,8 @@ openyida - Yida CLI ツール
 
   // ── lib/verify-short-url.js ────────────────────────
   verify_short_url: {
-    usage: '使用方法: openyida verify-short-url <appType> <formUuid> <url>',
-    example: '例: openyida verify-short-url "APP_XXX" "FORM-XXX" "/o/aaa"',
+    usage: '使用方法: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
+    example: '例: yeqiu-yida verify-short-url "APP_XXX" "FORM-XXX" "/o/aaa"',
     formats_label: '  対応フォーマット：',
     format_open: '    /o/xxx - 公開アクセス（外部向け）',
     format_share: '    /s/xxx - 組織内共有（内部向け）',
@@ -798,21 +798,21 @@ openyida - Yida CLI ツール
 
   // ── lib/copy.js ────────────────────────────────────
   copy: {
-    title: '  openyida copy - Yida 作業ディレクトリを初期化',
+    title: '  yeqiu-yida copy - Yida 作業ディレクトリを初期化',
     package_root: '\n📦 パッケージルート: {0}',
     dest_base: '🤖 ターゲットルート: {0}',
     dest_root: '🤖 ターゲットルート: {0}',
     dest_empty_flatten: '📂 ターゲットディレクトリが空のため、project/ の内容を直接コピーします（project/ サブディレクトリは作成しません）',
     force_mode: '⚠️  --force モード：ターゲットディレクトリをクリアしてからコピーします',
-    no_package: '\n❌ openyida パッケージディレクトリが見つかりません',
-    no_package_hint1: '   openyida がグローバルにインストールされていることを確認してください：',
-    no_package_hint2: '   npm install -g openyida',
+    no_package: '\n❌ yeqiu-yida パッケージディレクトリが見つかりません',
+    no_package_hint1: '   yeqiu-yida がグローバルにインストールされていることを確認してください：',
+    no_package_hint2: '   npm install -g yeqiu-yida',
     no_ai_tool: '\n❌ アクティブな AI ツール環境が検出されませんでした\n   対応ツール：悟空、Codex、OpenCode、Claude Code、Aone Copilot、Cursor、Qoder\n\n   現在の検出結果：',
     no_active_tool: '\n❌ アクティブな AI ツール環境が検出されませんでした',
     supported_tools: '   対応ツール：悟空、Codex、OpenCode、Claude Code、Aone Copilot、Cursor、Qoder',
     current_result: '\n   現在の検出結果：',
-    force_hint: '\n   現在のディレクトリに強制コピーするには、次を実行してください：\n   openyida copy --force',
-    force_cmd: '   openyida copy --force',
+    force_hint: '\n   現在のディレクトリに強制コピーするには、次を実行してください：\n   yeqiu-yida copy --force',
+    force_cmd: '   yeqiu-yida copy --force',
     copying: '    コピー: {0}',
     copying_label: '\n📂 {0} をコピー中...',
     creating_symlink: '\n📂 yida-skills/ シンボリックリンクを作成中...',
@@ -846,7 +846,7 @@ openyida - Yida CLI ツール
     available_templates: 'Available templates: {0}',
     template_not_found: 'Template file not found: {0}',
     done: 'Page generated: {0}',
-    hint: 'Next run openyida compile <file>, or pass --compile to compile immediately.',
+    hint: 'Next run yeqiu-yida compile <file>, or pass --compile to compile immediately.',
     success: 'Page generation complete',
   },
   publish: {
@@ -899,7 +899,7 @@ openyida - Yida CLI ツール
     target_not_found: 'Publish target was not found in app navigation: {0}',
     target_type_invalid: 'Publish target is not a custom display page: {0} current type is {1}',
     target_type_hint: 'The current target "{0}" does not look like a custom page (type: {1}). Do not publish JSX to data forms or process forms.',
-    target_list_hint: 'Run openyida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
+    target_list_hint: 'Run yeqiu-yida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
     target_force_hint: 'Append --force only when you intentionally bypass this guard; it overwrites the target Schema and should be used only for a known custom page.',
     step_compile: '\n📦 Step 1: ソースをコンパイルして Schema を構築\n',
     reading_source: '[1/4] {0} のソースを読み込み中...',
@@ -944,8 +944,8 @@ openyida - Yida CLI ツール
     exception: '\n❌ 公開エラー: {0}',
     error: '\n❌ 公開エラー: {0}',
     source_not_found: '❌ ソースファイルが見つかりません：{0}',
-    usage: '使用方法: openyida publish <ソースファイル> <appType> <formUuid> [--health-check]',
-    example: '例: openyida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
+    usage: '使用方法: yeqiu-yida publish <ソースファイル> <appType> <formUuid> [--health-check]',
+    example: '例: yeqiu-yida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
   },
 
   // ── lib/qr-login.js ────────────────────────────────
@@ -992,9 +992,9 @@ openyida - Yida CLI ツール
 
   // ── scripts/postinstall.js ─────────────────────────
   postinstall: {
-    welcome_title: '  🎉 OpenYida へようこそ！                                    ',
+    welcome_title: '  🎉 Yeqiu-Yida へようこそ！                                    ',
     install_success: '  ✅ インストール完了！{0} Yida AI 開発ツールが使用可能になりました。',
-    update_success: '  ✅ 更新完了！{0} OpenYida が最新バージョンにアップグレードされました。',
+    update_success: '  ✅ 更新完了！{0} Yeqiu-Yida が最新バージョンにアップグレードされました。',
     ai_mode_title: '  🚀 AI 会話モードを開始',
     ai_mode_desc: '  Codex / Claude Code / Aone Copilot / Cursor などの AI ツールで直接チャット：',
     prompt1: '  📋  「Yida で勤怠管理システムを作ってください」',
@@ -1004,29 +1004,29 @@ openyida - Yida CLI ツール
     steps_title: '  📖 基本的な使い方',
     step1: '  {0}Step 1{1}  AI コーディングツールを開く（Codex / Claude Code / Cursor など）',
     step2: '  {0}Step 2{1}  作りたいアプリを自然言語で説明する',
-    step3: '  {0}Step 3{1}  AI が自動的に openyida コマンドを実行してアプリを作成・公開',
+    step3: '  {0}Step 3{1}  AI が自動的に yeqiu-yida コマンドを実行してアプリを作成・公開',
     step4: '  {0}Step 4{1}  Yida アプリのリンクを取得 🎉',
     commands_title: '  ⚡ クイックコマンド',
-    cmd_env: '  {0}openyida env{1}      {2}# AI ツール環境とログイン状態を検出{3}',
-    cmd_login: '  {0}openyida login{1}    {2}# Yida にログイン{3}',
-    cmd_help: '  {0}openyida --help{1}   {2}# 全コマンドを表示{3}',
-    footer1: '  📚 ドキュメント：https://github.com/openyida/openyida',
-    footer2: '  💬 コミュニティ：DingTalk で OpenYida コミュニティに参加',
+    cmd_env: '  {0}yeqiu-yida env{1}      {2}# AI ツール環境とログイン状態を検出{3}',
+    cmd_login: '  {0}yeqiu-yida login{1}    {2}# Yida にログイン{3}',
+    cmd_help: '  {0}yeqiu-yida --help{1}   {2}# 全コマンドを表示{3}',
+    footer1: '  📚 ドキュメント：https://github.com/yeqiu-yida/yeqiu-yida',
+    footer2: '  💬 コミュニティ：DingTalk で Yeqiu-Yida コミュニティに参加',
   },
 
   // ── src/flash-note/flash-to-prd.ts ──────────────
   flashNote: {
     toPrd: {
       title: '📋 DingTalk フラッシュノートを PRD に変換',
-      help_usage: '使用法：openyida flash-to-prd --file <パス> [--name <プロジェクト名>]',
-      help_usage2: '        openyida flash-to-prd --name <プロジェクト名>（標準入力から読み取り）',
+      help_usage: '使用法：yeqiu-yida flash-to-prd --file <パス> [--name <プロジェクト名>]',
+      help_usage2: '        yeqiu-yida flash-to-prd --name <プロジェクト名>（標準入力から読み取り）',
       help_args_title: '引数：',
       help_arg_file: '  --file, -f <パス>       フラッシュノートファイルパス（.txt / .md）',
       help_arg_name: '  --name, -n <名前>       プロジェクト名（省略可、内容から自動抽出）',
       help_arg_max_tokens: '  --max-tokens <数>       AI 最大出力トークン数（デフォルト 8000）',
       help_examples_title: '例：',
-      help_example1: '  openyida flash-to-prd --file ./meeting-notes.txt --name "設備点検システム"',
-      help_example2: '  cat meeting.txt | openyida flash-to-prd --name "設備点検システム"',
+      help_example1: '  yeqiu-yida flash-to-prd --file ./meeting-notes.txt --name "設備点検システム"',
+      help_example2: '  cat meeting.txt | yeqiu-yida flash-to-prd --name "設備点検システム"',
       step_read: '[Step 1] フラッシュノートを読み込み中...',
       file_not_found: 'ファイルが見つかりません：{0}',
       no_input: 'フラッシュノートが提供されていません。--file でファイルを指定するか、パイプで入力してください。',
@@ -1061,11 +1061,11 @@ openyida - Yida CLI ツール
     },
   },
   codex_login: {
-    title: '  openyida login {0} - {1} Login Mode',
+    title: '  yeqiu-yida login {0} - {1} Login Mode',
     not_codex: 'Current environment is not detected as Codex / Qoder / Wukong; returning an in-app browser login handoff only.',
     no_playwright: '{0} mode does not require Playwright or a separate Chromium install.',
-    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use openyida login --browser for Yida login cookies.',
-    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use openyida login --browser when CLI cookies are required.',
+    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use yeqiu-yida login --browser for Yida login cookies.',
+    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use yeqiu-yida login --browser when CLI cookies are required.',
     handoff_message: '{0} in-app Browser cannot export Yida login cookies. Run fallback_command when CLI cookies are required.',
     cache_available: 'Existing CLI Cookie cache is available; no browser login needed.',
   },

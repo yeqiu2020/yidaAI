@@ -605,7 +605,9 @@ async function main() {
 }
 
 // 运行主函数
-main();
+if (require.main === module) {
+  main();
+}
 
 /**
  * 版本: v1.2.8

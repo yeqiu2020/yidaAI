@@ -1,23 +1,33 @@
 /**
  * 宜搭表单数据清空脚本
- * 版本: 2.1.2
+ * 版本: 2.2.0
  * 功能: 清空指定应用中的表单数据（保留表单结构）
  *
  * 使用方式:
- * node scripts/clear-form-data.js <应用ID> [选项]
+ * node scripts/clear-form-data.js <应用ID> <范围> [选项]
  *
- * 选项:
+ * 范围（三者必须显式指定其一，否则拒绝执行）:
  *   --all                    清空所有表单数据
  *   --form <formUuid>        清空指定表单数据
  *   --forms <uuid1,uuid2>    清空多个指定表单数据（逗号分隔）
+ *
+ * 选项:
  *   --appName <应用名称>      指定应用名称，直接定位配置文件
+ *   --dry-run                预览模式：仅列出将删除的表单与条数，不执行任何删除
+ *   --confirm                确认执行删除（不可逆）。缺省时改用交互输入 DELETE 确认
  *
  * 示例:
- *   node scripts/clear-form-data.js APP_XXXXXXXX --all
- *   node scripts/clear-form-data.js APP_XXXXXXXX --all --appName AI宜搭场景
- *   node scripts/clear-form-data.js APP_XXXXXXXX --form FORM-XXXXXXXX
- *   node scripts/clear-form-data.js APP_XXXXXXXX --forms FORM-XXX,FORM-YYY
+ *   node scripts/clear-form-data.js APP_XXXXXXXX --all --dry-run          # 先预览
+ *   node scripts/clear-form-data.js APP_XXXXXXXX --all --confirm          # 确认后执行
+ *   node scripts/clear-form-data.js APP_XXXXXXXX --form FORM-XXXXXXXX --confirm
+ *   node scripts/clear-form-data.js APP_XXXXXXXX --forms FORM-XXX,FORM-YYY --confirm
  *
+ * v2.2.0 安全加固:
+ * - 取消“无参数默认删除全部”行为：必须显式 --all / --form / --forms，否则拒绝执行
+ * - 新增 --dry-run 预览模式，仅统计将删除的表单与条数，不执行删除
+ * - 新增执行前确认闸门：需 --confirm 或交互输入 DELETE，否则不删除任何数据
+ * - 备份升级为“可还原备份”：抓取每条记录的完整内容（不再仅存 dataId）；
+ *   内容抓取不完整时在备份文件与终端明确提示“不可完整还原”；备份写入失败则跳过删除
  * v2.1.2 修复:
  * - 根因修复：Markdown转义下划线导致appId包含反斜杠（APP\_XXX → APP_XXX）
  * - main函数入口添加unescape处理，防御性清理appId中的反斜杠
@@ -42,32 +52,28 @@ const fs = require('fs');
 const path = require('path');
 const querystring = require('querystring');
 
+// Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
+const coreUtils = require('../../../../lib/core/utils');
+
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
 
 /**
  * 加载Cookie
+ * Phase 6: 委托给 lib/core/utils.loadCookieData（统一实现）
+ * 保留原返回结构：{ cookies, baseUrl, csrfToken, userId }
  */
 function loadCookies() {
-  try {
-    const data = JSON.parse(fs.readFileSync(COOKIE_FILE, 'utf-8'));
-    if (Array.isArray(data)) {
-      return {
-        cookies: data,
-        baseUrl: 'https://www.aliwork.com',
-        csrfToken: '',
-        userId: ''
-      };
-    }
-    return {
-      cookies: data.cookies || [],
-      baseUrl: data.base_url || 'https://www.aliwork.com',
-      csrfToken: data.csrf_token || '',
-      userId: data.user_id || ''
-    };
-  } catch (e) {
-    throw new Error(`读取Cookie失败: ${e.message}。请先运行登录脚本获取Cookie。`);
+  const data = coreUtils.loadCookieData(PROJECT_ROOT);
+  if (!data) {
+    throw new Error(`读取Cookie失败：.cookies.json 不存在或为空。请先运行登录脚本获取Cookie。`);
   }
+  return {
+    cookies: data.cookies || [],
+    baseUrl: data.base_url || 'https://www.aliwork.com',
+    csrfToken: data.csrf_token || '',
+    userId: data.user_id || ''
+  };
 }
 
 /**
@@ -240,9 +246,55 @@ async function deleteProcessInstance(appId, processInstanceId, cookies, hostname
 }
 
 /**
- * 清空单个表单数据
+ * 抓取单条记录的完整内容（用于可还原备份）
+ * 普通表单：getFormDataById.json（主表字段，不含子表明细）
+ * 流程表单：getInstanceById.json（流程实例详情）
+ * @returns {object|null} 成功返回记录内容，失败返回 null
  */
-async function clearFormData(appId, formUuid, formName, isProcess, cookies, hostname, csrfToken) {
+async function fetchFormDataContent(appId, instId, isProcess, cookies, hostname, csrfToken) {
+  try {
+    const reqPath = isProcess
+      ? `/dingtalk/web/${appId}/v1/process/getInstanceById.json?processInstanceId=${encodeURIComponent(instId)}`
+      : `/dingtalk/web/${appId}/v1/form/getFormDataById.json?formInstId=${encodeURIComponent(instId)}`;
+    const result = await getRequest(hostname, reqPath, cookies, csrfToken);
+    if (!result) return null;
+    // 标准包装：{ success, result: {...} }
+    if (result.result !== undefined && result.result !== null) return result.result;
+    // 部分接口直接返回扁平对象（无 success/result 包装）
+    if (result.success === undefined && !result.raw && typeof result === 'object') return result;
+    if (result.success === true) return result.content || result.data || result;
+    return null;
+  } catch (e) {
+    return null;
+  }
+}
+
+/**
+ * 交互式确认：要求用户输入 DELETE 才视为确认
+ * 非 TTY（无交互终端）环境下直接返回 false，需显式 --confirm
+ * @returns {Promise<boolean>}
+ */
+function askConfirmation(promptText) {
+  return new Promise(resolve => {
+    if (!process.stdin.isTTY) {
+      resolve(false);
+      return;
+    }
+    const readline = require('readline');
+    const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+    rl.question(promptText, answer => {
+      rl.close();
+      resolve(String(answer).trim() === 'DELETE');
+    });
+  });
+}
+
+/**
+ * 清空单个表单数据
+ * @param {object} [opts] - { dryRun: boolean } dryRun 为 true 时仅统计不删除
+ */
+async function clearFormData(appId, formUuid, formName, isProcess, cookies, hostname, csrfToken, opts = {}) {
+  const dryRun = opts.dryRun === true;
   console.log(`\n📋 处理表单: ${formName || formUuid}`);
 
   let ids = [];
@@ -259,19 +311,60 @@ async function clearFormData(appId, formUuid, formName, isProcess, cookies, host
     console.log(`   📊 共找到 ${ids.length} 条数据`);
 
     if (ids.length === 0) {
-      return { success: true, deleted: 0, failed: 0 };
+      return { success: true, deleted: 0, failed: 0, found: 0 };
     }
 
+    // dry-run：仅统计，不执行任何删除与备份
+    if (dryRun) {
+      console.log(`   🔍 [dry-run] 将删除 ${ids.length} 条数据（未执行）`);
+      return { success: true, deleted: 0, failed: 0, found: ids.length, dryRun: true };
+    }
+
+    // 备份：抓取每条记录的完整内容以支持还原
     const backupDir = path.join(PROJECT_ROOT, 'temp-file', 'data-backup');
     if (!fs.existsSync(backupDir)) {
       fs.mkdirSync(backupDir, { recursive: true });
     }
+    const records = [];
+    let contentComplete = true;
+    const subFormLimited = !isProcess; // getFormDataById 不返回子表明细
+    console.log(`   💾 正在备份 ${ids.length} 条记录内容...`);
+    for (let i = 0; i < ids.length; i++) {
+      const content = await fetchFormDataContent(appId, ids[i], isProcess, cookies, hostname, csrfToken);
+      if (content === null) contentComplete = false;
+      records.push({ dataId: ids[i], data: content });
+      process.stdout.write(`   💾 备份中 ${i + 1}/${ids.length}\r`);
+      await new Promise(resolve => setTimeout(resolve, 150));
+    }
+    const restorable = contentComplete;
     const backupFile = path.join(backupDir, `${(formName || formUuid).replace(/[\/\\:*?"<>|]/g, '_')}_${new Date().toISOString().slice(0,10)}.json`);
     try {
-      fs.writeFileSync(backupFile, JSON.stringify({ appId, formUuid, formName, isProcess, dataIds: ids, backupTime: new Date().toISOString() }, null, 2), 'utf-8');
-      console.log(`   💾 已备份数据ID列表: ${backupFile}`);
+      fs.writeFileSync(backupFile, JSON.stringify({
+        appId,
+        formUuid,
+        formName,
+        isProcess,
+        backupTime: new Date().toISOString(),
+        restorable,
+        restoreNote: restorable
+          ? (subFormLimited
+              ? '本备份包含主表字段内容，可用于人工还原（通过 saveFormData 重新提交）；但普通表单的子表明细未包含在内，还原时需另行补录子表数据。'
+              : '本备份包含流程实例详情内容，可用于人工还原（需通过发起流程 API 重新提交）。')
+          : '⚠️ 部分或全部记录内容抓取失败，本备份不可完整还原，请谨慎。',
+        count: records.length,
+        records
+      }, null, 2), 'utf-8');
+      console.log(`\n   💾 已备份记录内容: ${backupFile}`);
+      if (!restorable) {
+        console.log(`   ⚠️  部分记录内容抓取失败，备份不可完整还原`);
+      } else if (subFormLimited) {
+        console.log(`   ℹ️  备份含主表字段；子表明细未包含，还原需补录`);
+      }
     } catch (backupErr) {
-      console.log(`   ⚠️  备份失败: ${backupErr.message}，继续执行清空操作`);
+      // 备份写入失败视为高风险，跳过该表单的删除操作
+      console.log(`\n   ⚠️  备份失败: ${backupErr.message}`);
+      console.log(`   🛑 因备份失败，已跳过该表单的删除操作`);
+      return { success: false, deleted: 0, failed: 0, found: ids.length, backupFailed: true };
     }
 
     // 逐条删除数据
@@ -316,7 +409,9 @@ function parseArgs() {
     all: false,
     form: null,
     forms: null,
-    appName: null
+    appName: null,
+    dryRun: false,
+    confirm: false
   };
 
   // 第一个参数是应用ID
@@ -345,6 +440,12 @@ function parseArgs() {
         if (i + 1 < args.length) {
           options.appName = args[++i];
         }
+        break;
+      case '--dry-run':
+        options.dryRun = true;
+        break;
+      case '--confirm':
+        options.confirm = true;
         break;
     }
   }
@@ -534,7 +635,7 @@ async function getFormsFromAPI(appId, cookies, hostname, csrfToken) {
  */
 async function main() {
   console.log('═══════════════════════════════════════════');
-  console.log('        宜搭表单数据清空工具 v2.1.2');
+  console.log('        宜搭表单数据清空工具 v2.2.0');
   console.log('═══════════════════════════════════════════\n');
 
   // 解析参数
@@ -548,8 +649,9 @@ async function main() {
   }
   if (!appId) {
     console.error('❌ 缺少应用ID参数！');
-    console.log('用法: node clear-form-data.js <应用ID> --all [--appName 应用名称]');
-    console.log('示例: node clear-form-data.js APP_XXXXXXXX --all --appName AI宜搭场景');
+    console.log('用法: node clear-form-data.js <应用ID> <--all|--form <uuid>|--forms <u1,u2>> [--dry-run|--confirm] [--appName 应用名称]');
+    console.log('示例: node clear-form-data.js APP_XXXXXXXX --all --dry-run');
+    console.log('示例: node clear-form-data.js APP_XXXXXXXX --all --confirm --appName AI宜搭场景');
     process.exit(1);
   }
 
@@ -571,6 +673,17 @@ async function main() {
 
   const hostname = cookieData.baseUrl.replace('https://', '');
 
+  // 校验删除范围：必须显式指定 --all / --form / --forms（取消“无参数默认删除全部”）
+  if (!options.all && !options.form && !options.forms) {
+    console.error('\n❌ 未指定删除范围，已拒绝执行（不会删除任何数据）');
+    console.log('   请显式指定以下之一：');
+    console.log('     --all                  清空所有表单数据');
+    console.log('     --form <formUuid>      清空指定表单数据');
+    console.log('     --forms <uuid1,uuid2>  清空多个指定表单数据');
+    console.log('   建议先加 --dry-run 预览，确认后再加 --confirm 执行删除。');
+    process.exit(1);
+  }
+
   // 确定要处理的表单列表
   let forms = [];
 
@@ -581,7 +694,7 @@ async function main() {
       console.log('📡 从宜搭API获取表单列表...');
       forms = await getFormsFromAPI(appId, cookieData.cookies, hostname, cookieData.csrfToken);
     }
-    if (forms.length === 0) {
+    if (!forms || forms.length === 0) {
       console.log('⚠️  未找到任何表单，请确认应用ID是否正确');
       process.exit(1);
     }
@@ -597,25 +710,46 @@ async function main() {
     forms = options.forms.map(uuid => ({ name: uuid, uuid: uuid, isProcess: false }));
     console.log(`\n🎯 目标应用: ${appId}${options.appName ? ` (${options.appName})` : ''}`);
     console.log(`📋 清空范围: 指定表单 (${options.forms.length} 个)`);
-  } else {
-    // 默认清空所有表单
-    forms = getFormsFromConfig(appId, options.appName);
-    if (!forms) {
-      console.log('📡 从宜搭API获取表单列表...');
-      forms = await getFormsFromAPI(appId, cookieData.cookies, hostname, cookieData.csrfToken);
-    }
-    if (forms.length === 0) {
-      console.log('⚠️  未找到任何表单，请确认应用ID是否正确');
-      process.exit(1);
-    }
-    console.log(`\n🎯 目标应用: ${appId}${options.appName ? ` (${options.appName})` : ''}`);
-    console.log(`📋 清空范围: 所有表单 (${forms.length} 个)`);
   }
 
-  console.log('\n⚠️  警告: 此操作将删除所有表单数据，且不可恢复！');
-  console.log('⏳ 3秒后开始执行...\n');
+  // ── dry-run：仅统计将删除的表单与条数，不执行任何删除 ──
+  if (options.dryRun) {
+    console.log('\n🔍 [dry-run] 预览模式：仅统计，不会删除任何数据\n');
+    let totalFound = 0;
+    for (let i = 0; i < forms.length; i++) {
+      const form = forms[i];
+      console.log(`[${i + 1}/${forms.length}]`);
+      const result = await clearFormData(
+        appId, form.uuid, form.name, form.isProcess,
+        cookieData.cookies, hostname, cookieData.csrfToken,
+        { dryRun: true }
+      );
+      totalFound += result.found || 0;
+      if (i < forms.length - 1) await new Promise(resolve => setTimeout(resolve, 300));
+    }
+    console.log('\n═════════════════════════════');
+    console.log('           [dry-run] 预览汇总');
+    console.log('══════════════════════════════');
+    console.log(`📋 将处理表单数: ${forms.length}`);
+    console.log(`📊 将删除数据: ${totalFound} 条`);
+    console.log('🛑 未执行任何删除。确认无误后，去掉 --dry-run 并添加 --confirm 执行。');
+    console.log('══════════════════════════════\n');
+    process.exit(0);
+  }
 
-  await new Promise(resolve => setTimeout(resolve, 3000));
+  // ── 执行前确认闸门：必须 --confirm 或交互输入 DELETE ──
+  console.log('\n⚠️  警告: 此操作将删除上述表单的全部数据，且不可逆！');
+  console.log('💾 删除前会自动将记录内容备份到 temp-file/data-backup/');
+  if (!options.confirm) {
+    const confirmed = await askConfirmation('\n请输入 DELETE 以确认删除（或取消后加 --confirm 重试）: ');
+    if (!confirmed) {
+      console.log('\n🛑 未获确认，已取消操作。未删除任何数据。');
+      console.log('   如需执行删除：先用 --dry-run 预览，确认后重新运行并添加 --confirm。');
+      process.exit(0);
+    }
+  } else {
+    console.log('✅ 已通过 --confirm 确认，开始执行...');
+  }
 
   // 统计
   let totalDeleted = 0;
@@ -658,7 +792,9 @@ async function main() {
 }
 
 // 执行
-main().catch(error => {
-  console.error('❌ 执行出错:', error.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error('❌ 执行出错:', error.message);
+    process.exit(1);
+  });
+}

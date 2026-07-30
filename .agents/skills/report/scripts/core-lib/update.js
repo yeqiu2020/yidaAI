@@ -1,5 +1,5 @@
 /**
- * update.js - openyida 自更新命令
+ * update.js - yeqiu-yida 自更新命令
  *
  * 参考 openclaw update 的终端输出风格：
  *   - 表格化状态展示（Install / Channel / Version / Update）
@@ -80,7 +80,7 @@ function detectPackageManager() {
  * 执行自更新流程（仿 openclaw update 风格）：
  * 1. 展示当前状态表格
  * 2. 查询 npm registry 获取最新版本
- * 3. 若有新版本，spinner 动画执行 npm install -g openyida@latest
+ * 3. 若有新版本，spinner 动画执行 npm install -g yeqiu-yida@latest
  * 4. 若已是最新，表格中标记 up to date
  *
  * @param {string} currentVersion - 当前版本号（来自 package.json）
@@ -88,7 +88,7 @@ function detectPackageManager() {
 async function runUpdate(currentVersion) {
   // ── 标题 ──
   console.log('');
-  console.log(`${BOLD}${CYAN}OpenYida update${RESET}`);
+  console.log(`${BOLD}${CYAN}Yeqiu-Yida update${RESET}`);
   console.log('');
 
   // ── Step 1: 检查最新版本 ──
@@ -129,7 +129,7 @@ async function runUpdate(currentVersion) {
   const installSpinner = createSpinner(t('update.installing'));
 
   try {
-    execSync(`${getNpmExecutable()} install -g openyida@latest`, {
+    execSync(`${getNpmExecutable()} install -g yeqiu-yida@latest`, {
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 120000,
     });

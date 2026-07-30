@@ -1,5 +1,5 @@
 /**
- * check-update.js - openyida 版本更新检查
+ * check-update.js - yeqiu-yida 版本更新检查
  *
  * 向 npm registry 查询最新版本，有新版本时打印提示。
  * 全程异步，不阻塞主命令流程。
@@ -10,7 +10,7 @@
 const https = require('https');
 const { t } = require('./i18n');
 
-const REGISTRY_URL = 'https://registry.npmjs.org/openyida/latest';
+const REGISTRY_URL = 'https://registry.npmjs.org/yeqiu-yida/latest';
 
 /**
  * 从 npm registry 获取最新版本号。

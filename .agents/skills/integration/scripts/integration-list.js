@@ -1,7 +1,10 @@
 'use strict';
 
 const path = require('path');
-const { loadCookieData, triggerLogin, resolveBaseUrl } = require(path.resolve(__dirname, '../../yida-api-client/scripts/api_client'));
+// Phase 6: Cookie 加载统一委托给 lib/core/utils
+const coreUtils = require('../../../../lib/core/utils');
+const { loadCookieData, resolveBaseUrl } = coreUtils;
+const { triggerLogin } = require(path.resolve(__dirname, '../../api-client/scripts/api_client'));
 const { listLogicflows, switchLogicflow } = require('./integration-api');
 
 async function createAuthRef() {

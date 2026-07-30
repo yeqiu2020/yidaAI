@@ -163,6 +163,8 @@ async function main() {
 }
 
 // 运行测试
-main().catch(console.error);
+if (require.main === module) {
+  main().catch(console.error);
+}
 
 module.exports = { runTest, parseArgs };

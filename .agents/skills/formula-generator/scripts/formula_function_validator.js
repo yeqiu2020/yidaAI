@@ -13,7 +13,7 @@ const fs = require('fs');
 const path = require('path');
 
 // 宜搭官方函数列表（从宜搭表单公式文档.md提取）
-const YIDA_OFFICIAL_FUNCTIONS = new Set([
+const OFFICIAL_FUNCTIONS = new Set([
   // 文本函数
   'ARRAYGET', 'CONCATENATE', 'LEFT', 'RIGHT', 'LEN', 'LOWER', 'UPPER', 'MID',
   'PINYINHEADCHAR', 'REPLACE', 'REPT', 'RMBFORMAT', 'SEARCH', 'SPLIT', 'TEXT',
@@ -88,7 +88,7 @@ function validateFunctions(formulaText) {
   const warnings = [];
 
   for (const func of functions) {
-    if (!YIDA_OFFICIAL_FUNCTIONS.has(func)) {
+    if (!OFFICIAL_FUNCTIONS.has(func)) {
       // 检查是否是常见错误
       if (COMMON_MISTAKES[func]) {
         invalidFunctions.push({
@@ -143,7 +143,7 @@ function validateFormulaStrict(formulaText) {
 module.exports = {
   validateFunctions,
   validateFormulaStrict,
-  YIDA_OFFICIAL_FUNCTIONS,
+  OFFICIAL_FUNCTIONS,
   COMMON_MISTAKES
 };
 

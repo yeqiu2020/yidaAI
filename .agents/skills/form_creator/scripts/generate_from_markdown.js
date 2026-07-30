@@ -1,8 +1,17 @@
 /**
  * 宜搭表单生成器 - 表格格式字段清单版本
- * 版本: 6.3.0
- * 更新日期: 2026-04-01
+ * 版本: 6.5.0
+ * 更新日期: 2026-07-07
  * 更新说明:
+ *   - 【优化】分组目录加「分组」后缀，与表单目录结构对齐（如"基础信息「分组」"），让用户更好区分分组和表单
+ *   - 【根因修复】分组目录命名规则与应用分组.md保持一致，去掉数字编号前缀
+ *     之前：generate_from_markdown.js 创建"02基础信息"等带编号目录
+ *           create_from_markdown.js + sync_config.js 创建"基础信息"等不带编号目录
+ *           两个脚本命名规则不一致，导致sync_config.js找不到目录后创建新目录，产生重复
+ *     修复：统一使用不带编号的分组目录名（与应用分组.md一致），删除getModuleNumberedName函数
+ *   - 【修复】输出目录已存在但有分组信息时，强制使用分组结构
+ *     之前：目录已存在 → 扁平结构（与create_from_markdown.js的syncFormSchemas不一致，导致两份目录）
+ *     修复：目录已存在 + 有module分组 → 分组结构（与create_from_markdown.js保持一致）
  *   - 【重要修复】生成表单时同时创建三个标准文件：JSON、组件ID清单.md、表单结构变更.md
  *   - 【重要修复】当输出路径是已存在的目录时，采用扁平结构，直接将表单输出到该目录
  *     不再强制创建"02未分类"等模块子目录，避免用户指定路径后还多一层目录的问题
@@ -10,7 +19,7 @@
  *   - 支持字段状态（普通/只读/隐藏），映射到宜搭的behavior属性（NORMAL/READONLY/HIDDEN）
  *   - 支持是否必填配置，生成validation验证规则
  *   - 支持公式计算字段识别
- *   - 集成yida_field_templates.js v4.1.0，支持字段状态
+ *   - 集成field_templates.js v4.1.0，支持字段状态
  *
  * 功能: 读取Markdown字段表（表格格式），AI判断字段类型，生成宜搭表单JSON
  * 用法: node generate_from_markdown.js <markdown文件路径> [输出目录]
@@ -68,13 +77,17 @@ function parseFieldType(typeStr, description) {
     '数值': 'NumberField',
     '日期': 'DateField',
     '日期时间': 'DateField',
+    '单选': 'RadioField',
+    '复选': 'CheckboxField',
     '下拉单选': 'SelectField',
     '下拉多选': 'MultiSelectField',
+    '下拉复选': 'MultiSelectField',
     '关联表单': 'AssociationFormField',
     '成员': 'EmployeeField',
     '部门': 'DepartmentSelectField',
     '附件': 'AttachmentField',
     '图片': 'ImageField',
+    '地址': 'AddressField',
     '流水号': 'SerialNumberField'
   };
   
@@ -106,13 +119,21 @@ function parseFieldType(typeStr, description) {
     }
   }
   
-  if (type === '下拉单选' || type === '下拉多选') {
+  if (type === '单选' || type === '复选' || type === '下拉单选' || type === '下拉多选' || type === '下拉复选') {
     // 解析选项值
     if (desc && desc !== '-' && !desc.includes('关联')) {
       config.options = desc.split(/[\/、]/).map(opt => opt.trim()).filter(opt => opt);
     }
   }
-  
+
+  // 解析流水号前缀（支持"前缀:CP"或"前缀：CP"格式）
+  if (type === '流水号') {
+    const prefixMatch = desc.match(/前缀[：:](\w+)/);
+    if (prefixMatch) {
+      config.serialPrefix = prefixMatch[1].trim();
+    }
+  }
+
   // 检查是否为公式计算字段
   if (desc.includes('公式计算')) {
     config.isFormula = true;
@@ -122,8 +143,9 @@ function parseFieldType(typeStr, description) {
     }
   }
   
-  // 检查是否为关联带出
-  if (desc.includes('关联带出')) {
+  // 检查是否为填充字段（旧格式兼容：被填充字段的description包含"填充-->"）
+  // 新格式下，被填充字段的description不再包含"填充"，通过markFillingFields后处理标记
+  if (desc.includes('填充-->') || desc.includes('关联带出')) {
     config.isAssociationOut = true;
   }
   
@@ -266,7 +288,15 @@ function parseMarkdown(content) {
   if (currentForm) {
     forms.push(currentForm);
   }
-  
+
+  // 新格式后处理：从关联字段的description解析填充规则，标记被填充字段
+  for (const form of forms) {
+    markFillingFields(form.fields);
+    for (const subTable of form.subTables) {
+      markFillingFields(subTable.fields);
+    }
+  }
+
   return {
     name: systemName,
     version: version,
@@ -275,11 +305,68 @@ function parseMarkdown(content) {
 }
 
 /**
+ * 新格式后处理：从关联表单字段的description解析填充规则，标记被填充字段
+ * 新格式中，填充规则写在关联字段的说明列：关联-->产品信息；填充：规格型号=规格型号，单位=单位
+ * @param {Array} fields - 字段数组
+ */
+function markFillingFields(fields) {
+  for (const field of fields) {
+    if (field.type === 'AssociationFormField' && field.description) {
+      const match = field.description.match(/填充：(.+)/);
+      if (match) {
+        const fillingStr = match[1];
+        const pairs = fillingStr.split('，').map(s => s.trim());
+        for (const pair of pairs) {
+          const parts = pair.split('=').map(s => s.trim());
+          if (parts.length === 2 && parts[0]) {
+            const fillingField = fields.find(f => f.label === parts[0]);
+            if (fillingField) {
+              fillingField.isAssociationOut = true;
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * 根据表单名称生成流水号前缀（拼音首字母大写）
+ * @param {string} formName - 表单名称
+ * @returns {string} 前缀字符串
+ */
+function generateSerialPrefix(formName) {
+  // 常见表单名称到拼音首字母的映射
+  const prefixMap = {
+    '产品信息': 'CP',
+    '仓库信息': 'CK',
+    '库存盘点': 'KCPD',
+    '库存调拨': 'KCDB',
+    '客户信息': 'KH',
+    '客户跟进': 'KHGJ',
+    '供应商信息': 'GYS',
+    '采购订单': 'CGDD',
+    '采购入库': 'CGRK',
+    '销售订单': 'XSDD',
+    '销售出库': 'XSCK',
+    '销售退货': 'XSTH',
+    '收款登记': 'SKDJ',
+    '开票登记': 'KPDJ',
+    '付款登记': 'FKDJ',
+    '收票登记': 'SPDJ'
+  };
+  return prefixMap[formName] || 'SN';
+}
+
+/**
  * 转换表单配置
  * @param {Object} form - 解析后的表单
  * @returns {Object} 表单配置
  */
 function convertFormToConfig(form) {
+  // 根据表单名称生成流水号前缀
+  const serialPrefix = generateSerialPrefix(form.name);
+
   // 处理主表字段
   const fields = form.fields.map(field => ({
     label: field.label,
@@ -293,6 +380,7 @@ function convertFormToConfig(form) {
     isFormula: field.isFormula,
     formula: field.formula,
     isAssociationOut: field.isAssociationOut,
+    serialPrefix: field.serialPrefix || (field.type === 'SerialNumberField' ? serialPrefix : undefined),
     description: field.description
   }));
 
@@ -326,27 +414,6 @@ function convertFormToConfig(form) {
     module: form.module,
     fields: fields
   };
-}
-
-/**
- * 模块名称到编号的映射
- * 从02开始编号（01留给需求梳理）
- */
-const moduleNumberMap = new Map();
-let moduleCounter = 2; // 从02开始
-
-/**
- * 获取模块编号
- * @param {string} moduleName - 模块名称
- * @returns {string} 带编号的模块名称
- */
-function getModuleNumberedName(moduleName) {
-  if (!moduleNumberMap.has(moduleName)) {
-    const number = String(moduleCounter).padStart(2, '0');
-    moduleNumberMap.set(moduleName, `${number}${moduleName}`);
-    moduleCounter++;
-  }
-  return moduleNumberMap.get(moduleName);
 }
 
 /**
@@ -401,7 +468,7 @@ async function generateProject(markdownPath, outputPath) {
                       field.unit ? `[单位:${field.unit}]` :
                       field.precision !== undefined ? `[${field.precision}位小数]` :
                       field.isFormula ? '[公式]' :
-                      field.isAssociationOut ? '[关联带出]' : '';
+                      field.isAssociationOut ? '[填充]' : '';
         const status = field.status === 'readonly' ? '[只读]' : field.status === 'hidden' ? '[隐藏]' : '';
         const required = field.required ? '[必填]' : '';
         console.log(`    - ${field.label}: ${field.type}${extra}${status}${required}`);
@@ -417,31 +484,40 @@ async function generateProject(markdownPath, outputPath) {
   const resolvedOutputPath = path.resolve(outputPath);
   const isExistingDir = fs.existsSync(resolvedOutputPath) && fs.statSync(resolvedOutputPath).isDirectory();
   
+  // 检查是否有分组信息：如果字段清单中定义了module，应使用分组结构
+  const hasModuleInfo = configs.some(f => f.module);
+  
   let projectPath;
   let useFlatStructure = false; // 是否使用扁平结构（不创建模块目录）
   
   if (isExistingDir) {
-    // 使用已有目录 - 直接将表单输出到该目录，不创建模块子目录
     projectPath = resolvedOutputPath;
-    useFlatStructure = true;
-    console.log(`[信息] 使用已有目录: ${projectPath}`);
-    console.log(`[信息] 采用扁平结构，表单直接输出到当前目录\n`);
+    if (hasModuleInfo) {
+      // 有分组信息时强制使用分组结构，与create_from_markdown.js的syncFormSchemas保持一致
+      useFlatStructure = false;
+      console.log(`[信息] 使用已有目录: ${projectPath}`);
+      console.log(`[信息] 检测到分组信息，采用分组结构（与宜搭同步保持一致）\n`);
+    } else {
+      // 无分组信息，使用扁平结构
+      useFlatStructure = true;
+      console.log(`[信息] 使用已有目录: ${projectPath}`);
+      console.log(`[信息] 无分组信息，采用扁平结构，表单直接输出到当前目录\n`);
+    }
   } else {
     // 创建新项目目录
     projectPath = path.join(__dirname, '..', '..', '..', '..', '项目', outputPath);
     console.log(`[信息] 创建新项目: ${outputPath}\n`);
   }
 
-  // 只有在新项目模式下才创建模块目录
+  // 创建模块目录（与应用分组.md保持一致，加「分组」后缀与表单目录结构对齐）
   if (!useFlatStructure) {
-    // 创建模块目录（带编号）
     const modules = [...new Set(configs.map(f => f.module || '未分类'))];
     for (const module of modules) {
-      const numberedModuleName = getModuleNumberedName(module);
-      const modulePath = path.join(projectPath, numberedModuleName);
+      const groupDirName = `${module}「分组」`;
+      const modulePath = path.join(projectPath, groupDirName);
       if (!fs.existsSync(modulePath)) {
         fs.mkdirSync(modulePath, { recursive: true });
-        console.log(`  [创建] 模块目录: ${numberedModuleName}/`);
+        console.log(`  [创建] 模块目录: ${groupDirName}/`);
       }
     }
     console.log();
@@ -463,10 +539,10 @@ async function generateProject(markdownPath, outputPath) {
       // 扁平结构：表单直接放在指定目录下
       formFolderPath = path.join(projectPath, formFolderName);
     } else {
-      // 模块结构：表单放在模块子目录下
+      // 模块结构：表单放在分组子目录下（分组目录加「分组」后缀）
       const module = config.module || '未分类';
-      const numberedModuleName = getModuleNumberedName(module);
-      formFolderPath = path.join(projectPath, numberedModuleName, formFolderName);
+      const groupDirName = `${module}「分组」`;
+      formFolderPath = path.join(projectPath, groupDirName, formFolderName);
     }
     
     if (!fs.existsSync(formFolderPath)) {
@@ -487,7 +563,7 @@ async function generateProject(markdownPath, outputPath) {
       formName: config.formName,
       formType: config.formType,
       module: config.module || '-',
-      numberedModule: useFlatStructure ? '-' : (config.module || '未分类'),
+      numberedModule: useFlatStructure ? '-' : (config.module || '未分类'), // 保留字段名向后兼容，值与module一致
       outputPath: outputFile
     });
   }
@@ -504,7 +580,7 @@ async function generateProject(markdownPath, outputPath) {
     if (useFlatStructure) {
       console.log(`  ✓ ${form.formName}「${form.formType}」/${form.formName}「${form.formType}」.json`);
     } else {
-      console.log(`  ✓ ${form.numberedModule}/${form.formName}「${form.formType}」/${form.formName}「${form.formType}」.json`);
+      console.log(`  ✓ ${form.module}「分组」/${form.formName}「${form.formType}」/${form.formName}「${form.formType}」.json`);
     }
   });
   console.log('\n============================================================\n');
@@ -530,7 +606,7 @@ function generateProjectDocs(projectPath, forms, systemInfo) {
 
 | 序号 | 表单名称 | 表单类型 | 模块 | 文件路径 |
 |------|----------|----------|------|----------|
-${forms.map((form, index) => `| ${index + 1} | ${form.formName} | ${form.formType} | ${form.module} | ${form.numberedModule}/${form.formName}.json |`).join('\n')}
+${forms.map((form, index) => `| ${index + 1} | ${form.formName} | ${form.formType} | ${form.module} | ${form.numberedModule}「分组」/${form.formName}.json |`).join('\n')}
 
 ---
 
@@ -629,4 +705,6 @@ function main() {
   });
 }
 
-main();
+if (require.main === module) {
+  main();
+}

@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 宜搭自动化测试 - 测试执行引擎
  * 版本: v1.0.85
  * 
@@ -7,16 +7,16 @@
  * v1.0.84 - 修复 base_url 使用问题，从登录态中读取正确的域名
  * v1.0.83 - 优化登录检查逻辑，先检查是否直接访问成功，避免不必要的登录流程
  * v1.0.82 - 迁移到 simulated-login Skill 进行登录态管理
- * v1.0.81 - 集成 yida-api-client 的 login_helper，统一登录态管理
- * v1.0.80 - 优化登录态管理，优先从 .cookies.json 加载，与 yida-api-client 保持一致
+ * v1.0.81 - 集成 api-client 的 login_helper，统一登录态管理
+ * v1.0.80 - 优化登录态管理，优先从 .cookies.json 加载，与 api-client 保持一致
  */
 
 const fs = require('fs');
 const path = require('path');
 
-// 加载 yida-api-client
-const { createEmptyForm, saveFormSchema } = require('../../yida-api-client/scripts/form_manager');
-const { buildFormSchema } = require('../../yida-api-client/scripts/schema_builder');
+// 加载 api-client
+const { createEmptyForm, saveFormSchema } = require('../../api-client/scripts/form_manager');
+const { buildFormSchema } = require('../../api-client/scripts/schema_builder');
 
 // 加载登录处理模块
 const { handleLoginFlow } = require('./login-handler');
@@ -166,7 +166,7 @@ class YidaAutoTester {
 
   /**
    * 初始化浏览器
-   * 使用 yida-api-client 的 login_helper 管理登录态
+   * 使用 api-client 的 login_helper 管理登录态
    */
   async initBrowser() {
     console.log('🚀 初始化浏览器...');

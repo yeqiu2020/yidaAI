@@ -79,7 +79,7 @@ module.exports = {
     group_utility: 'Tiện ích',
     cmd_commands: 'Output machine-readable command manifest',
     cmd_a2a: 'Start local read-only A2A adapter or print Agent Card',
-    cmd_bridge: 'Start OpenYida local web bridge service',
+    cmd_bridge: 'Start Yeqiu-Yida local web bridge service',
     cmd_copy: 'Sao chép thư mục làm việc project',
     cmd_sample: 'Xuất mẫu ví dụ/mẫu mã',
     cmd_doctor: 'Chẩn đoán môi trường và sửa tự động',
@@ -100,21 +100,21 @@ module.exports = {
 
   // ── bin/yida.js ────────────────────────────────────
   cli: {
-    integration_help: 'Cach dung: openyida integration <create|list|enable|disable> ...',
+    integration_help: 'Cach dung: yeqiu-yida integration <create|list|enable|disable> ...',
     integration_unknown: 'Lenh con integration khong xac dinh: {0}',
-    integration_help_hint: 'Chay openyida integration --help de xem cac lenh con kha dung',
-    integration_list_usage: 'Cach dung: openyida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
-    integration_list_example: 'Vi du: openyida integration list APP_XXX --form-uuid FORM-XXX --json',
-    integration_enable_usage: 'Cach dung: openyida integration enable <appType> <formUuid> <processCode>',
-    integration_enable_example: 'Vi du: openyida integration enable APP_XXX FORM-XXX LPROC-XXX',
-    integration_disable_usage: 'Cach dung: openyida integration disable <appType> <formUuid> <processCode>',
-    integration_disable_example: 'Vi du: openyida integration disable APP_XXX FORM-XXX LPROC-XXX',
-    compile_usage: 'Cách dùng: openyida compile <sourceFile>',
-    compile_example: 'Ví dụ: openyida compile pages/src/home.oyd.jsx',
-    check_page_usage: 'Usage: openyida check-page <sourceFile> [--compat] [--json]',
-    check_page_example: 'Example: openyida check-page pages/src/home.oyd.jsx --json',
-    generate_page_usage: 'Usage: openyida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/openyida/page-specs/home.json] [--compile]',
-    generate_page_example: 'Example: openyida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
+    integration_help_hint: 'Chay yeqiu-yida integration --help de xem cac lenh con kha dung',
+    integration_list_usage: 'Cach dung: yeqiu-yida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
+    integration_list_example: 'Vi du: yeqiu-yida integration list APP_XXX --form-uuid FORM-XXX --json',
+    integration_enable_usage: 'Cach dung: yeqiu-yida integration enable <appType> <formUuid> <processCode>',
+    integration_enable_example: 'Vi du: yeqiu-yida integration enable APP_XXX FORM-XXX LPROC-XXX',
+    integration_disable_usage: 'Cach dung: yeqiu-yida integration disable <appType> <formUuid> <processCode>',
+    integration_disable_example: 'Vi du: yeqiu-yida integration disable APP_XXX FORM-XXX LPROC-XXX',
+    compile_usage: 'Cách dùng: yeqiu-yida compile <sourceFile>',
+    compile_example: 'Ví dụ: yeqiu-yida compile pages/src/home.oyd.jsx',
+    check_page_usage: 'Usage: yeqiu-yida check-page <sourceFile> [--compat] [--json]',
+    check_page_example: 'Example: yeqiu-yida check-page pages/src/home.oyd.jsx --json',
+    generate_page_usage: 'Usage: yeqiu-yida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/yeqiu-yida/page-specs/home.json] [--compile]',
+    generate_page_example: 'Example: yeqiu-yida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
   },
 
   // ── lib/integration/integration-check.js ─────────
@@ -143,9 +143,9 @@ module.exports = {
     summary: 'Check complete: {0} apps, {1} automations, {2} with abnormal logs',
     apps_failed: '{0} app(s) failed to check. See JSON output or error summary for details.',
     no_logs: 'No abnormal execution logs found.',
-    usage: 'openyida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
-    example: 'openyida integration check APP_XXX --output project/output/automation-errors.xlsx',
-    missing_app: 'Missing appType. Usage: openyida integration check <appType...>',
+    usage: 'yeqiu-yida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
+    example: 'yeqiu-yida integration check APP_XXX --output project/output/automation-errors.xlsx',
+    missing_app: 'Missing appType. Usage: yeqiu-yida integration check <appType...>',
     banner_title: 'Check integration automation abnormal logs',
     status_filter: 'Execution status filter: {0}',
     checking_app: 'Checking app: {0}',
@@ -156,7 +156,7 @@ module.exports = {
 
   // ── lib/env.js ─────────────────────────────────────
   env: {
-    title: '  openyida env - Phát hiện môi trường công cụ AI',
+    title: '  yeqiu-yida env - Phát hiện môi trường công cụ AI',
     detecting: '  Đang phát hiện môi trường công cụ AI...',
     tool_label: '  Công cụ AI:   {0}',
     login_label: '  Trạng thái:   {0}',
@@ -175,7 +175,7 @@ module.exports = {
     starting_qr: '  Đang khởi động đăng nhập bằng mã QR...',
     success: '✅ Đăng nhập thành công!',
     failed: '❌ Đăng nhập thất bại: {0}',
-    usage: 'Cách dùng: openyida login',
+    usage: 'Cách dùng: yeqiu-yida login',
   },
 
   // ── lib/logout.js ───────────────────────────────────
@@ -188,8 +188,8 @@ module.exports = {
 
   // ── lib/create-app.js ───────────────────────────────
   create_app: {
-    usage: 'Cách dùng: openyida create-app "<tên ứng dụng>" hoặc openyida create-app --name "<tên ứng dụng>" [--desc "..."] [--theme deepBlue]',
-    example: 'Ví dụ: openyida create-app --name "Ứng dụng của tôi" --desc "Mô tả ứng dụng" --theme deepBlue',
+    usage: 'Cách dùng: yeqiu-yida create-app "<tên ứng dụng>" hoặc yeqiu-yida create-app --name "<tên ứng dụng>" [--desc "..."] [--theme deepBlue]',
+    example: 'Ví dụ: yeqiu-yida create-app --name "Ứng dụng của tôi" --desc "Mô tả ứng dụng" --theme deepBlue',
     title: '  create-app - Công cụ tạo ứng dụng Yida',
     app_name: '\n  Tên ứng dụng: {0}',
     app_desc: '  Mô tả:         {0}',
@@ -205,7 +205,7 @@ module.exports = {
 
   // ── lib/create-form.js ──────────────────────────────
   create_form: {
-    usage: 'Cách dùng: openyida create-form <appType> <tên trang> [JSON schema]',
+    usage: 'Cách dùng: yeqiu-yida create-form <appType> <tên trang> [JSON schema]',
     title: '  create-form - Công cụ tạo/cập nhật biểu mẫu Yida',
     app_id: '\n  ID ứng dụng:  {0}',
     page_name: '  Tên trang:    {0}',
@@ -220,7 +220,7 @@ module.exports = {
     data_exists_impact: '     - Mất hoặc hỏng dữ liệu lịch sử\n     - Bất thường trạng thái quy trình\n     - Không nhất quán dữ liệu',
     data_exists_abort: '  ❌ Đã hủy sửa đổi. Thêm --force để tiếp tục.',
     data_exists_confirm_message: 'Biểu mẫu này có {0} bản ghi hiện có. Thay đổi cấu trúc có thể ảnh hưởng đến dữ liệu hiện có. Thêm --force để xác nhận.',
-    data_exists_force_hint: 'Cách dùng: openyida create-form update <appType> <formUuid> <changesJson> --force',
+    data_exists_force_hint: 'Cách dùng: yeqiu-yida create-form update <appType> <formUuid> <changesJson> --force',
     data_exists_force_proceed: '  ⚠️  Chế độ --force: bỏ qua xác nhận, buộc thay đổi cấu trúc biểu mẫu với {0} bản ghi hiện có',
     data_check_empty: '  ✅ Biểu mẫu không có dữ liệu, có thể sửa đổi an toàn',
     data_check_failed: '  ⚠️  Kiểm tra dữ liệu thất bại, tiếp tục sửa đổi',
@@ -228,8 +228,8 @@ module.exports = {
 
   // ── lib/create-page.js ──────────────────────────────
   create_page: {
-    usage: 'Cách dùng: openyida create-page <appType> <tên trang> [--mode dashboard]',
-    example: 'Ví dụ: openyida create-page APP_XXX "Dashboard" --mode dashboard',
+    usage: 'Cách dùng: yeqiu-yida create-page <appType> <tên trang> [--mode dashboard]',
+    example: 'Ví dụ: yeqiu-yida create-page APP_XXX "Dashboard" --mode dashboard',
     title: '  create-page - Công cụ tạo trang tùy chỉnh Yida',
     app_id: '\n  ID ứng dụng:  {0}',
     page_name: '  Tên trang:    {0}',
@@ -247,7 +247,7 @@ module.exports = {
 
   // ── lib/get-schema.js ───────────────────────────────
   get_schema: {
-    usage: 'Cách dùng: openyida get-schema <appType> <formUuid>',
+    usage: 'Cách dùng: yeqiu-yida get-schema <appType> <formUuid>',
     title: '  get-schema - Công cụ lấy schema biểu mẫu Yida',
     app_id: '\n  ID ứng dụng:  {0}',
     form_uuid: '  UUID biểu mẫu: {0}',
@@ -260,7 +260,7 @@ module.exports = {
   // ── lib/check-update.js ─────────────────────────────
   check_update: {
     new_version: '\n🎉 Phiên bản mới có sẵn: {0} → {1}',
-    update_cmd: '   Cập nhật: npm install -g openyida',
+    update_cmd: '   Cập nhật: npm install -g yeqiu-yida',
     check_failed: 'Kiểm tra phiên bản thất bại: {0}',
   },
 
@@ -270,10 +270,10 @@ module.exports = {
     fetch_failed: 'Không thể lấy thông tin phiên bản mới nhất. Vui lòng kiểm tra kết nối mạng',
     already_latest: 'Đã là phiên bản mới nhất ({0}), không cần cập nhật',
     found_new_version: 'Phát hiện phiên bản mới: {0} (hiện tại: {1})',
-    installing: 'Đang cài đặt openyida@latest...',
+    installing: 'Đang cài đặt yeqiu-yida@latest...',
     success: 'Cập nhật thành công! Phiên bản hiện tại: {0}',
     install_failed: 'Cập nhật thất bại: {0}',
-    manual_hint: 'Vui lòng thử thủ công: npm install -g openyida@latest',
+    manual_hint: 'Vui lòng thử thủ công: npm install -g yeqiu-yida@latest',
     available: 'có bản cập nhật',
     up_to_date: 'đã cập nhật',
     label_install: 'Install',
@@ -281,12 +281,12 @@ module.exports = {
     label_version: 'Version',
     label_update: 'Update',
     done: 'Cập nhật hoàn tất!',
-    done_hint: 'Chạy openyida --version để xác nhận phiên bản mới',
+    done_hint: 'Chạy yeqiu-yida --version để xác nhận phiên bản mới',
   },
 
   // ── lib/export-app.js ───────────────────────────────
   export_app: {
-    usage: 'Cách dùng: openyida export-app <appType>',
+    usage: 'Cách dùng: yeqiu-yida export-app <appType>',
     title: '  export-app - Công cụ xuất ứng dụng Yida',
     app_id: '\n  ID ứng dụng: {0}',
     step_export: '\n📦 Đang xuất ứng dụng...',
@@ -297,7 +297,7 @@ module.exports = {
 
   // ── lib/import-app.js ───────────────────────────────
   import_app: {
-    usage: 'Cách dùng: openyida import-app <đường dẫn tệp>',
+    usage: 'Cách dùng: yeqiu-yida import-app <đường dẫn tệp>',
     title: '  import-app - Công cụ nhập ứng dụng Yida',
     file_path: '\n  Đường dẫn tệp: {0}',
     step_import: '\n📥 Đang nhập ứng dụng...',
@@ -308,7 +308,7 @@ module.exports = {
 
   // ── lib/get-page-config.js ──────────────────────────
   get_page_config: {
-    usage: 'Cách dùng: openyida get-page-config <appType> <formUuid>',
+    usage: 'Cách dùng: yeqiu-yida get-page-config <appType> <formUuid>',
     title: '  get-page-config - Công cụ lấy cấu hình trang Yida',
     app_id: '\n  ID ứng dụng:  {0}',
     form_uuid: '  UUID biểu mẫu: {0}',
@@ -320,7 +320,7 @@ module.exports = {
 
   // ── lib/save-share-config.js ────────────────────────
   save_share_config: {
-    usage: 'Cách dùng: openyida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
+    usage: 'Cách dùng: yeqiu-yida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
     title: '  save-share-config - Công cụ lưu cấu hình truy cập công khai Yida',
     app_id: '\n  ID ứng dụng:  {0}',
     form_uuid: '  UUID biểu mẫu: {0}',
@@ -346,7 +346,7 @@ module.exports = {
 
   // ── lib/update-form-config.js ──────────────────────
   update_form_config: {
-    usage: 'Cách dùng: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    usage: 'Cách dùng: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
     title: '  update-form-config - Công cụ cập nhật cấu hình biểu mẫu Yida',
     app_id: '\n  ID ứng dụng:  {0}',
     form_uuid: '  UUID biểu mẫu: {0}',
@@ -363,7 +363,7 @@ module.exports = {
 
   // ── lib/verify-short-url.js ────────────────────────
   verify_short_url: {
-    usage: 'Cách dùng: openyida verify-short-url <appType> <formUuid> <url>',
+    usage: 'Cách dùng: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
     title: '  verify-short-url - Công cụ xác minh URL Yida',
     app_id: '\n  ID ứng dụng:  {0}',
     form_uuid: '  UUID biểu mẫu: {0}',
@@ -385,19 +385,19 @@ module.exports = {
 
   // ── lib/copy.js ────────────────────────────────────
   copy: {
-    title: '  openyida copy - Khởi tạo thư mục làm việc Yida',
+    title: '  yeqiu-yida copy - Khởi tạo thư mục làm việc Yida',
     package_root: '\n📦 Thư mục gốc gói: {0}',
     dest_root: '🤖 Thư mục đích: {0}',
     dest_empty_flatten: '📂 Thư mục đích trống, nội dung project/ sẽ được sao chép trực tiếp (không tạo thư mục con project/)',
     force_mode: '⚠️  Chế độ --force: thư mục đích sẽ được xóa trước khi sao chép',
-    no_package: '\n❌ Không tìm thấy thư mục gói openyida',
-    no_package_hint1: '   Hãy đảm bảo openyida đã được cài đặt toàn cục:',
-    no_package_hint2: '   npm install -g openyida',
+    no_package: '\n❌ Không tìm thấy thư mục gói yeqiu-yida',
+    no_package_hint1: '   Hãy đảm bảo yeqiu-yida đã được cài đặt toàn cục:',
+    no_package_hint2: '   npm install -g yeqiu-yida',
     no_active_tool: '\n❌ Không phát hiện môi trường công cụ AI nào đang hoạt động',
     supported_tools: '   Công cụ hỗ trợ: Wukong, Codex, OpenCode, Claude Code, Aone Copilot, Cursor, Qoder',
     current_result: '\n   Kết quả phát hiện hiện tại:',
-    force_hint: '\n   Để buộc sao chép vào thư mục hiện tại:\n   openyida copy --force',
-    force_cmd: '   openyida copy --force',
+    force_hint: '\n   Để buộc sao chép vào thư mục hiện tại:\n   yeqiu-yida copy --force',
+    force_cmd: '   yeqiu-yida copy --force',
     copying_label: '\n📂 Đang sao chép {0}...',
     creating_symlink: '\n📂 Đang tạo liên kết tượng trưng yida-skills/...',
     file_copied: '    Đã sao chép: {0}',
@@ -429,7 +429,7 @@ module.exports = {
     available_templates: 'Available templates: {0}',
     template_not_found: 'Template file not found: {0}',
     done: 'Page generated: {0}',
-    hint: 'Next run openyida compile <file>, or pass --compile to compile immediately.',
+    hint: 'Next run yeqiu-yida compile <file>, or pass --compile to compile immediately.',
     success: 'Page generation complete',
   },
   publish: {
@@ -479,7 +479,7 @@ module.exports = {
     target_not_found: 'Publish target was not found in app navigation: {0}',
     target_type_invalid: 'Publish target is not a custom display page: {0} current type is {1}',
     target_type_hint: 'The current target "{0}" does not look like a custom page (type: {1}). Do not publish JSX to data forms or process forms.',
-    target_list_hint: 'Run openyida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
+    target_list_hint: 'Run yeqiu-yida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
     target_force_hint: 'Append --force only when you intentionally bypass this guard; it overwrites the target Schema and should be used only for a known custom page.',
     step_compile: '\n📦 Step 1: Biên dịch nguồn và xây dựng schema\n',
     reading_source: '[1/4] Đang đọc nguồn {0}...',
@@ -505,8 +505,8 @@ module.exports = {
     health_check_failed: '  ⚠️  Health check failed: HTTP {0} {1}',
     exception: '\n❌ Lỗi xuất bản: {0}',
     source_not_found: '❌ Không tìm thấy tệp nguồn: {0}',
-    usage: 'Cách dùng: openyida publish <tệpNguồn> <appType> <formUuid> [--health-check]',
-    example: 'Ví dụ: openyida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
+    usage: 'Cách dùng: yeqiu-yida publish <tệpNguồn> <appType> <formUuid> [--health-check]',
+    example: 'Ví dụ: yeqiu-yida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
   },
 
   // ── lib/qr-login.js ────────────────────────────────
@@ -540,9 +540,9 @@ module.exports = {
 
   // ── scripts/postinstall.js ─────────────────────────
   postinstall: {
-    welcome_title: '  🎉 Chào mừng đến với OpenYida!                               ',
+    welcome_title: '  🎉 Chào mừng đến với Yeqiu-Yida!                               ',
     install_success: '  ✅ Cài đặt hoàn tất! {0} Công cụ phát triển AI Yida đã sẵn sàng.',
-    update_success: '  ✅ Cập nhật hoàn tất! {0} OpenYida đã được nâng cấp lên phiên bản mới nhất.',
+    update_success: '  ✅ Cập nhật hoàn tất! {0} Yeqiu-Yida đã được nâng cấp lên phiên bản mới nhất.',
     ai_mode_title: '  🚀 Chế độ hội thoại AI',
     ai_mode_desc: '  Trong Codex / Claude Code / Aone Copilot / Cursor, hãy trò chuyện trực tiếp:',
     prompt1: '  📋  "Tạo cho tôi hệ thống quản lý chấm công với Yida"',
@@ -552,21 +552,21 @@ module.exports = {
     steps_title: '  📖 Bắt đầu',
     step1: '  {0}Step 1{1}  Mở công cụ AI của bạn (Codex / Claude Code / Cursor, v.v.)',
     step2: '  {0}Step 2{1}  Mô tả ứng dụng bạn muốn bằng ngôn ngữ tự nhiên',
-    step3: '  {0}Step 3{1}  AI tự động chạy các lệnh openyida để tạo và xuất bản',
+    step3: '  {0}Step 3{1}  AI tự động chạy các lệnh yeqiu-yida để tạo và xuất bản',
     step4: '  {0}Step 4{1}  Nhận liên kết ứng dụng Yida của bạn 🎉',
     commands_title: '  ⚡ Lệnh nhanh',
-    cmd_env: '  {0}openyida env{1}      {2}# Phát hiện môi trường công cụ AI và trạng thái đăng nhập{3}',
-    cmd_login: '  {0}openyida login{1}    {2}# Đăng nhập Yida{3}',
-    cmd_help: '  {0}openyida --help{1}   {2}# Xem tất cả lệnh{3}',
-    footer1: '  📚 Tài liệu: https://github.com/openyida/openyida',
-    footer2: '  💬 Cộng đồng: Tham gia cộng đồng OpenYida trên DingTalk',
+    cmd_env: '  {0}yeqiu-yida env{1}      {2}# Phát hiện môi trường công cụ AI và trạng thái đăng nhập{3}',
+    cmd_login: '  {0}yeqiu-yida login{1}    {2}# Đăng nhập Yida{3}',
+    cmd_help: '  {0}yeqiu-yida --help{1}   {2}# Xem tất cả lệnh{3}',
+    footer1: '  📚 Tài liệu: https://github.com/yeqiu-yida/yeqiu-yida',
+    footer2: '  💬 Cộng đồng: Tham gia cộng đồng Yeqiu-Yida trên DingTalk',
   },
 
   // ── lib/cdn-*.js ───────────────────────────────────
   cdn: {
     config_load_error: 'Tải cấu hình CDN thất bại: {0}',
     config_saved: '✅ Cấu hình CDN đã được lưu vào: {0}',
-    config_usage: 'Cách dùng: openyida cdn-config [tùy chọn]',
+    config_usage: 'Cách dùng: yeqiu-yida cdn-config [tùy chọn]',
     config_file_path: '📄 Tệp cấu hình: {0}',
     config_section_aliyun: '🔐 Thông tin xác thực Alibaba Cloud',
     config_section_cdn: '🌐 Cấu hình CDN',
@@ -592,7 +592,7 @@ module.exports = {
     upload_no_files: '❌ Vui lòng chỉ định tệp ảnh để tải lên',
     config_incomplete: '❌ Cấu hình CDN chưa đầy đủ',
     missing_fields: '   Trường còn thiếu: {0}',
-    run_config_init: '   Vui lòng chạy trước: openyida cdn-config --init',
+    run_config_init: '   Vui lòng chạy trước: yeqiu-yida cdn-config --init',
     no_config: '❌ Không tìm thấy cấu hình CDN',
     oss_sdk_required: '❌ Thiếu SDK ali-oss',
     run_npm_install: '   Chạy: npm install {0}',
@@ -626,15 +626,15 @@ module.exports = {
   flashNote: {
     toPrd: {
       title: '📋 Ghi chu nhanh DingTalk sang PRD',
-      help_usage: 'Cach dung: openyida flash-to-prd --file <duong-dan> [--name <ten-du-an>]',
-      help_usage2: '           openyida flash-to-prd --name <ten-du-an>  (doc tu stdin)',
+      help_usage: 'Cach dung: yeqiu-yida flash-to-prd --file <duong-dan> [--name <ten-du-an>]',
+      help_usage2: '           yeqiu-yida flash-to-prd --name <ten-du-an>  (doc tu stdin)',
       help_args_title: 'Tham so:',
       help_arg_file: '  --file, -f <duong dan>  Duong dan file ghi chu nhanh (.txt / .md)',
       help_arg_name: '  --name, -n <ten>        Ten du an (tuy chon, tu dong trich xuat)',
       help_arg_max_tokens: '  --max-tokens <so>       Token dau ra AI toi da (mac dinh 8000)',
       help_examples_title: 'Vi du:',
-      help_example1: '  openyida flash-to-prd --file ./meeting-notes.txt --name "Kiem tra thiet bi"',
-      help_example2: '  cat meeting.txt | openyida flash-to-prd --name "Kiem tra thiet bi"',
+      help_example1: '  yeqiu-yida flash-to-prd --file ./meeting-notes.txt --name "Kiem tra thiet bi"',
+      help_example2: '  cat meeting.txt | yeqiu-yida flash-to-prd --name "Kiem tra thiet bi"',
       step_read: '[Buoc 1] Dang doc noi dung ghi chu nhanh...',
       file_not_found: 'Khong tim thay file: {0}',
       no_input: 'Khong co noi dung ghi chu nhanh. Dung --file de chi dinh file hoac chuyen huong noi dung qua stdin.',
@@ -669,11 +669,11 @@ module.exports = {
     },
   },
   codex_login: {
-    title: '  openyida login {0} - {1} Login Mode',
+    title: '  yeqiu-yida login {0} - {1} Login Mode',
     not_codex: 'Current environment is not detected as Codex / Qoder / Wukong; returning an in-app browser login handoff only.',
     no_playwright: '{0} mode does not require Playwright or a separate Chromium install.',
-    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use openyida login --browser for Yida login cookies.',
-    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use openyida login --browser when CLI cookies are required.',
+    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use yeqiu-yida login --browser for Yida login cookies.',
+    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use yeqiu-yida login --browser when CLI cookies are required.',
     handoff_message: '{0} in-app Browser cannot export Yida login cookies. Run fallback_command when CLI cookies are required.',
     cache_available: 'Existing CLI Cookie cache is available; no browser login needed.',
   },

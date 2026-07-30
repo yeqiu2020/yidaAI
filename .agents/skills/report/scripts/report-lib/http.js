@@ -2,7 +2,7 @@
 
 const querystring = require('querystring');
 const { httpPost } = require('../core-lib/utils');
-const { buildYidaI18n } = require('../core-lib/yida-i18n');
+const { buildPlatformI18n } = require('../core-lib/platform-i18n');
 
 /**
  * 调用 saveFormSchemaInfo 创建空白报表
@@ -11,7 +11,7 @@ async function createBlankReport(baseUrl, csrfToken, cookies, appType, reportTit
   const postData = querystring.stringify({
     _csrf_token: csrfToken,
     formType: 'report',
-    title: JSON.stringify(buildYidaI18n(reportTitle, { en_US: reportTitle, ja_JP: reportTitle })),
+    title: JSON.stringify(buildPlatformI18n(reportTitle, { en_US: reportTitle, ja_JP: reportTitle })),
   });
   return httpPost(baseUrl, `/dingtalk/web/${appType}/query/formdesign/saveFormSchemaInfo.json`, postData, cookies);
 }

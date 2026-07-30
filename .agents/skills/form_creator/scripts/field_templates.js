@@ -1,8 +1,11 @@
 /**
  * 宜搭字段模板库
- * 版本: 4.1.3
+ * 版本: 4.5.0
  * 创建日期: 2026-02-16
- * 更新: 2026-03-13 - 修复SerialNumberField，强制behavior为READONLY且validation为空数组，确保流水号自动生成且非必填
+ * 更新: 2026-07-01 - SerialNumberField支持serialNumberRule配置（固定字符+日期+自动计数），解决流水号无法自动生成问题
+ * 更新: 2026-07-12 - RadioField/CheckboxField/SelectField/MultiSelectField 默认开启彩色（isUseDataSourceColor=true），并为每个选项生成 color
+ * 更新: 2026-07-16 - EmployeeField/DateField 自动识别"创建人/创建时间"字段名，设置默认值公式 USER()/TIMESTAMP(TODAY())
+ * 更新: 2026-07-16 - AssociationFormField 默认开启 supportDataFilling=true，添加 unmatched 字段，修正注释说明子表内tableRules通过API生效
  *
  * 功能: 提供所有宜搭标准字段的模板生成函数
  * 更新: TableField 默认表格方式显示
@@ -10,6 +13,14 @@
  */
 
 let fieldCounter = 0;
+
+/**
+ * 默认彩色配色方案（与宜搭默认彩色一致）
+ */
+const DEFAULT_OPTION_COLORS = [
+  '#e0f0ff', '#e0f4e6', '#fff2e0', '#f5e0ff',
+  '#ffe0e0', '#e0e8ff', '#fff8e0', '#e0fff8'
+];
 
 /**
  * 生成字段ID
@@ -230,11 +241,20 @@ function NumberField(config) {
 
 /**
  * DateField - 日期
+ * 【v4.4.0】创建时间字段自动设置默认值公式 TIMESTAMP(TODAY())
  */
 function DateField(config) {
   const behavior = getBehaviorByStatus(config.status);
   const isHidden = getHiddenByStatus(config.status);
-  
+
+  // 【v4.4.0】创建时间字段自动设置默认值公式 TIMESTAMP(TODAY())
+  const isCreateTimeField = config.label === '创建时间' || config.label === '创建日期' || config.label === '录入时间';
+  const complexValue = isCreateTimeField
+    ? { complexType: 'formula', value: '', formula: 'TIMESTAMP(TODAY())' }
+    : { complexType: 'custom', value: i18n(''), formula: '' };
+  const valueType = isCreateTimeField ? 'variable' : 'custom';
+  const variable = isCreateTimeField ? { type: 'today' } : '';
+
   return {
     componentName: 'DateField',
     props: {
@@ -244,18 +264,14 @@ function DateField(config) {
       hasClear: true,
       format: config.format || 'yyyy-MM-dd',
       showTime: config.showTime || false,
-      complexValue: {
-        complexType: 'custom',
-        value: i18n(''),
-        formula: ''
-      },
-      valueType: 'custom',
+      complexValue,
+      valueType,
       value: i18n(''),
       onVisibleChange: { ignored: true },
       formularZoneCode: '',
       formula: '',
       linkage: '',
-      variable: '',
+      variable,
       fieldId: config.fieldId || generateFieldId('DateField'),
       validation: config.required ? [{ type: 'required' }] : [],
       behavior: behavior
@@ -324,7 +340,7 @@ function SelectField(config) {
         afterFetch: 'function didFetch(content) {\n  return content;\n}'
       },
       supportInverse: false,
-      isUseDataSourceColor: false,
+      isUseDataSourceColor: true,
       dataSourceLinkage: '',
       reusePrivilege: false,
       behavior: behavior
@@ -339,11 +355,20 @@ function SelectField(config) {
 
 /**
  * EmployeeField - 成员选择
+ * 【v4.4.0】创建人字段自动设置默认值公式 USER()
  */
 function EmployeeField(config) {
   const behavior = getBehaviorByStatus(config.status);
   const isHidden = getHiddenByStatus(config.status);
-  
+
+  // 【v4.4.0】创建人字段自动设置默认值公式 USER()
+  const isCreatorField = config.label === '创建人' || config.label === '创建者' || config.label === '录入人';
+  const complexValue = isCreatorField
+    ? { complexType: 'formula', value: [], formula: 'USER()' }
+    : { complexType: 'custom', value: i18n(''), formula: '' };
+  const valueType = isCreatorField ? 'variable' : 'custom';
+  const variable = isCreatorField ? { type: 'user' } : '';
+
   return {
     componentName: 'EmployeeField',
     props: {
@@ -352,17 +377,13 @@ function EmployeeField(config) {
       placeholder: i18n(''),
       multiple: config.multiple || false,
       hasClear: true,
-      complexValue: {
-        complexType: 'custom',
-        value: i18n(''),
-        formula: ''
-      },
-      valueType: 'custom',
+      complexValue,
+      valueType,
       value: i18n(''),
       formularZoneCode: '',
       formula: '',
       linkage: '',
-      variable: '',
+      variable,
       fieldId: config.fieldId || generateFieldId('EmployeeField'),
       validation: config.required ? [{ type: 'required' }] : [],
       behavior: behavior
@@ -430,13 +451,15 @@ function AssociationFormField(config) {
         version: 'v2'
       },
       supportDataFilter: false,
-      // 数据回填规则
+      // 数据填充规则（主表用mainRules，子表内用tableRules，两者均通过API生效）
+      // 注意：宜搭设计器UI对子表内关联字段不显示填充规则面板，但通过API写入的tableRules在运行时完全生效
       dataFillingRules: {
         mainRules: [],
         tableRules: [],
-        version: 'v2'
+        version: 'v2',
+        unmatched: []
       },
-      supportDataFilling: false,
+      supportDataFilling: true,  // 默认开启，即使初始时规则为空，后续updateAssociationFields会填充
       // 排序配置
       orderEnable: false,
       orderConfig: [],
@@ -597,13 +620,15 @@ function generateDataSource(options) {
       },
       value: value,
       defaultChecked: false,
-      syncLabelValue: true
+      syncLabelValue: true,
+      color: DEFAULT_OPTION_COLORS[index % DEFAULT_OPTION_COLORS.length]
     };
   });
 }
 
 /**
- * RadioField - 单�? */
+ * RadioField - 单选
+ */
 function RadioField(config) {
   const behavior = getBehaviorByStatus(config.status);
   const isHidden = getHiddenByStatus(config.status);
@@ -657,7 +682,7 @@ function RadioField(config) {
       linkage: '',
       variable: '',
       supportInverse: false,
-      isUseDataSourceColor: false,
+      isUseDataSourceColor: true,
       dataSourceLinkage: '',
       reusePrivilege: false,
       behavior: behavior
@@ -671,20 +696,58 @@ function RadioField(config) {
 }
 
 /**
- * CheckboxField - 复�? */
+ * CheckboxField - 复选框
+ */
 function CheckboxField(config) {
   const behavior = getBehaviorByStatus(config.status);
   const isHidden = getHiddenByStatus(config.status);
-  
+  const dataSource = generateDataSource(config.options);
+
   return {
     componentName: 'CheckboxField',
     props: {
       ...baseProps,
       label: i18n(config.label),
+      placeholder: i18n(''),
       options: config.options || [],
       hasClear: true,
       fieldId: config.fieldId || generateFieldId('CheckboxField'),
       validation: config.required ? [{ type: 'required' }] : [],
+      defaultDataSource: {
+        customStashOptions: [],
+        complexType: 'custom',
+        options: dataSource,
+        formula: {
+          data: [],
+          event: {
+            'onPageReady,onChange': []
+          }
+        },
+        url: '',
+        searchConfig: {
+          type: 'JSONP',
+          url: '',
+          beforeFetch: '',
+          afterFetch: ''
+        }
+      },
+      dataSourceType: 'custom',
+      dataSource: dataSource,
+      complexValue: {
+        complexType: 'custom',
+        value: '',
+        formula: ''
+      },
+      valueType: 'custom',
+      value: '',
+      formularZoneCode: '',
+      formula: '',
+      linkage: '',
+      variable: '',
+      supportInverse: false,
+      isUseDataSourceColor: true,
+      dataSourceLinkage: '',
+      reusePrivilege: false,
       behavior: behavior
     },
     condition: true,
@@ -696,11 +759,13 @@ function CheckboxField(config) {
 }
 
 /**
- * MultiSelectField - 下拉复�? */
+ * MultiSelectField - 下拉复选
+ */
 function MultiSelectField(config) {
   const behavior = getBehaviorByStatus(config.status);
   const isHidden = getHiddenByStatus(config.status);
-  
+  const dataSource = generateDataSource(config.options);
+
   return {
     componentName: 'MultiSelectField',
     props: {
@@ -711,6 +776,41 @@ function MultiSelectField(config) {
       hasClear: true,
       fieldId: config.fieldId || generateFieldId('MultiSelectField'),
       validation: config.required ? [{ type: 'required' }] : [],
+      defaultDataSource: {
+        customStashOptions: [],
+        complexType: 'custom',
+        options: dataSource,
+        formula: {
+          data: [],
+          event: {
+            'onPageReady,onChange': []
+          }
+        },
+        url: '',
+        searchConfig: {
+          type: 'JSONP',
+          url: '',
+          beforeFetch: '',
+          afterFetch: ''
+        }
+      },
+      dataSourceType: 'custom',
+      dataSource: dataSource,
+      complexValue: {
+        complexType: 'custom',
+        value: '',
+        formula: ''
+      },
+      valueType: 'custom',
+      value: '',
+      formularZoneCode: '',
+      formula: '',
+      linkage: '',
+      variable: '',
+      supportInverse: false,
+      isUseDataSourceColor: true,
+      dataSourceLinkage: '',
+      reusePrivilege: false,
       behavior: behavior
     },
     condition: true,
@@ -884,23 +984,120 @@ function AssociationQuery(config) {
 /**
  * SerialNumberField - 流水号
  * 注意：流水号字段始终为只读且非必填，由系统自动生成
+ * 支持serialNumberRule配置：固定字符 + 日期 + 自动计数
+ * config.serialPrefix: 固定字符前缀，如 "CP"
+ * config.datePattern: 日期格式，默认 "yyyyMMdd"
+ * config.digitCount: 自动计数位数，默认 3
+ * config.isFixed: 位数是否固定（自动补零），默认 true
+ * config.resetPeriod: 重置周期，默认 "noClean"（不重置）
+ * config.initialValue: 初始值，默认 1
  */
 function SerialNumberField(config) {
+  const behavior = getBehaviorByStatus(config.status);
   const isHidden = getHiddenByStatus(config.status);
-  
+
+  // 流水号规则参数
+  const prefix = config.serialPrefix || config.prefix || 'SN';
+  const datePattern = config.datePattern || 'yyyyMMdd';
+  const digitCount = config.digitCount || 3;
+  const isFixed = config.isFixed !== false;
+  const resetPeriod = config.resetPeriod || 'noClean';
+  const initialValue = config.initialValue || 1;
+
+  // 生成唯一sid
+  const ts = Date.now().toString(36);
+  const sid1 = `item_${ts}c1`;
+  const sid2 = `item_${ts}c2`;
+  const sid3 = `item_${ts}c3`;
+  const ssid1 = `serial_${ts}c1`;
+  const ssid2 = `serial_${ts}c2`;
+  const ssid3 = `serial_${ts}c3`;
+
+  // 构建serialNumberRule数组（固定字符 + 日期 + 自动计数）
+  const serialNumberRule = [
+    {
+      __hide_delete__: false,
+      ruleType: 'character',
+      content: prefix,
+      formField: '',
+      emptyPlaceholder: '',
+      dateFormat: datePattern,
+      timeZone: '+8',
+      digitCount: digitCount,
+      isFixed: isFixed,
+      isFixedTips: '',
+      resetPeriod: resetPeriod,
+      resetPeriodTips: '',
+      initialValue: initialValue,
+      __sid: sid1,
+      __sid__: ssid1
+    },
+    {
+      __hide_delete__: false,
+      ruleType: 'date',
+      content: '',
+      formField: '',
+      emptyPlaceholder: '',
+      dateFormat: datePattern,
+      timeZone: '+8',
+      digitCount: digitCount,
+      isFixed: isFixed,
+      isFixedTips: '',
+      resetPeriod: resetPeriod,
+      resetPeriodTips: '',
+      initialValue: initialValue,
+      __sid: sid2,
+      __sid__: ssid2
+    },
+    {
+      __hide_delete__: true,
+      ruleType: 'autoCount',
+      content: '',
+      formField: '',
+      emptyPlaceholder: '',
+      dateFormat: datePattern,
+      timeZone: '+8',
+      digitCount: digitCount,
+      isFixed: isFixed,
+      isFixedTips: '',
+      resetPeriod: resetPeriod,
+      resetPeriodTips: '',
+      initialValue: initialValue,
+      __sid: sid3,
+      __sid__: ssid3
+    }
+  ];
+
+  // 生成预览值（固定字符 + 今日日期 + 计数初始值）
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth() + 1).padStart(2, '0');
+  const dd = String(today.getDate()).padStart(2, '0');
+  const dateStr = `${yyyy}${mm}${dd}`;
+  const countStr = String(initialValue).padStart(digitCount, '0');
+  const serialNumPreview = `${prefix}${dateStr}${countStr}`;
+
   return {
     componentName: 'SerialNumberField',
     props: {
       ...baseProps,
       label: i18n(config.label),
-      placeholder: i18n(''),
-      prefix: config.prefix || 'SN',
+      placeholder: i18n('自动生成'),
+      prefix: prefix,
       suffix: config.suffix || '',
-      digit: config.digit || 6,
-      startValue: config.startValue || 1,
+      digit: digitCount,
+      startValue: initialValue,
+      serialNumReset: 1,
+      serialNumPreview: serialNumPreview,
+      serialNumberRule: serialNumberRule,
+      resetPeriod: 'never',
+      syncSerialConfig: false,
+      formula: {
+        expression: ''
+      },
       fieldId: config.fieldId || generateFieldId('SerialNumberField'),
       validation: [],  // 流水号字段永不必填
-      behavior: 'READONLY'
+      behavior: behavior
     },
     condition: true,
     hidden: isHidden,

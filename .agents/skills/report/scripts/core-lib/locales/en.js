@@ -82,7 +82,7 @@ module.exports = {
     group_utility: 'Utility',
     cmd_commands: 'Output machine-readable command manifest',
     cmd_a2a: 'Start local read-only A2A adapter or print Agent Card',
-    cmd_bridge: 'Start OpenYida local web bridge service',
+    cmd_bridge: 'Start Yeqiu-Yida local web bridge service',
     cmd_copy: 'Copy project working directory',
     cmd_sample: 'Output code samples/templates',
     cmd_doctor: 'Environment diagnostics & auto-fix',
@@ -105,10 +105,10 @@ module.exports = {
   // ── bin/yida.js ────────────────────────────────────
   cli: {
     help: `
-openyida - Yida CLI Tool
+yeqiu-yida - Yida CLI Tool
 
 Usage:
-  openyida <command> [args...]  (alias: yida)
+  yeqiu-yida <command> [args...]  (alias: yida)
 
 Commands:
   env                                                          Detect AI tool environment and login status
@@ -178,105 +178,105 @@ Commands:
   cdn-refresh [options]                                        Refresh CDN cache
 
 Examples:
-  openyida login
-  openyida logout
-  openyida create-app "Attendance"
-  openyida create-app "Attendance" "Employee Attendance" "xian-daka" "#00B853" "deepBlue" "dark" "slide"
-  openyida create-page APP_XXX "Game Home"
-  openyida create-form create APP_XXX "Employee Info" .cache/openyida/forms/employee-fields.json
-  openyida create-form update APP_XXX FORM-XXX '[{"action":"add","field":{"type":"TextField","label":"Notes"}}]'
-  openyida list-forms APP_XXX
-  openyida list-forms APP_XXX --keyword customer
-  openyida get-schema APP_XXX FORM-XXX
-  openyida get-schema APP_XXX --all --output-dir .cache/schemas
-  openyida formula evaluate 'IF(GT(#{numberField_total}, 100), "high", "low")' --schema .cache/schema.json
-  openyida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX
-  openyida verify-short-url APP_XXX FORM-XXX /o/myapp
-  openyida save-share-config APP_XXX FORM-XXX /o/myapp y n
-  openyida get-page-config APP_XXX FORM-XXX
-  openyida update-form-config APP_XXX FORM-XXX false "Page Title"
-  openyida data query form APP_XXX FORM-XXX --page 1 --size 20
-  openyida dws contact user search --keyword "wukong"
-  openyida dws calendar event list
-  openyida dws todo task create --title "Task"
-  openyida create-report APP_XXX "Sales Report" .cache/openyida/reports/charts.json
-  openyida append-chart APP_XXX REPORT-XXX .cache/openyida/reports/charts.json
-  openyida configure-process APP_XXX FORM-YYY .cache/openyida/process/process-def.json
-  openyida create-process APP_XXX "Order Form" .cache/openyida/process/fields.json .cache/openyida/process/process-def.json
-  openyida create-process APP_XXX --formUuid FORM-YYY .cache/openyida/process/process-def.json
-  openyida export APP_XXX
-  openyida export APP_XXX ./my-app-backup.json
-  openyida import ./yida-export.json
-  openyida import ./yida-export.json "Quality Traceability System (Production)"
-  openyida doctor                                 Full diagnosis
-  openyida doctor --fix                           Diagnose and auto-fix
-  openyida doctor --production --app APP_XXX      Production app diagnosis
-  openyida doctor --monitor                       Real-time monitoring
-  openyida doctor --report markdown               Generate Markdown report
-  openyida doctor --create-ticket                 Create ticket
-  openyida doctor --create-voc                    Create VOC
-  openyida doctor --auto-submit                   Auto-submit
-  openyida export-conversation                    Export current conversation
-  openyida export-conversation -o output.md       Specify output path
-  openyida export-conversation --list             List available conversations
+  yeqiu-yida login
+  yeqiu-yida logout
+  yeqiu-yida create-app "Attendance"
+  yeqiu-yida create-app "Attendance" "Employee Attendance" "xian-daka" "#00B853" "deepBlue" "dark" "slide"
+  yeqiu-yida create-page APP_XXX "Game Home"
+  yeqiu-yida create-form create APP_XXX "Employee Info" .cache/yeqiu-yida/forms/employee-fields.json
+  yeqiu-yida create-form update APP_XXX FORM-XXX '[{"action":"add","field":{"type":"TextField","label":"Notes"}}]'
+  yeqiu-yida list-forms APP_XXX
+  yeqiu-yida list-forms APP_XXX --keyword customer
+  yeqiu-yida get-schema APP_XXX FORM-XXX
+  yeqiu-yida get-schema APP_XXX --all --output-dir .cache/schemas
+  yeqiu-yida formula evaluate 'IF(GT(#{numberField_total}, 100), "high", "low")' --schema .cache/schema.json
+  yeqiu-yida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX
+  yeqiu-yida verify-short-url APP_XXX FORM-XXX /o/myapp
+  yeqiu-yida save-share-config APP_XXX FORM-XXX /o/myapp y n
+  yeqiu-yida get-page-config APP_XXX FORM-XXX
+  yeqiu-yida update-form-config APP_XXX FORM-XXX false "Page Title"
+  yeqiu-yida data query form APP_XXX FORM-XXX --page 1 --size 20
+  yeqiu-yida dws contact user search --keyword "wukong"
+  yeqiu-yida dws calendar event list
+  yeqiu-yida dws todo task create --title "Task"
+  yeqiu-yida create-report APP_XXX "Sales Report" .cache/yeqiu-yida/reports/charts.json
+  yeqiu-yida append-chart APP_XXX REPORT-XXX .cache/yeqiu-yida/reports/charts.json
+  yeqiu-yida configure-process APP_XXX FORM-YYY .cache/yeqiu-yida/process/process-def.json
+  yeqiu-yida create-process APP_XXX "Order Form" .cache/yeqiu-yida/process/fields.json .cache/yeqiu-yida/process/process-def.json
+  yeqiu-yida create-process APP_XXX --formUuid FORM-YYY .cache/yeqiu-yida/process/process-def.json
+  yeqiu-yida export APP_XXX
+  yeqiu-yida export APP_XXX ./my-app-backup.json
+  yeqiu-yida import ./yida-export.json
+  yeqiu-yida import ./yida-export.json "Quality Traceability System (Production)"
+  yeqiu-yida doctor                                 Full diagnosis
+  yeqiu-yida doctor --fix                           Diagnose and auto-fix
+  yeqiu-yida doctor --production --app APP_XXX      Production app diagnosis
+  yeqiu-yida doctor --monitor                       Real-time monitoring
+  yeqiu-yida doctor --report markdown               Generate Markdown report
+  yeqiu-yida doctor --create-ticket                 Create ticket
+  yeqiu-yida doctor --create-voc                    Create VOC
+  yeqiu-yida doctor --auto-submit                   Auto-submit
+  yeqiu-yida export-conversation                    Export current conversation
+  yeqiu-yida export-conversation -o output.md       Specify output path
+  yeqiu-yida export-conversation --list             List available conversations
 `,
     unknown_command: 'Unknown command: {0}',
-    run_help: 'Run openyida --help for usage',
-    integration_help: 'Usage: openyida integration <create|list|enable|disable|check> ...',
+    run_help: 'Run yeqiu-yida --help for usage',
+    integration_help: 'Usage: yeqiu-yida integration <create|list|enable|disable|check> ...',
     integration_unknown: 'Unknown integration subcommand: {0}',
-    integration_help_hint: 'Run openyida integration --help for available subcommands',
-    integration_list_usage: 'Usage: openyida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
-    integration_list_example: 'Example: openyida integration list APP_XXX --form-uuid FORM-XXX --json',
-    integration_enable_usage: 'Usage: openyida integration enable <appType> <formUuid> <processCode>',
-    integration_enable_example: 'Example: openyida integration enable APP_XXX FORM-XXX LPROC-XXX',
-    integration_disable_usage: 'Usage: openyida integration disable <appType> <formUuid> <processCode>',
-    integration_disable_example: 'Example: openyida integration disable APP_XXX FORM-XXX LPROC-XXX',
-    compile_usage: 'Usage: openyida compile <sourceFile>',
-    compile_example: 'Example: openyida compile pages/src/home.oyd.jsx',
-    check_page_usage: 'Usage: openyida check-page <sourceFile> [--compat] [--json]',
-    check_page_example: 'Example: openyida check-page pages/src/home.oyd.jsx --json',
-    generate_page_usage: 'Usage: openyida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/openyida/page-specs/home.json] [--compile]',
-    generate_page_example: 'Example: openyida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
-    build_page_usage: 'Usage: openyida build-page <sourceFile> [--output pages/build/page.yida.jsx|--write] [--json]',
-    build_page_example: 'Example: openyida build-page pages/src/dashboard.oyd.jsx --output pages/build/dashboard.yida.jsx',
-    publish_usage: 'Usage: openyida publish <sourceFile> <appType> <formUuid> [--health-check]',
-    publish_example: 'Example: openyida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX --health-check',
-    formula_usage: 'Usage: openyida formula evaluate <formula|file> [--schema schema.json] [--json] [--strict]',
-    formula_example: 'Example: openyida formula evaluate \'IF(GT(#{numberField_total}, 100), "high", "low")\' --schema .cache/schema.json',
-    verify_usage: 'Usage: openyida verify-short-url <appType> <formUuid> <url>',
-    verify_example: 'Example: openyida verify-short-url APP_XXX FORM-XXX /o/myapp',
-    share_usage: 'Usage: openyida save-share-config <appType> <formUuid> <url> <isOpen> [openAuth]',
-    share_example: 'Example: openyida save-share-config APP_XXX FORM-XXX /o/myapp y n',
-    page_config_usage: 'Usage: openyida get-page-config <appType> <formUuid>',
-    page_config_example: 'Example: openyida get-page-config APP_XXX FORM-XXX',
-    form_config_usage: 'Usage: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
-    form_config_example: 'Example: openyida update-form-config APP_XXX FORM-XXX false "Page Title"',
-    update_app_usage: 'Usage: openyida update-app <appType> --name "New Name" [--desc "Description"] [--icon "icon-name"]',
-    update_app_example: 'Example: openyida update-app APP_XXX --name "New App Name" --desc "New Description"',
-    export_usage: 'Usage: openyida export <appType> [output]',
-    export_example1: 'Example: openyida export APP_XXX',
-    export_example2: '        openyida export APP_XXX ./my-app-backup.json',
-    import_usage: 'Usage: openyida import <file> [name]',
-    import_example1: 'Example: openyida import ./yida-export.json',
-    import_example2: '        openyida import ./yida-export.json "Quality System (Production)"',
-    configure_process_usage: 'Usage: openyida configure-process <appType> <formUuid> <processDefinitionFile> [processCode]',
-    configure_process_example: 'Example: openyida configure-process "APP_XXX" "FORM-YYY" .cache/openyida/process/process-definition.json',
-    create_process_usage: 'Usage: openyida create-process <appType> <formTitle> <fieldsJsonFile> <processDefinitionFile>\n        openyida create-process <appType> --formUuid <formUuid> <processDefinitionFile>',
-    create_process_example: 'Example: openyida create-process "APP_XXX" "Order Form" .cache/openyida/process/fields.json .cache/openyida/process/process-definition.json',
-    process_usage: 'Usage: openyida process <subcommand>\n\nSubcommands:\n  preview <appType> <processInstanceId> [--output <path>]  Preview process instance (generate visual flowchart)',
-    process_preview_usage: 'Usage: openyida process preview <appType> <processInstanceId> [--output <path>]',
-    process_preview_example: 'Example: openyida process preview APP_XXX proc-inst-id-xxx',
-    get_permission_usage: 'Usage: openyida get-permission <appType> <formUuid>',
-    get_permission_example: 'Example: openyida get-permission APP_XXX FORM-XXX',
-    save_permission_usage: 'Usage: openyida save-permission <appType> <formUuid> [--data-permission <json>] [--action-permission <json>]',
-    save_permission_example: "Example: openyida save-permission APP_XXX FORM-XXX --data-permission '{\"role\":\"DEFAULT\",\"dataRange\":\"SELF\"}'",
+    integration_help_hint: 'Run yeqiu-yida integration --help for available subcommands',
+    integration_list_usage: 'Usage: yeqiu-yida integration list <appType> [--form-uuid <uuid>] [--status y|n] [--key <kw>] [--page <n>] [--size <n>] [--json]',
+    integration_list_example: 'Example: yeqiu-yida integration list APP_XXX --form-uuid FORM-XXX --json',
+    integration_enable_usage: 'Usage: yeqiu-yida integration enable <appType> <formUuid> <processCode>',
+    integration_enable_example: 'Example: yeqiu-yida integration enable APP_XXX FORM-XXX LPROC-XXX',
+    integration_disable_usage: 'Usage: yeqiu-yida integration disable <appType> <formUuid> <processCode>',
+    integration_disable_example: 'Example: yeqiu-yida integration disable APP_XXX FORM-XXX LPROC-XXX',
+    compile_usage: 'Usage: yeqiu-yida compile <sourceFile>',
+    compile_example: 'Example: yeqiu-yida compile pages/src/home.oyd.jsx',
+    check_page_usage: 'Usage: yeqiu-yida check-page <sourceFile> [--compat] [--json]',
+    check_page_example: 'Example: yeqiu-yida check-page pages/src/home.oyd.jsx --json',
+    generate_page_usage: 'Usage: yeqiu-yida generate-page <template> --output pages/src/home.oyd.jsx [--spec .cache/yeqiu-yida/page-specs/home.json] [--compile]',
+    generate_page_example: 'Example: yeqiu-yida generate-page product-homepage --brand-name OpenKuma --brand-initials OK --output pages/src/home.oyd.jsx --compile',
+    build_page_usage: 'Usage: yeqiu-yida build-page <sourceFile> [--output pages/build/page.yida.jsx|--write] [--json]',
+    build_page_example: 'Example: yeqiu-yida build-page pages/src/dashboard.oyd.jsx --output pages/build/dashboard.yida.jsx',
+    publish_usage: 'Usage: yeqiu-yida publish <sourceFile> <appType> <formUuid> [--health-check]',
+    publish_example: 'Example: yeqiu-yida publish pages/src/home.oyd.jsx APP_XXX FORM-XXX --health-check',
+    formula_usage: 'Usage: yeqiu-yida formula evaluate <formula|file> [--schema schema.json] [--json] [--strict]',
+    formula_example: 'Example: yeqiu-yida formula evaluate \'IF(GT(#{numberField_total}, 100), "high", "low")\' --schema .cache/schema.json',
+    verify_usage: 'Usage: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
+    verify_example: 'Example: yeqiu-yida verify-short-url APP_XXX FORM-XXX /o/myapp',
+    share_usage: 'Usage: yeqiu-yida save-share-config <appType> <formUuid> <url> <isOpen> [openAuth]',
+    share_example: 'Example: yeqiu-yida save-share-config APP_XXX FORM-XXX /o/myapp y n',
+    page_config_usage: 'Usage: yeqiu-yida get-page-config <appType> <formUuid>',
+    page_config_example: 'Example: yeqiu-yida get-page-config APP_XXX FORM-XXX',
+    form_config_usage: 'Usage: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    form_config_example: 'Example: yeqiu-yida update-form-config APP_XXX FORM-XXX false "Page Title"',
+    update_app_usage: 'Usage: yeqiu-yida update-app <appType> --name "New Name" [--desc "Description"] [--icon "icon-name"]',
+    update_app_example: 'Example: yeqiu-yida update-app APP_XXX --name "New App Name" --desc "New Description"',
+    export_usage: 'Usage: yeqiu-yida export <appType> [output]',
+    export_example1: 'Example: yeqiu-yida export APP_XXX',
+    export_example2: '        yeqiu-yida export APP_XXX ./my-app-backup.json',
+    import_usage: 'Usage: yeqiu-yida import <file> [name]',
+    import_example1: 'Example: yeqiu-yida import ./yida-export.json',
+    import_example2: '        yeqiu-yida import ./yida-export.json "Quality System (Production)"',
+    configure_process_usage: 'Usage: yeqiu-yida configure-process <appType> <formUuid> <processDefinitionFile> [processCode]',
+    configure_process_example: 'Example: yeqiu-yida configure-process "APP_XXX" "FORM-YYY" .cache/yeqiu-yida/process/process-definition.json',
+    create_process_usage: 'Usage: yeqiu-yida create-process <appType> <formTitle> <fieldsJsonFile> <processDefinitionFile>\n        yeqiu-yida create-process <appType> --formUuid <formUuid> <processDefinitionFile>',
+    create_process_example: 'Example: yeqiu-yida create-process "APP_XXX" "Order Form" .cache/yeqiu-yida/process/fields.json .cache/yeqiu-yida/process/process-definition.json',
+    process_usage: 'Usage: yeqiu-yida process <subcommand>\n\nSubcommands:\n  preview <appType> <processInstanceId> [--output <path>]  Preview process instance (generate visual flowchart)',
+    process_preview_usage: 'Usage: yeqiu-yida process preview <appType> <processInstanceId> [--output <path>]',
+    process_preview_example: 'Example: yeqiu-yida process preview APP_XXX proc-inst-id-xxx',
+    get_permission_usage: 'Usage: yeqiu-yida get-permission <appType> <formUuid>',
+    get_permission_example: 'Example: yeqiu-yida get-permission APP_XXX FORM-XXX',
+    save_permission_usage: 'Usage: yeqiu-yida save-permission <appType> <formUuid> [--data-permission <json>] [--action-permission <json>]',
+    save_permission_example: "Example: yeqiu-yida save-permission APP_XXX FORM-XXX --data-permission '{\"role\":\"DEFAULT\",\"dataRange\":\"SELF\"}'",
     exec_failed: '\n❌ Execution failed: {0}',
-    auth_usage: 'Usage: openyida auth <status|login|refresh|logout>',
-    auth_example: 'Examples:\n  openyida auth status         # View login status\n  openyida auth login          # Perform login\n  openyida auth login --codex  # Codex browser login\n  openyida auth refresh        # Refresh login session\n  openyida auth logout         # Logout',
-    org_usage: 'Usage: openyida org <list|switch>',
-    org_example: 'Examples:\n  openyida org list                       # List accessible organizations\n  openyida org switch --corp-id dingXXX   # Switch to specified organization',
-    first_run_title: '  🤖 OpenYida - AI Conversation Mode Activated!               ',
-    first_run_welcome: "  {0}Welcome to OpenYida!{1} Here's a quick start guide:",
+    auth_usage: 'Usage: yeqiu-yida auth <status|login|refresh|logout>',
+    auth_example: 'Examples:\n  yeqiu-yida auth status         # View login status\n  yeqiu-yida auth login          # Perform login\n  yeqiu-yida auth login --codex  # Codex browser login\n  yeqiu-yida auth refresh        # Refresh login session\n  yeqiu-yida auth logout         # Logout',
+    org_usage: 'Usage: yeqiu-yida org <list|switch>',
+    org_example: 'Examples:\n  yeqiu-yida org list                       # List accessible organizations\n  yeqiu-yida org switch --corp-id dingXXX   # Switch to specified organization',
+    first_run_title: '  🤖 Yeqiu-Yida - AI Conversation Mode Activated!               ',
+    first_run_welcome: "  {0}Welcome to Yeqiu-Yida!{1} Here's a quick start guide:",
     first_run_way1_title: '  📝 Option 1: Describe your needs directly',
     first_run_way1_desc: '  In your AI tool, just tell the AI what you want:',
     first_run_prompt1: '  "Help me create an attendance management system with Yida"',
@@ -287,12 +287,12 @@ Examples:
     first_run_examples_title: '  📋 Example Apps',
     first_run_examples: '  Salary Calculator    • Birthday Greeting App    • Company Landing Page',
     first_run_tips_title: '  🔧 Getting Started Tips',
-    first_run_tip1: '  1. Run {0}openyida env{1}   to detect environment and login status',
-    first_run_tip2: '  2. Run {0}openyida login{1} to log in to Yida',
+    first_run_tip1: '  1. Run {0}yeqiu-yida env{1}   to detect environment and login status',
+    first_run_tip2: '  2. Run {0}yeqiu-yida login{1} to log in to Yida',
     first_run_tip3: '  3. Chat with your AI tool and describe the app you want 🚀',
     first_run_footer1: '  Supported AI tools: Codex / Claude Code / Aone Copilot / Cursor / OpenCode',
-    first_run_footer2: '  📚 Docs: https://github.com/openyida/openyida',
-    first_run_footer3: '  (This guide only shows on first run. Use openyida --help to see all commands)',
+    first_run_footer2: '  📚 Docs: https://github.com/yeqiu-yida/yeqiu-yida',
+    first_run_footer3: '  (This guide only shows on first run. Use yeqiu-yida --help to see all commands)',
   },
 
   // ── lib/integration/integration-check.js ─────────
@@ -321,9 +321,9 @@ Examples:
     summary: 'Check complete: {0} apps, {1} automations, {2} with abnormal logs',
     apps_failed: '{0} app(s) failed to check. See JSON output or error summary for details.',
     no_logs: 'No abnormal execution logs found.',
-    usage: 'openyida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
-    example: 'openyida integration check APP_XXX --output project/output/automation-errors.xlsx',
-    missing_app: 'Missing appType. Usage: openyida integration check <appType...>',
+    usage: 'yeqiu-yida integration check <appType...> [--json] [--output result.xlsx] [--no-progress] [--flow-types 1,2,3,5,6] [--log-page-size 10] [--max-log-pages 1]',
+    example: 'yeqiu-yida integration check APP_XXX --output project/output/automation-errors.xlsx',
+    missing_app: 'Missing appType. Usage: yeqiu-yida integration check <appType...>',
     banner_title: 'Check integration automation abnormal logs',
     status_filter: 'Execution status filter: {0}',
     checking_app: 'Checking app: {0}',
@@ -334,7 +334,7 @@ Examples:
 
   // ── lib/check-update.js ────────────────────────────
   check_update: {
-    new_version: '\n💡 New version available: {0} (current: {1})\n   Run the following command to update:\n   npm install -g openyida@latest\n',
+    new_version: '\n💡 New version available: {0} (current: {1})\n   Run the following command to update:\n   npm install -g yeqiu-yida@latest\n',
   },
 
   // ── lib/update.js ──────────────────────────────────
@@ -343,10 +343,10 @@ Examples:
     fetch_failed: 'Failed to fetch the latest version. Please check your network connection',
     already_latest: 'Already up to date ({0}), no update needed',
     found_new_version: 'New version available: {0} (current: {1})',
-    installing: 'Installing openyida@latest...',
+    installing: 'Installing yeqiu-yida@latest...',
     success: 'Update successful! Current version: {0}',
     install_failed: 'Update failed: {0}',
-    manual_hint: 'Please try manually: npm install -g openyida@latest',
+    manual_hint: 'Please try manually: npm install -g yeqiu-yida@latest',
     available: 'update available',
     up_to_date: 'up to date',
     label_install: 'Install',
@@ -354,12 +354,12 @@ Examples:
     label_version: 'Version',
     label_update: 'Update',
     done: 'Update complete!',
-    done_hint: 'Run openyida --version to confirm the new version',
+    done_hint: 'Run yeqiu-yida --version to confirm the new version',
   },
 
   // ── lib/env.js ─────────────────────────────────────
   env: {
-    title: '  openyida env - Environment Detection',
+    title: '  yeqiu-yida env - Environment Detection',
     system_info: '\n📋 System Info',
     os: '  OS:           {0} ({1})',
     node: '  Node.js:      {0}',
@@ -383,22 +383,22 @@ Examples:
     corp_id_label: '  Org ID:       {0}',
     user_id_label: '  User ID:      {0}',
     csrf_label: '  csrf_token:   {0}...',
-    not_logged_in: '  Status:       ❌ Not logged in (run openyida login to authenticate)',
+    not_logged_in: '  Status:       ❌ Not logged in (run yeqiu-yida login to authenticate)',
     unknown: '(unknown)',
   },
 
   // ── lib/login.js ───────────────────────────────────
   login: {
-    title: '  openyida login - Yida Login Tool',
-    logout_title: '  openyida logout - Yida Logout Tool',
+    title: '  yeqiu-yida login - Yida Login Tool',
+    logout_title: '  yeqiu-yida logout - Yida Logout Tool',
     cookie_file_label: '\n  Cookie file: {0}',
     logout_success: '  ✅ Cookie cleared, login session invalidated.',
-    logout_hint: '  Next time you run openyida login, a QR scan will be triggered.',
+    logout_hint: '  Next time you run yeqiu-yida login, a QR scan will be triggered.',
     logout_no_file: '  ℹ️  Cookie file does not exist, nothing to clear.',
     using_cache: '🔍 Local Cookie found, using it directly...',
     csrf_ok: '  ✅ csrf_token: {0}...',
     corp_id_ok: '  ✅ corpId: {0}',
-    no_playwright: '\n❌ Local browser login prefers Chrome/Edge/Chromium CDP first; CDP is unavailable and no Playwright fallback was found. Use openyida login or openyida login --qr by default; install Playwright only if you need local browser login:',
+    no_playwright: '\n❌ Local browser login prefers Chrome/Edge/Chromium CDP first; CDP is unavailable and no Playwright fallback was found. Use yeqiu-yida login or yeqiu-yida login --qr by default; install Playwright only if you need local browser login:',
     playwright_install1: '   npm install -g playwright',
     playwright_install2: '   npx playwright install chromium',
     browser_opening: '\n🔐 Opening browser for QR code login...',
@@ -416,11 +416,11 @@ Examples:
 
   // ── lib/auth.js ────────────────────────────────────
   auth: {
-    status_title: '  openyida auth status - Login Status Query',
+    status_title: '  yeqiu-yida auth status - Login Status Query',
     not_logged_in: '  Status:       ❌ Not logged in',
-    login_hint: '  Hint:         Run openyida auth login to authenticate',
+    login_hint: '  Hint:         Run yeqiu-yida auth login to authenticate',
     no_csrf_token: '  Status:       ❌ Invalid login (no csrf_token)',
-    relogin_hint: '  Hint:         Run openyida auth login to re-authenticate',
+    relogin_hint: '  Hint:         Run yeqiu-yida auth login to re-authenticate',
     logged_in: '  Status:       ✅ Logged in',
     base_url_label: '  Domain:      {0}',
     corp_id_label: '  Org ID:      {0}',
@@ -441,12 +441,12 @@ Examples:
 
   // ── lib/org.js ─────────────────────────────────────
   org: {
-    list_title: '  openyida org list - Organization List',
+    list_title: '  yeqiu-yida org list - Organization List',
     no_corp_id: '  ❌ Cannot get current org ID, please login first',
     current_org: 'Current organization',
     current: 'current',
     no_organizations: '  ⚠️  No organization info available',
-    switch_title: '  openyida org switch - Organization Switch',
+    switch_title: '  yeqiu-yida org switch - Organization Switch',
     switch_from: '  Current org: {0}',
     switch_to: '  Target org:  {0}',
     already_in_org: '  ✅ Already in target organization',
@@ -462,16 +462,16 @@ Examples:
     only_one_org: '  ⚠️  Only one organization available',
     select_prompt: '\n  Select organization to switch:',
     use_corp_id_hint: '\n  💡 Hint: use --corp-id option to specify target organization',
-    no_login: '❌ Not logged in, please run openyida login first',
+    no_login: '❌ Not logged in, please run yeqiu-yida login first',
     switched_org: 'Switched organization',
     unknown: 'unknown',
   },
 
   // ── lib/create-app.js ──────────────────────────────
   create_app: {
-    title: '  openyida create-app - Yida App Creation Tool',
-    usage: 'Usage: openyida create-app "<appName>" [description] [icon] [iconColor] [themeColor] or openyida create-app --name "<appName>" [--desc "..."] [--theme deepBlue]',
-    example: 'Example: openyida create-app --name "Attendance" --desc "Employee attendance system" --theme deepBlue',
+    title: '  yeqiu-yida create-app - Yida App Creation Tool',
+    usage: 'Usage: yeqiu-yida create-app "<appName>" [description] [icon] [iconColor] [themeColor] or yeqiu-yida create-app --name "<appName>" [--desc "..."] [--theme deepBlue]',
+    example: 'Example: yeqiu-yida create-app --name "Attendance" --desc "Employee attendance system" --theme deepBlue',
     available_icons: '\nAvailable icons:',
     icons_list: '  xian-xinwen, xian-zhengfu, xian-yingyong, xian-xueshimao, xian-qiye,\n  xian-danju, xian-shichang, xian-jingli, xian-falv, xian-baogao,\n  huoche, xian-shenbao, xian-diqiu, xian-qiche, xian-feiji,\n  xian-diannao, xian-gongzuozheng, xian-gouwuche, xian-xinyongka,\n  xian-huodong, xian-jiangbei, xian-liucheng, xian-chaxun, xian-daka',
     available_colors: '\nAvailable colors:',
@@ -496,9 +496,9 @@ Examples:
 
   // ── lib/create-page.js ─────────────────────────────
   create_page: {
-    title: '  openyida create-page - Yida Custom Page Creation Tool',
-    usage: 'Usage: openyida create-page <appType> "<pageName>" [--mode dashboard]',
-    example: 'Example: openyida create-page "APP_XXX" "Game Home" --mode dashboard',
+    title: '  yeqiu-yida create-page - Yida Custom Page Creation Tool',
+    usage: 'Usage: yeqiu-yida create-page <appType> "<pageName>" [--mode dashboard]',
+    example: 'Example: yeqiu-yida create-page "APP_XXX" "Game Home" --mode dashboard',
     app_id: '  App ID:    {0}',
     page_name: '  Page name: {0}',
     step_create: '\n📄 Step 2: Create Custom Page\n',
@@ -516,9 +516,9 @@ Examples:
 
   // ── lib/get-schema.js ──────────────────────────────
   get_schema: {
-    title: '  openyida get-schema - Yida Form Schema Tool',
-    usage: 'Usage: openyida get-schema <appType> <formUuid> or openyida get-schema <appType> --all [--output-dir <dir>]',
-    example: 'Example: openyida get-schema "APP_XXX" "FORM-XXX"; openyida get-schema "APP_XXX" --all --output-dir .cache/schemas',
+    title: '  yeqiu-yida get-schema - Yida Form Schema Tool',
+    usage: 'Usage: yeqiu-yida get-schema <appType> <formUuid> or yeqiu-yida get-schema <appType> --all [--output-dir <dir>]',
+    example: 'Example: yeqiu-yida get-schema "APP_XXX" "FORM-XXX"; yeqiu-yida get-schema "APP_XXX" --all --output-dir .cache/schemas',
     app_id: '  App ID:    {0}',
     form_uuid: '  Form UUID: {0}',
     step_get: '\n📄 Step 2: Get Form Schema',
@@ -529,9 +529,9 @@ Examples:
 
   list_forms: {
     title: '  yidacli list-forms - App form/page list tool',
-    usage: 'Usage: openyida list-forms <appType> [--keyword <text>]',
-    example1: 'Example: openyida list-forms APP_XXX',
-    example2: '         openyida list-forms APP_XXX --keyword customer',
+    usage: 'Usage: yeqiu-yida list-forms <appType> [--keyword <text>]',
+    example1: 'Example: yeqiu-yida list-forms APP_XXX',
+    example2: '         yeqiu-yida list-forms APP_XXX --keyword customer',
     app_id: '  App ID:      {0}',
     keyword: '  Keyword:     {0}',
     step_get: '\n📋 Step 2: Fetch app forms/pages',
@@ -608,13 +608,13 @@ Examples:
     schema_ok_config_failed: '  Schema saved, but config update failed',
     schema_saved_config_failed: '  Schema saved, but config update failed',
     error: '\n❌ Error: {0}',
-    usage_create: 'Usage: openyida create-form create <appType> <formTitle> <fieldsJsonFile>',
-    example_create: 'Example: openyida create-form create "APP_XXX" "Employee Info" .cache/openyida/forms/employee-fields.json',
-    usage_update: 'Usage: openyida create-form update <appType> <formUuid> <changesJsonOrFile>',
-    example_update: 'Example: openyida create-form update "APP_XXX" "FORM-YYY" \'[{"action":"add","field":{"type":"TextField","label":"Note"}}]\'',
+    usage_create: 'Usage: yeqiu-yida create-form create <appType> <formTitle> <fieldsJsonFile>',
+    example_create: 'Example: yeqiu-yida create-form create "APP_XXX" "Employee Info" .cache/yeqiu-yida/forms/employee-fields.json',
+    usage_update: 'Usage: yeqiu-yida create-form update <appType> <formUuid> <changesJsonOrFile>',
+    example_update: 'Example: yeqiu-yida create-form update "APP_XXX" "FORM-YYY" \'[{"action":"add","field":{"type":"TextField","label":"Note"}}]\'',
     usage_label: 'Usage:',
-    usage_create_short: '  create: openyida create-form create <appType> <formTitle> <fieldsJsonFile>',
-    usage_update_short: '  update: openyida create-form update <appType> <formUuid> <changesJsonOrFile>',
+    usage_create_short: '  create: yeqiu-yida create-form create <appType> <formTitle> <fieldsJsonFile>',
+    usage_update_short: '  update: yeqiu-yida create-form update <appType> <formUuid> <changesJsonOrFile>',
     example_label: '\nExamples:',
     fields_file_not_found: '  ❌ Fields definition file not found: ',
     fields_format_invalid: 'Invalid fields definition format',
@@ -657,7 +657,7 @@ Examples:
     data_exists_impact: '     - Historical data loss or corruption\n     - Process status anomalies\n     - Data inconsistency',
     data_exists_abort: '  ❌ Modification aborted. Add --force to proceed.',
     data_exists_confirm_message: 'This form has {0} existing records. Modifying the structure may affect existing data. Add --force to confirm.',
-    data_exists_force_hint: 'Usage: openyida create-form update <appType> <formUuid> <changesJson> --force',
+    data_exists_force_hint: 'Usage: yeqiu-yida create-form update <appType> <formUuid> <changesJson> --force',
     data_exists_force_proceed: '  ⚠️  --force mode: skipping confirmation, force-modifying form structure with {0} existing records',
     data_check_empty: '  ✅ Form has no data, safe to modify',
     data_check_failed: '  ⚠️  Data check failed, proceeding with modification',
@@ -691,10 +691,10 @@ Examples:
 
   // ── lib/export-app.js ──────────────────────────────
   export: {
-    usage: 'Usage: openyida export <appType> [output]',
-    example1: 'Example: openyida export APP_XXXXXXXXXXXXX',
-    example2: '         openyida export APP_XXXXXXXXXXXXX ./my-app-backup.json',
-    title: '  openyida export - Yida App Export Tool',
+    usage: 'Usage: yeqiu-yida export <appType> [output]',
+    example1: 'Example: yeqiu-yida export APP_XXXXXXXXXXXXX',
+    example2: '         yeqiu-yida export APP_XXXXXXXXXXXXX ./my-app-backup.json',
+    title: '  yeqiu-yida export - Yida App Export Tool',
     app_id: '\n  App ID:      {0}',
     output_file: '  Output file: {0}',
     step_get_forms: '\n📋 Step 2: Get app form list',
@@ -714,15 +714,15 @@ Examples:
 
   // ── lib/import-app.js ──────────────────────────────
   import: {
-    usage: 'Usage: openyida import <file> [name]',
-    example1: 'Example: openyida import ./yida-export.json',
-    example2: '         openyida import ./yida-export.json "Quality Traceability (Production)"',
-    title: '  openyida import - Yida App Import Tool',
+    usage: 'Usage: yeqiu-yida import <file> [name]',
+    example1: 'Example: yeqiu-yida import ./yida-export.json',
+    example2: '         yeqiu-yida import ./yida-export.json "Quality Traceability (Production)"',
+    title: '  yeqiu-yida import - Yida App Import Tool',
     import_file: '\n  Import file: {0}',
     step_read_file: '\n📂 Step 1: Read export file',
     file_not_found: '  ❌ File not found: {0}',
     parse_failed: '  ❌ Failed to parse export file: {0}',
-    invalid_format: '  ❌ Invalid export file format. Please use openyida export to generate.',
+    invalid_format: '  ❌ Invalid export file format. Please use yeqiu-yida export to generate.',
     migration_suffix: ' (migrated)',
     read_ok: '  ✅ Read successfully, {0} forms total',
     source_app_id: '  Source app ID: {0}',
@@ -750,15 +750,15 @@ Examples:
     report_path: '  Report:       {0}',
     notice_label: '\n  ⚠️  Notes:',
     notice_association: '  - Cross-form references (associationFormField) must be updated manually based on the migration report',
-    notice_custom_page: '  - Custom pages must be re-published separately using openyida publish',
+    notice_custom_page: '  - Custom pages must be re-published separately using yeqiu-yida publish',
     create_app_error: 'Failed to create app',
     create_form_error: 'Failed to create form',
   },
 
   // ── lib/get-page-config.js ─────────────────────────
   get_page_config: {
-    usage: 'Usage: openyida get-page-config <appType> <formUuid>',
-    example: 'Example: openyida get-page-config APP_XXX FORM-XXX',
+    usage: 'Usage: yeqiu-yida get-page-config <appType> <formUuid>',
+    example: 'Example: yeqiu-yida get-page-config APP_XXX FORM-XXX',
     title: '  get-page-config - Yida Page Config Query Tool',
     app_id: '\n  App ID:    {0}',
     form_uuid: '  Form UUID: {0}',
@@ -773,8 +773,8 @@ Examples:
 
   // ── lib/save-share-config.js ───────────────────────
   save_share_config: {
-    usage: 'Usage: openyida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
-    example: 'Example: openyida save-share-config "APP_XXX" "FORM-XXX" "/o/xxx" "y" "n"',
+    usage: 'Usage: yeqiu-yida save-share-config <appType> <formUuid> <openUrl> <isOpen> [openAuth]',
+    example: 'Example: yeqiu-yida save-share-config "APP_XXX" "FORM-XXX" "/o/xxx" "y" "n"',
     is_open_hint: '  isOpen: y=enable public access, n=disable public access',
     open_auth_hint: '  openAuth: y=require auth, n=no auth required (default)',
     title: '  save-share-config - Yida Public Access Config Tool',
@@ -801,8 +801,8 @@ Examples:
 
   // ── lib/update-app.js ─────────────────────────────
   update_app: {
-    usage: 'Usage: openyida update-app <appType> --name "New Name" [--desc "Description"] [--icon "icon-name"] [--icon-color "color"]',
-    example: 'Example: openyida update-app APP_XXX --name "New App Name" --desc "New Description"',
+    usage: 'Usage: yeqiu-yida update-app <appType> --name "New Name" [--desc "Description"] [--icon "icon-name"] [--icon-color "color"]',
+    example: 'Example: yeqiu-yida update-app APP_XXX --name "New App Name" --desc "New Description"',
     options: 'Options:\n  --name, -n      App name (required or at least one update field)\n  --desc, -d      App description\n  --icon          Icon name (e.g. xian-yingyong)\n  --icon-color    Icon color (default: #0089FF)',
     missing_app_type: 'Error: missing appType argument',
     missing_update_field: 'Error: at least one update field must be specified (--name, --desc, --icon)',
@@ -820,8 +820,8 @@ Examples:
 
   // ── lib/update-form-config.js ──────────────────────
   update_form_config: {
-    usage: 'Usage: openyida update-form-config <appType> <formUuid> <isRenderNav> <title>',
-    example: 'Example: openyida update-form-config "APP_XXX" "FORM_XXX" "false" "My Page"',
+    usage: 'Usage: yeqiu-yida update-form-config <appType> <formUuid> <isRenderNav> <title>',
+    example: 'Example: yeqiu-yida update-form-config "APP_XXX" "FORM_XXX" "false" "My Page"',
     params_label: 'Parameters:',
     param_is_render_nav: '  isRenderNav: true=show top nav, false=hide top nav',
     param_title: '  title: page title (required)',
@@ -841,8 +841,8 @@ Examples:
 
   // ── lib/verify-short-url.js ────────────────────────
   verify_short_url: {
-    usage: 'Usage: openyida verify-short-url <appType> <formUuid> <url>',
-    example: 'Example: openyida verify-short-url "APP_XXX" "FORM-XXX" "/o/aaa"',
+    usage: 'Usage: yeqiu-yida verify-short-url <appType> <formUuid> <url>',
+    example: 'Example: yeqiu-yida verify-short-url "APP_XXX" "FORM-XXX" "/o/aaa"',
     formats_label: '  Supported formats:',
     format_open: '    /o/xxx - public access (external)',
     format_share: '    /s/xxx - org share (internal)',
@@ -869,21 +869,21 @@ Examples:
 
   // ── lib/copy.js ────────────────────────────────────
   copy: {
-    title: '  openyida copy - Initialize Yida Working Directory',
+    title: '  yeqiu-yida copy - Initialize Yida Working Directory',
     package_root: '\n📦 Package root: {0}',
     dest_base: '🤖 Target root: {0}',
     dest_root: '🤖 Target root: {0}',
     dest_empty_flatten: '📂 Target directory is empty, flattening project/ contents directly into it (no project/ subdirectory)',
     force_mode: '⚠️  --force mode: target directory will be cleared before copying',
-    no_package: '\n❌ openyida package directory not found',
-    no_package_hint1: '   Please ensure openyida is installed globally:',
-    no_package_hint2: '   npm install -g openyida',
+    no_package: '\n❌ yeqiu-yida package directory not found',
+    no_package_hint1: '   Please ensure yeqiu-yida is installed globally:',
+    no_package_hint2: '   npm install -g yeqiu-yida',
     no_ai_tool: '\n❌ No active AI tool environment detected\n   Supported tools: Wukong, Codex, OpenCode, Claude Code, Aone Copilot, Cursor, Qoder\n\n   Current detection results:',
     no_active_tool: '\n❌ No active AI tool environment detected',
     supported_tools: '   Supported tools: Wukong, Codex, OpenCode, Claude Code, Aone Copilot, Cursor, Qoder',
     current_result: '\n   Current detection results:',
-    force_hint: '\n   To force copy to current directory, run:\n   openyida copy --force',
-    force_cmd: '   openyida copy --force',
+    force_hint: '\n   To force copy to current directory, run:\n   yeqiu-yida copy --force',
+    force_cmd: '   yeqiu-yida copy --force',
     copying: '    Copied: {0}',
     copying_label: '\n📂 Copying {0}...',
     creating_symlink: '\n📂 Creating yida-skills/ symlink...',
@@ -917,7 +917,7 @@ Examples:
     available_templates: 'Available templates: {0}',
     template_not_found: 'Template file not found: {0}',
     done: 'Page generated: {0}',
-    hint: 'Next run openyida compile <file>, or pass --compile to compile immediately.',
+    hint: 'Next run yeqiu-yida compile <file>, or pass --compile to compile immediately.',
     success: 'Page generation complete',
   },
   build_page: {
@@ -977,7 +977,7 @@ Examples:
     target_not_found: 'Publish target was not found in app navigation: {0}',
     target_type_invalid: 'Publish target is not a custom display page: {0} current type is {1}',
     target_type_hint: 'The current target "{0}" does not look like a custom page (type: {1}). Do not publish JSX to data forms or process forms.',
-    target_list_hint: 'Run openyida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
+    target_list_hint: 'Run yeqiu-yida list-forms {0} --keyword <page name>, then choose a custom page formUuid with formType=display.',
     target_force_hint: 'Append --force only when you intentionally bypass this guard; it overwrites the target Schema and should be used only for a known custom page.',
     step_compile: '\n📦 Step 1: Compile source & build Schema\n',
     reading_source: '[1/4] Reading {0} source...',
@@ -1022,8 +1022,8 @@ Examples:
     exception: '\n❌ Publish error: {0}',
     error: '\n❌ Publish error: {0}',
     source_not_found: '❌ Source file not found: {0}',
-    usage: 'Usage: openyida publish <sourceFile> <appType> <formUuid> [--health-check]',
-    example: 'Example: openyida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
+    usage: 'Usage: yeqiu-yida publish <sourceFile> <appType> <formUuid> [--health-check]',
+    example: 'Example: yeqiu-yida publish pages/src/xxx.js APP_XXX FORM-XXX --health-check',
   },
 
   // ── lib/qr-login.js ────────────────────────────────
@@ -1070,9 +1070,9 @@ Examples:
 
   // ── scripts/postinstall.js ─────────────────────────
   postinstall: {
-    welcome_title: '  🎉 Welcome to OpenYida!                                     ',
+    welcome_title: '  🎉 Welcome to Yeqiu-Yida!                                     ',
     install_success: '  ✅ Installation complete! {0} Yida AI development tool is ready.',
-    update_success: '  ✅ Update complete! {0} OpenYida has been upgraded to the latest version.',
+    update_success: '  ✅ Update complete! {0} Yeqiu-Yida has been upgraded to the latest version.',
     ai_mode_title: '  🚀 AI Conversation Mode',
     ai_mode_desc: '  In Codex / Claude Code / Aone Copilot / Cursor and other AI tools, just chat:',
     prompt1: '  📋  "Help me create an attendance management system with Yida"',
@@ -1082,14 +1082,14 @@ Examples:
     steps_title: '  📖 Getting Started',
     step1: '  {0}Step 1{1}  Open your AI coding tool (Codex / Claude Code / Cursor, etc.)',
     step2: '  {0}Step 2{1}  Describe the app you want in natural language',
-    step3: '  {0}Step 3{1}  AI automatically runs openyida commands to create and publish',
+    step3: '  {0}Step 3{1}  AI automatically runs yeqiu-yida commands to create and publish',
     step4: '  {0}Step 4{1}  Get a working Yida app link 🎉',
     commands_title: '  ⚡ Quick Commands',
-    cmd_env: '  {0}openyida env{1}      {2}# Detect AI tool environment and login status{3}',
-    cmd_login: '  {0}openyida login{1}    {2}# Log in to Yida{3}',
-    cmd_help: '  {0}openyida --help{1}   {2}# Show all commands{3}',
-    footer1: '  📚 Docs: https://github.com/openyida/openyida',
-    footer2: '  💬 Community: Join OpenYida community on DingTalk',
+    cmd_env: '  {0}yeqiu-yida env{1}      {2}# Detect AI tool environment and login status{3}',
+    cmd_login: '  {0}yeqiu-yida login{1}    {2}# Log in to Yida{3}',
+    cmd_help: '  {0}yeqiu-yida --help{1}   {2}# Show all commands{3}',
+    footer1: '  📚 Docs: https://github.com/yeqiu-yida/yeqiu-yida',
+    footer2: '  💬 Community: Join Yeqiu-Yida community on DingTalk',
   },
 
   // ── lib/conversation/export-conversation.js ────────
@@ -1132,12 +1132,12 @@ Examples:
     // Configuration
     config_load_error: 'Failed to load CDN config: {0}',
     config_saved: '✅ CDN config saved to: {0}',
-    config_usage: 'Usage: openyida cdn-config [options]',
+    config_usage: 'Usage: yeqiu-yida cdn-config [options]',
     config_examples: `
 Examples:
-  openyida cdn-config --init
-  openyida cdn-config --show
-  openyida cdn-config --set-domain cdn.example.com`,
+  yeqiu-yida cdn-config --init
+  yeqiu-yida cdn-config --show
+  yeqiu-yida cdn-config --set-domain cdn.example.com`,
     config_options: `
 Options:
   --init                Initialize config (interactive)
@@ -1184,7 +1184,7 @@ Options:
     config_opt_path: 'Set upload path prefix',
 
     // Upload
-    upload_usage: 'Usage: openyida cdn-upload <image-path> [options]',
+    upload_usage: 'Usage: yeqiu-yida cdn-upload <image-path> [options]',
     upload_examples: `
 Examples:
   yida cdn-upload ./image.png
@@ -1204,7 +1204,7 @@ Options:
     upload_no_files: '❌ Please specify image files to upload',
     config_incomplete: '❌ CDN config incomplete',
     missing_fields: '   Missing fields: {0}',
-    run_config_init: '   Please run: openyida cdn-config --init',
+    run_config_init: '   Please run: yeqiu-yida cdn-config --init',
     no_config: '❌ CDN config not found',
     oss_sdk_required: '❌ Missing ali-oss SDK',
     run_npm_install: '   Please run: npm install {0}',
@@ -1220,7 +1220,7 @@ Options:
     upload_error: '❌ Upload failed: {0}',
 
     // Refresh
-    refresh_usage: 'Usage: openyida cdn-refresh [options]',
+    refresh_usage: 'Usage: yeqiu-yida cdn-refresh [options]',
     refresh_examples: `
 Examples:
   yida cdn-refresh --urls "https://cdn.example.com/image.png"
@@ -1256,15 +1256,15 @@ Options:
   flashNote: {
     toPrd: {
       title: '📋 DingTalk Flash Note to PRD',
-      help_usage: 'Usage: openyida flash-to-prd --file <flash-note-path> [--name <project-name>]',
-      help_usage2: '       openyida flash-to-prd --name <project-name>  (read from stdin)',
+      help_usage: 'Usage: yeqiu-yida flash-to-prd --file <flash-note-path> [--name <project-name>]',
+      help_usage2: '       yeqiu-yida flash-to-prd --name <project-name>  (read from stdin)',
       help_args_title: 'Arguments:',
       help_arg_file: '  --file, -f <path>       Flash note file path (.txt / .md)',
       help_arg_name: '  --name, -n <name>       Project name (optional, auto-extracted from content)',
       help_arg_max_tokens: '  --max-tokens <count>    Max AI output tokens (default 8000)',
       help_examples_title: 'Examples:',
-      help_example1: '  openyida flash-to-prd --file ./meeting-notes.txt --name "Equipment Inspection"',
-      help_example2: '  cat meeting.txt | openyida flash-to-prd --name "Equipment Inspection"',
+      help_example1: '  yeqiu-yida flash-to-prd --file ./meeting-notes.txt --name "Equipment Inspection"',
+      help_example2: '  cat meeting.txt | yeqiu-yida flash-to-prd --name "Equipment Inspection"',
       step_read: '[Step 1] Reading flash note content...',
       file_not_found: 'File not found: {0}',
       no_input: 'No flash note content provided. Use --file to specify a file, or pipe content via stdin.',
@@ -1301,9 +1301,9 @@ Options:
 
   // ── lib/process/preview-process.js ─────────────────
   preview_process: {
-    usage: 'Usage: openyida process preview <appType> <processInstanceId> [--output <path>]',
-    example: 'Example: openyida process preview APP_XXX proc-inst-id-xxx',
-    no_login: '❌ Unable to obtain valid login credentials. Please run openyida login first',
+    usage: 'Usage: yeqiu-yida process preview <appType> <processInstanceId> [--output <path>]',
+    example: 'Example: yeqiu-yida process preview APP_XXX proc-inst-id-xxx',
+    no_login: '❌ Unable to obtain valid login credentials. Please run yeqiu-yida login first',
     fetch_instance_failed: 'Failed to fetch process instance details',
     fetch_records_warning: 'Failed to fetch operation records, will show basic flowchart only',
     fetching: 'Fetching process instance {0} ...',
@@ -1319,7 +1319,7 @@ Options:
 
   // ── db-index ────────────────────────────────────────────
   db_index: {
-    usage: 'Usage: openyida db-index [options]',
+    usage: 'Usage: yeqiu-yida db-index [options]',
     commands: 'Commands:',
     cmd_form: 'Check index status for a specific form',
     cmd_form_suggest: 'Get index suggestions',
@@ -1350,7 +1350,7 @@ Options:
 
   // ── db-seq-fix ────────────────────────────────────────────
   db_seq_fix: {
-    usage: 'Usage: openyida db-seq-fix [options]',
+    usage: 'Usage: yeqiu-yida db-seq-fix [options]',
     commands: 'Commands:',
     cmd_check: 'Check all Sequence status (default)',
     cmd_fix: 'Automatically fix problematic Sequences',
@@ -1377,7 +1377,7 @@ Options:
     suggested: 'Suggested Start Value',
     fix_sql: 'Fix SQL',
     summary_need_fix: 'Found {0} Sequences that need fixing',
-    run_fix_hint: 'Run openyida db-seq-fix --fix to fix them',
+    run_fix_hint: 'Run yeqiu-yida db-seq-fix --fix to fix them',
     summary_ok: 'All Sequences are OK',
   },
 
@@ -1416,17 +1416,17 @@ Options:
     process_def_not_found: 'Process definition file not found',
     done: 'Process form creation completed',
     url: 'URL',
-    usage: 'Usage: openyida create-process <appType> <formTitle> <fieldsJsonFile> <processDefinitionFile>',
-    usage2: '       openyida create-process <appType> --formUuid <formUuid> <processDefinitionFile>',
-    example: 'Example: openyida create-process "APP_XXX" "Order Form" .cache/openyida/process/fields.json .cache/openyida/process/process-definition.json',
-    example2: '         openyida create-process "APP_XXX" --formUuid FORM-YYY .cache/openyida/process/process-definition.json',
+    usage: 'Usage: yeqiu-yida create-process <appType> <formTitle> <fieldsJsonFile> <processDefinitionFile>',
+    usage2: '       yeqiu-yida create-process <appType> --formUuid <formUuid> <processDefinitionFile>',
+    example: 'Example: yeqiu-yida create-process "APP_XXX" "Order Form" .cache/yeqiu-yida/process/fields.json .cache/yeqiu-yida/process/process-definition.json',
+    example2: '         yeqiu-yida create-process "APP_XXX" --formUuid FORM-YYY .cache/yeqiu-yida/process/process-definition.json',
   },
   codex_login: {
-    title: '  openyida login {0} - {1} Login Mode',
+    title: '  yeqiu-yida login {0} - {1} Login Mode',
     not_codex: 'Current environment is not detected as Codex / Qoder / Wukong; returning an in-app browser login handoff only.',
     no_playwright: '{0} mode does not require Playwright or a separate Chromium install.',
-    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use openyida login --browser for Yida login cookies.',
-    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use openyida login --browser when CLI cookies are required.',
+    using_browser: '{0} in-app Browser is only suitable for unauthenticated page previews; use yeqiu-yida login --browser for Yida login cookies.',
+    browser_handoff_hint: '{0} in-app Browser does not support authentication Cookie export. Use yeqiu-yida login --browser when CLI cookies are required.',
     handoff_message: '{0} in-app Browser cannot export Yida login cookies. Run fallback_command when CLI cookies are required.',
     cache_available: 'Existing CLI Cookie cache is available; no browser login needed.',
   },

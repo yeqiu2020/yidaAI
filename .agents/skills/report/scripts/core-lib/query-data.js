@@ -2,7 +2,7 @@
  * query-data.js - 宜搭统一数据管理命令
  *
  * 用法：
- *   openyida data <action> <resource> [参数]
+ *   yeqiu-yida data <action> <resource> [参数]
  *
  * 支持的操作：
  *   query form / get form / create form / update form / query subform
@@ -26,23 +26,23 @@ const {
 
 const { warn } = require('./chalk');
 
-const USAGE = `openyida data - Unified Yida data CLI
+const USAGE = `yeqiu-yida data - Unified Yida data CLI
 
 Usage:
-  openyida data query form <appType> <formUuid> [--page N] [--size N] [--search-json JSON|--search-file .cache/openyida/search.json] [--inst-id ID]
-  openyida data get form <appType> --inst-id <formInstId>
-  openyida data create form <appType> <formUuid> (--data-json <JSON>|--data-file .cache/openyida/data.json) [--dept-id ID]
-  openyida data update form <appType> --inst-id <formInstId> (--data-json <JSON>|--data-file .cache/openyida/data.json) [--use-latest-version y]
-  openyida data query subform <appType> <formUuid> --inst-id <formInstId> --table-field-id <fieldId> [--page N] [--size N]
+  yeqiu-yida data query form <appType> <formUuid> [--page N] [--size N] [--search-json JSON|--search-file .cache/yeqiu-yida/search.json] [--inst-id ID]
+  yeqiu-yida data get form <appType> --inst-id <formInstId>
+  yeqiu-yida data create form <appType> <formUuid> (--data-json <JSON>|--data-file .cache/yeqiu-yida/data.json) [--dept-id ID]
+  yeqiu-yida data update form <appType> --inst-id <formInstId> (--data-json <JSON>|--data-file .cache/yeqiu-yida/data.json) [--use-latest-version y]
+  yeqiu-yida data query subform <appType> <formUuid> --inst-id <formInstId> --table-field-id <fieldId> [--page N] [--size N]
 
-  openyida data query process <appType> <formUuid> [--page N] [--size N] [--search-json JSON|--search-file .cache/openyida/search.json] [--task-id ID] [--instance-status STATUS] [--approved-result RESULT]
-  openyida data get process <appType> --process-inst-id <processInstanceId>
-  openyida data create process <appType> <formUuid> --process-code <processCode> (--data-json <JSON>|--data-file .cache/openyida/data.json) [--dept-id ID]
-  openyida data update process <appType> --process-inst-id <processInstanceId> (--data-json <JSON>|--data-file .cache/openyida/data.json)
-  openyida data query operation-records <appType> --process-inst-id <processInstanceId>
-  openyida data execute task <appType> --task-id <taskId> --process-inst-id <processInstanceId> --out-result <AGREE|DISAGREE> --remark <text> [--data-json JSON|--data-file .cache/openyida/data.json] [--no-execute-expressions y]
+  yeqiu-yida data query process <appType> <formUuid> [--page N] [--size N] [--search-json JSON|--search-file .cache/yeqiu-yida/search.json] [--task-id ID] [--instance-status STATUS] [--approved-result RESULT]
+  yeqiu-yida data get process <appType> --process-inst-id <processInstanceId>
+  yeqiu-yida data create process <appType> <formUuid> --process-code <processCode> (--data-json <JSON>|--data-file .cache/yeqiu-yida/data.json) [--dept-id ID]
+  yeqiu-yida data update process <appType> --process-inst-id <processInstanceId> (--data-json <JSON>|--data-file .cache/yeqiu-yida/data.json)
+  yeqiu-yida data query operation-records <appType> --process-inst-id <processInstanceId>
+  yeqiu-yida data execute task <appType> --task-id <taskId> --process-inst-id <processInstanceId> --out-result <AGREE|DISAGREE> --remark <text> [--data-json JSON|--data-file .cache/yeqiu-yida/data.json] [--no-execute-expressions y]
 
-  openyida data query tasks <appType> --type <todo|done|submitted|cc> [--page N] [--size N] [--keyword TEXT] [--process-codes JSON] [--instance-status STATUS]
+  yeqiu-yida data query tasks <appType> --type <todo|done|submitted|cc> [--page N] [--size N] [--keyword TEXT] [--process-codes JSON] [--instance-status STATUS]
 `;
 
 function fail(message) {

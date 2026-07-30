@@ -2,12 +2,12 @@
  * copy.js - 复制 project 工作目录模板 / 复制 yida-skills 到当前 AI 工具环境
  *
  * 用法：
- *   openyida copy                → 复制 project/ 目录模板（默认，合并模式）
- *   openyida copy --force        → 复制 project/ 目录模板（强制覆盖，先清空目标目录）
- *   openyida copy -skills        → 复制 yida-skills/ 到当前 AI 工具的 skills 目录
+ *   yeqiu-yida copy                → 复制 project/ 目录模板（默认，合并模式）
+ *   yeqiu-yida copy --force        → 复制 project/ 目录模板（强制覆盖，先清空目标目录）
+ *   yeqiu-yida copy -skills        → 复制 yida-skills/ 到当前 AI 工具的 skills 目录
  *                                  悟空环境下：删除已有 yida-skills/（悟空通过手动上传技能）
- *   openyida copy -project       → 复制 project/ 目录模板（与默认行为相同，显式指定）
- *   openyida copy -project --force → 复制 project/ 目录模板（强制覆盖）
+ *   yeqiu-yida copy -project       → 复制 project/ 目录模板（与默认行为相同，显式指定）
+ *   yeqiu-yida copy -project --force → 复制 project/ 目录模板（强制覆盖）
  *
  * 目标策略：
  *   - 悟空（Wukong）：复制/链接到 ~/.real/workspace/（专属 workspace，路径固定）
@@ -38,7 +38,7 @@ const { warn } = require('./chalk');
  */
 function findPackageRoot() {
   try {
-    const packageJsonPath = require.resolve('openyida/package.json');
+    const packageJsonPath = require.resolve('yeqiu-yida/package.json');
     return path.dirname(packageJsonPath);
   } catch {
     // fallback：从当前文件向上查找包含 package.json 的目录

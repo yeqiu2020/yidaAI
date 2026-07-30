@@ -2,7 +2,7 @@
  * check-data.js - 宜搭流程表单异常数据检测命令
  *
  * 用法：
- *   openyida data check <appType> <formUuid> <rules.json> [选项]
+ *   yeqiu-yida data check <appType> <formUuid> <rules.json> [选项]
  *
  * 规则类型：
  *   contradiction  矛盾检测：条件成立时，某些字段应为空
@@ -26,10 +26,10 @@ const {
 
 const querystring = require('querystring');
 
-const USAGE = `openyida data check - 流程表单异常数据检测
+const USAGE = `yeqiu-yida data check - 流程表单异常数据检测
 
 用法：
-  openyida data check <appType> <formUuid> <rules.json> [选项]
+  yeqiu-yida data check <appType> <formUuid> <rules.json> [选项]
 
 参数：
   appType     应用类型标识（如 APP_XXXXXX）

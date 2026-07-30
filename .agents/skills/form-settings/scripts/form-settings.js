@@ -1,13 +1,17 @@
-const path = require('path');
+﻿const path = require('path');
 const fs = require('fs');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
-const FORM_MANAGER_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'yida-api-client', 'scripts', 'form_manager.js');
-const API_CLIENT_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'yida-api-client', 'scripts', 'api_client.js');
+const FORM_MANAGER_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'form_manager.js');
+const API_CLIENT_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'api_client.js');
+
+// Phase 6: Cookie 加载统一委托给 lib/core/utils
+const coreUtils = require('../../../../lib/core/utils');
 
 function getAuthRef() {
-  const { loadCookieData, resolveBaseUrl, resolveCorpId } = require(API_CLIENT_PATH);
+  const { loadCookieData, resolveBaseUrl } = coreUtils;
+  const { resolveCorpId } = require(API_CLIENT_PATH);
   const cookieData = loadCookieData();
   if (!cookieData) {
     console.error('  ❌ 未找到登录态，请先登录');
@@ -280,7 +284,9 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error('❌ 执行失败:', err.message);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(err => {
+    console.error('❌ 执行失败:', err.message);
+    process.exit(1);
+  });
+}

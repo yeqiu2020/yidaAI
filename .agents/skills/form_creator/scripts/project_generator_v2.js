@@ -9,7 +9,7 @@
  * - 提示词模板预填充表单字段信息
  *
  * 功能: 批量生成多个表单，自动组织项目目录结构
- * 使用: form_generator_v2.js + yida_field_templates.js
+ * 使用: form_generator_v2.js + field_templates.js
  */
 
 const fs = require('fs');
@@ -50,10 +50,12 @@ class ProjectGeneratorV2 {
 
     const modules = [...new Set(this.formConfigs.map(f => f.module || '未分类'))];
     for (const module of modules) {
-      const modulePath = path.join(this.projectPath, module);
+      // v1.1.0: 分组目录加「分组」后缀，与表单目录结构对齐
+      const groupDirName = `${module}「分组」`;
+      const modulePath = path.join(this.projectPath, groupDirName);
       if (!fs.existsSync(modulePath)) {
         fs.mkdirSync(modulePath, { recursive: true });
-        console.log(`  [创建] 模块目录: ${module}/`);
+        console.log(`  [创建] 模块目录: ${groupDirName}/`);
       }
     }
   }
@@ -68,7 +70,9 @@ class ProjectGeneratorV2 {
     const formJson = generator.generate(formConfig);
 
     const module = formConfig.module || '未分类';
-    const outputDir = path.join(this.projectPath, module);
+    // v1.1.0: 分组目录加「分组」后缀，与表单目录结构对齐
+    const groupDirName = `${module}「分组」`;
+    const outputDir = path.join(this.projectPath, groupDirName);
     const outputPath = path.join(outputDir, `${formConfig.formName}.json`);
 
     generator.saveToFile(formJson, outputPath);

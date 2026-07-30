@@ -6,11 +6,8 @@ description: Create new skills, modify and improve existing skills, and measure 
 ## 🔴 硬规则（绝对不可违反）
 
 ### 通用硬规则
-1. **禁止通过API修改已有应用的表单字段内容** — 公式、代码、字段增删改只能复制粘贴（规则25）
-2. **应用ID和表单UUID必须填真实值** — 从系统配置清单.md读取，严禁占位符（规则24）
-3. **写入文件前必须校验** — 运行 `node scripts/ai-validator.js check-before-write <文件路径>` 确认不覆盖已有文件
-4. **写入文件后必须校验** — 运行 `node scripts/ai-validator.js check-after-write <文件路径>` 确认内容合规
-5. **Cookie必须使用根目录** — 严禁 process.cwd()，必须用 PROJECT_ROOT（规则26）
+
+> 本区块 1-5 条通用硬规则统一维护于 [../通用硬规则.md](../通用硬规则.md)（单一来源，避免多点复制导致规则漂移），执行前必须阅读并严格遵守。
 
 ### 专属硬规则
 1. **核心流程捕获意图→写SKILL.md→测试→评估→迭代** — 必须按此流程执行
@@ -23,6 +20,14 @@ description: Create new skills, modify and improve existing skills, and measure 
 # Skill Creator
 
 A skill for creating new skills and iteratively improving them.
+
+## 📚 Reference file index (load on demand)
+
+| Reference file | Content | When to load |
+|---------------|---------|--------------|
+| [references/schemas.md](references/schemas.md) | JSON structures for evals.json, grading.json, benchmark.json, etc. | When writing assertions or generating benchmark.json manually |
+| [references/platform-specific.md](references/platform-specific.md) | Claude.ai-specific instructions, Cowork-specific instructions, Advanced blind comparison | When running in Claude.ai or Cowork, or when the user wants a rigorous blind A/B comparison between two skill versions |
+| `agents/grader.md` / `agents/comparator.md` / `agents/analyzer.md` | Instructions for grader / blind-comparison / analyzer subagents | When spawning the relevant subagent |
 
 At a high level, the process of creating a skill goes like this:
 
@@ -43,8 +48,6 @@ On the other hand, maybe they already have a draft of the skill. In this case yo
 Of course, you should always be flexible and if the user is like "I don't need to run a bunch of evaluations, just vibe with me", you can do that instead.
 
 Then after the skill is done (but again, the order is flexible), you can also run the skill description improver, which we have a whole separate script for, to optimize the triggering of the skill.
-
-Cool? Cool.
 
 ## Communicating with the user
 
@@ -341,9 +344,7 @@ Keep going until:
 
 ## Advanced: Blind comparison
 
-For situations where you want a more rigorous comparison between two versions of a skill (e.g., the user asks "is the new version actually better?"), there's a blind comparison system. Read `agents/comparator.md` and `agents/analyzer.md` for the details. The basic idea is: give two outputs to an independent agent without telling it which is which, and let it judge quality. Then analyze why the winner won.
-
-This is optional, requires subagents, and most users won't need it. The human review loop is usually sufficient.
+For a more rigorous comparison between two versions of a skill (e.g., the user asks "is the new version actually better?"), there's a blind comparison system: give two outputs to an independent agent without telling it which is which, and let it judge quality. Optional, requires subagents. Details in [references/platform-specific.md](references/platform-specific.md) (see also `agents/comparator.md` and `agents/analyzer.md`).
 
 ---
 
@@ -436,40 +437,17 @@ After packaging, direct the user to the resulting `.skill` file path so they can
 
 ## Claude.ai-specific instructions
 
-In Claude.ai, the core workflow is the same (draft → test → review → improve → repeat), but because Claude.ai doesn't have subagents, some mechanics change. Here's what to adapt:
+In Claude.ai, the core workflow is the same (draft → test → review → improve → repeat), but because Claude.ai doesn't have subagents, some mechanics change: run test cases yourself one at a time (no baseline runs), present results inline instead of the browser reviewer, skip quantitative benchmarking, skip description optimization (needs `claude -p`), skip blind comparison. Packaging via `package_skill.py` still works. When updating an existing skill: preserve the original name, and copy to a writeable location (e.g. `/tmp/skill-name/`) before editing/packaging.
 
-**Running test cases**: No subagents means no parallel execution. For each test case, read the skill's SKILL.md, then follow its instructions to accomplish the test prompt yourself. Do them one at a time. This is less rigorous than independent subagents (you wrote the skill and you're also running it, so you have full context), but it's a useful sanity check — and the human review step compensates. Skip the baseline runs — just use the skill to complete the task as requested.
-
-**Reviewing results**: If you can't open a browser (e.g., Claude.ai's VM has no display, or you're on a remote server), skip the browser reviewer entirely. Instead, present results directly in the conversation. For each test case, show the prompt and the output. If the output is a file the user needs to see (like a .docx or .xlsx), save it to the filesystem and tell them where it is so they can download and inspect it. Ask for feedback inline: "How does this look? Anything you'd change?"
-
-**Benchmarking**: Skip the quantitative benchmarking — it relies on baseline comparisons which aren't meaningful without subagents. Focus on qualitative feedback from the user.
-
-**The iteration loop**: Same as before — improve the skill, rerun the test cases, ask for feedback — just without the browser reviewer in the middle. You can still organize results into iteration directories on the filesystem if you have one.
-
-**Description optimization**: This section requires the `claude` CLI tool (specifically `claude -p`) which is only available in Claude Code. Skip it if you're on Claude.ai.
-
-**Blind comparison**: Requires subagents. Skip it.
-
-**Packaging**: The `package_skill.py` script works anywhere with Python and a filesystem. On Claude.ai, you can run it and the user can download the resulting `.skill` file.
-
-**Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. In this case:
-- **Preserve the original name.** Note the skill's directory name and `name` frontmatter field -- use them unchanged. E.g., if the installed skill is `research-helper`, output `research-helper.skill` (not `research-helper-v2`).
-- **Copy to a writeable location before editing.** The installed skill path may be read-only. Copy to `/tmp/skill-name/`, edit there, and package from the copy.
-- **If packaging manually, stage in `/tmp/` first**, then copy to the output directory -- direct writes may fail due to permissions.
+Full adaptation details: [references/platform-specific.md](references/platform-specific.md).
 
 ---
 
 ## Cowork-Specific Instructions
 
-If you're in Cowork, the main things to know are:
+If you're in Cowork: subagents work (parallel test runs OK, series if timeouts); no browser/display, so generate the eval viewer with `--static <output_path>` and proffer a clickable link. GENERATE THE EVAL VIEWER *BEFORE* evaluating inputs yourself — always via `generate_review.py`, never boutique HTML. Feedback arrives as a downloaded `feedback.json`. Packaging and description optimization (`run_loop.py` / `run_eval.py`) work; save optimization until the skill is finished. For updating an existing skill, follow the same update guidance as Claude.ai.
 
-- You have subagents, so the main workflow (spawn test cases in parallel, run baselines, grade, etc.) all works. (However, if you run into severe problems with timeouts, it's OK to run the test prompts in series rather than parallel.)
-- You don't have a browser or display, so when generating the eval viewer, use `--static <output_path>` to write a standalone HTML file instead of starting a server. Then proffer a link that the user can click to open the HTML in their browser.
-- For whatever reason, the Cowork setup seems to disincline Claude from generating the eval viewer after running the tests, so just to reiterate: whether you're in Cowork or in Claude Code, after running tests, you should always generate the eval viewer for the human to look at examples before revising the skill yourself and trying to make corrections, using `generate_review.py` (not writing your own boutique html code). Sorry in advance but I'm gonna go all caps here: GENERATE THE EVAL VIEWER *BEFORE* evaluating inputs yourself. You want to get them in front of the human ASAP!
-- Feedback works differently: since there's no running server, the viewer's "Submit All Reviews" button will download `feedback.json` as a file. You can then read it from there (you may have to request access first).
-- Packaging works — `package_skill.py` just needs Python and a filesystem.
-- Description optimization (`run_loop.py` / `run_eval.py`) should work in Cowork just fine since it uses `claude -p` via subprocess, not a browser, but please save it until you've fully finished making the skill and the user agrees it's in good shape.
-- **Updating an existing skill**: The user might be asking you to update an existing skill, not create a new one. Follow the update guidance in the claude.ai section above.
+Full details: [references/platform-specific.md](references/platform-specific.md).
 
 ---
 
@@ -483,6 +461,7 @@ The agents/ directory contains instructions for specialized subagents. Read them
 
 The references/ directory has additional documentation:
 - `references/schemas.md` — JSON structures for evals.json, grading.json, etc.
+- `references/platform-specific.md` — Claude.ai / Cowork platform adaptations and advanced blind comparison
 
 ---
 

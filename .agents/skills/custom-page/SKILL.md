@@ -1,4 +1,4 @@
-﻿---
+---
 name: custom-page
 description: 宜搭自定义页面开发。使用 export function renderJsx() 模式编写完整的自定义页面代码，支持 JSX 渲染、状态管理、API 调用和复杂交互。当用户说'自定义页面'、'JSX页面'、'自定义组件'、'页面JS代码'、'自定义页面代码'、'页面交互'时触发。不适用于原生表单页面开发。
 ---
@@ -46,6 +46,20 @@ description: 宜搭自定义页面开发。使用 export function renderJsx() �
 > 每条规则的代码示例、反模式和常见错误见 [编码指南](references/coding-guide.md)（编写代码前强制必读）。
 > 表单类 JSX 控件、筛选栏、表格、成员/附件等组件写法见 [组件指南](references/component-jsx-guide.md)；未验证的平台组件能力不得编造。
 
+## 链路选择决策（Phase 3 新增）
+
+> 自定义页面有两种编译链路，根据文件扩展名自动选择。
+
+| 条件 | 链路 | 说明 |
+|------|------|------|
+| `.canvas.jsx` / `.canvas.tsx` | **Canvas 链路（实验性）** | React18 + hooks + antd，崩溃隔离，详见 [Canvas 开发指南](references/canvas-guide.md) |
+| `.js` / `.oyd.jsx` / `.jsx`（非 canvas） | **Native 链路（稳定）** | React16 类组件 + `this.utils.yida`，原有流程不受影响 |
+
+**Canvas 适用**：现代 React 交互、hooks 状态、可视化、需要崩溃隔离的页面
+**Native 适用**：需要 `this.utils.yida.*` 数据桥、`this.$(fieldId)` 表单字段双向绑定、`dataSourceMap` 的页面
+
+> Canvas 是实验性功能，如遇问题可降级为 Native 链路。
+
 ## 适用场景
 
 **正向触发**：
@@ -86,7 +100,7 @@ description: 宜搭自定义页面开发。使用 export function renderJsx() �
 
 读取项目中的 `系统配置清单.md` 获取应用 ID 和表单 UUID，读取 `组件ID清单.md` 获取字段 ID。
 
-也可以使用 `yida-get-schema` 或 `yida-config-sync` Skill 同步最新的字段信息。
+也可以使用 `get-schema` 或 `config-sync` Skill 同步最新的字段信息。
 
 ### Step 2：创建页面代码文件
 
@@ -148,7 +162,7 @@ node .agents/skills/custom-page/scripts/publish-page.js <代码文件路径> <ap
 
 **前提条件**：
 - 项目根目录下存在 `.cookies.json`（有效的宜搭登录态）
-- 如果登录态过期（302 错误），需先运行 `node .agents/skills/yida-api-client/scripts/login_manager.js` 重新登录
+- 如果登录态过期（302 错误），需先运行 `node .agents/skills/api-client/scripts/login_manager.js` 重新登录
 
 **发布成功后**：
 - 脚本会输出设计器 URL 和工作台 URL
@@ -317,11 +331,26 @@ node .agents/skills/custom-page/scripts/publish-page.js <代码文件路径> <ap
 | 文档 | 覆盖范围 | 何时阅读 |
 |------|---------|---------|
 | [编码指南](references/coding-guide.md) | 文件结构模板、状态管理、生命周期、编码规范 | 编写任何页面代码前必读 |
+| [视觉决策指南](references/visual-decision-guide.md) | 6 步视觉决策法、5 套方向模板、密度配置、导航壳选择、场景级反 AI 味红线 | 编写任何页面代码前必读（编码指南前置步骤） |
 | [踩坑记录](references/pitfalls.md) | 所有已知坑点、根因分析、修复方案、排查方法论 | 编写代码前必读 + 每次排查问题后更新 |
 | [设计规范](references/design-system.md) | 色彩/圆角/字体/间距系统、组件样式模板、反模式 | 实现 UI 样式时必读 |
 | [组件指南](references/component-jsx-guide.md) | JSX 控件写法、筛选栏、表格、成员/附件 | 涉及表单控件时必读 |
 | [素材资源](references/assets-guide.md) | 图片/音乐/Icon 素材库、CDN 安全规范 | 需要引入图片、图标、音效时阅读 |
 | [附件上传](references/attachment-upload-guide.md) | AttachmentField 上传完整链路 | 需要上传附件时阅读 |
+| [Canvas 开发指南](references/canvas-guide.md) | Canvas 编译链路、React18 + hooks、依赖白名单、崩溃隔离 | 开发 .canvas.jsx/.canvas.tsx 页面时阅读 |
+
+### 发布前 Lint 检查（Phase 3 新增）
+
+发布流程会自动执行 lint 检查（lint → 编译 → 压缩 → 发布），检查项从致命规则自动提取：
+
+- **致命错误（FATAL）**：阻断发布，必须修复
+- **警告（WARN）**：不阻断，建议修复
+- **`--no-lint` 开关**：可完全跳过 lint 检查（不推荐）
+
+单独运行 lint：
+```bash
+node .agents/skills/custom-page/scripts/lint-page.js <代码文件路径>
+```
 
 ## 注意事项
 
@@ -331,5 +360,13 @@ node .agents/skills/custom-page/scripts/publish-page.js <代码文件路径> <ap
 - **发布编译必须使用 CommonJS 格式**：宜搭运行时用 `new Function()` 评估 `actions.module.compiled`，不支持 `export` 语法，因此 Babel 编译必须设置 `modules: 'commonjs'`
 
 ---
+
+*v1.3.4 (2026-07-24) — lint-page.js 新增 W07 规则（检测 UI 文案/标题/按钮中的装饰性 emoji，跳过纯注释行，WARN 级不阻断发布）；coding-guide.md 自检清单 E 段补充 emoji 红线*
+
+*v1.3.3 (2026-07-24) — visual-decision-guide.md 新增「场景级反 AI 味红线」一节（工作台/看板/列表/详情/落地页/批量录入 6 类场景的禁止默认脸清单，纯增量，不改动原 6 步法）*
+
+*v1.3.2 (2026-07-24) — coding-guide.md 顶部新增「生成代码前自检清单」（聚合已有硬规则，无新增知识）；design-system.md 新增「原生控件 focus 边框重置」一节*
+
+*v1.3.1 (2026-07-11) — 修复 publish-page.js 无 main 守卫导致 require 时触发 process.exit 的问题，新增 module.exports 导出*
 
 *v1.3.0 (2026-06-02) — 修复 formType 致命错误：自定义页面必须使用 formType:'display'，新增踩坑记录 P-13*

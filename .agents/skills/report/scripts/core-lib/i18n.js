@@ -16,14 +16,14 @@
  *   ar      - العربية
  *
  * 语言检测优先级：
- *   1. OPENYIDA_LANG 环境变量（如：OPENYIDA_LANG=en）
+ *   1. YEQIU_YIDA_LANG 环境变量（如：YEQIU_YIDA_LANG=en）
  *   2. LANG / LC_ALL 系统环境变量
  *   3. 默认：zh（简体中文）
  *
  * 用法：
  *   const { t } = require('./i18n');
  *   console.log(t('login.success'));
- *   console.log(t('create_app.usage', 'openyida'));
+ *   console.log(t('create_app.usage', 'yeqiu-yida'));
  */
 
 'use strict';
@@ -62,8 +62,8 @@ function mapLocaleToLanguage(code) {
  * @returns {string} 支持的语言代码
  */
 function detectLanguage() {
-  // 优先级1：OPENYIDA_LANG 环境变量（支持完整 locale，如 zh-HK、en-US）
-  const envLang = process.env.OPENYIDA_LANG;
+  // 优先级1：YEQIU_YIDA_LANG 环境变量（支持完整 locale，如 zh-HK、en-US）
+  const envLang = process.env.YEQIU_YIDA_LANG;
   if (envLang) {
     const normalized = envLang.toLowerCase().replace(/_/g, '-');
     // 先尝试完整匹配（如 zh-HK）
