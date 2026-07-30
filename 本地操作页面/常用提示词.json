@@ -1,0 +1,230 @@
+{
+  "应用创建": [
+    {
+      "label": "创建项目目录",
+      "prompt": "无提示词，页面操作",
+      "skill": "project-creator"
+    },
+    {
+      "label": "流程图转字段清单",
+      "prompt": "「调用技能flow-to-form」将流程图【粘贴图片路径】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。",
+      "skill": "flow-to-form"
+    },
+    {
+      "label": "Excel转字段清单",
+      "prompt": "「调用技能excel-to-form」将 Excel【xxx】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。应用的场景是电子产品的采购、库管和销售。",
+      "skill": "excel-to-form"
+    },
+    {
+      "label": "创建应用到宜搭",
+      "prompt": "「调用技能form_creator」按照【01需求梳理/字段清单.md】，生成宜搭表单并推送到宜搭创建应用。",
+      "skill": "form_creator"
+    }
+  ],
+  "表单设计": [
+    {
+      "label": "设计新表单",
+      "prompt": "「调用技能form_designer」在【xxx】目录下设计一个表单，表单名称叫做xxx，包含的字段有：",
+      "skill": "form_designer"
+    },
+    {
+      "label": "更新表单字段",
+      "prompt": "「调用技能form_designer」更新【xxx】目录下的【xxx】表单，添加xxx字段",
+      "skill": "form_designer"
+    }
+  ],
+  "表单创建": [
+    {
+      "label": "在应用中创建表单",
+      "prompt": "「调用技能form_creator」在【xxx】应用中创建【xxx】表单",
+      "skill": "form_creator"
+    },
+    {
+      "label": "根据字段清单创建",
+      "prompt": "「调用技能form_creator」根据【xxx/字段清单.md】，在【xxx】应用中创建【xxx】表单",
+      "skill": "form_creator"
+    }
+  ],
+  "公式开发": [
+    {
+      "label": "生成公式提示词",
+      "prompt": "「调用技能prompt-assistant」设计一个提示词，根据【XXX】表单内容，实现公式功能，功能需求如下：",
+      "skill": "prompt-assistant"
+    },
+    {
+      "label": "生成公式",
+      "prompt": "「调用技能formula-generator」根据【xxx】提示词，生成宜搭公式",
+      "skill": "formula-generator"
+    }
+  ],
+  "代码开发": [
+    {
+      "label": "生成代码提示词",
+      "prompt": "「调用技能prompt-assistant」设计一个提示词，根据【XXX】表单内容，实现代码功能，功能需求如下：",
+      "skill": "prompt-assistant"
+    },
+    {
+      "label": "生成校验代码",
+      "prompt": "「调用技能code-expert」根据【xxx】提示词，生成宜搭字段校验代码",
+      "skill": "code-expert"
+    },
+    {
+      "label": "生成动作代码",
+      "prompt": "「调用技能code-expert」根据【xxx】提示词，生成宜搭表单动作代码",
+      "skill": "code-expert"
+    },
+    {
+      "label": "生成自动化脚本",
+      "prompt": "「调用技能code-expert」编写宜搭自动化脚本：1.输入input结构 2.输出output结构",
+      "skill": "code-expert"
+    }
+  ],
+  "表单配置": [
+    {
+      "label": "更新数据标题",
+      "prompt": "「调用技能form-settings」更新【XXX】的数据标题",
+      "skill": "form-settings"
+    }
+  ],
+  "流程配置": [
+    {
+      "label": "设置自动审批",
+      "prompt": "「调用技能flow-settings」把xxx的流程设置为自动通过",
+      "skill": "flow-settings"
+    }
+  ],
+  "业务规则": [
+    {
+      "label": "INSERT新增（不支持插入子表）",
+      "prompt": "「调用技能business-rule」创建一个业务关联规则：当【XXX】表单提交时，向【YYY】表单插入（INSERT）一条新数据，字段映射如下：",
+      "skill": "business-rule"
+    },
+    {
+      "label": "UPDATE更新",
+      "prompt": "「调用技能business-rule」创建一个业务关联规则：当【XXX】表单提交时，更新(UPDATE)【YYY】表单中符合条件的记录，条件字段和更新字段如下：",
+      "skill": "business-rule"
+    },
+    {
+      "label": "DELETE删除",
+      "prompt": "「调用技能business-rule」创建一个业务关联规则：当【XXX】表单提交时，删除(DELETE)【YYY】表单中符合条件的记录，条件如下：",
+      "skill": "business-rule"
+    },
+    {
+      "label": "UPSERT新增或更新",
+      "prompt": "「调用技能business-rule」创建一个业务关联规则：当【XXX】表单提交时，UPSERT更新或插入【YYY】表单（存在则更新，不存在则新增），条件字段和映射字段如下：",
+      "skill": "business-rule"
+    }
+  ],
+  "集成自动化": [
+    {
+      "label": "创建表单触发自动化",
+      "prompt": "「调用技能integration」创建一个集成自动化：当【XXX】表单提交时触发，执行以下操作：",
+      "skill": "integration"
+    },
+    {
+      "label": "查看自动化列表",
+      "prompt": "「调用技能integration」查看【XXX】应用的集成自动化列表",
+      "skill": "integration"
+    },
+    {
+      "label": "启停自动化",
+      "prompt": "「调用技能integration」启用/停用【XXX】应用的自动化规则【YYY】",
+      "skill": "integration"
+    }
+  ],
+  "连接器管理": [
+    {
+      "label": "从cURL创建连接器",
+      "prompt": "「调用技能connector」根据以下cURL命令创建宜搭HTTP连接器：curl -X GET \"https://api.example.com/users\" -H \"Authorization: Bearer TOKEN\"",
+      "skill": "connector"
+    },
+    {
+      "label": "从API文档创建连接器",
+      "prompt": "「调用技能connector」根据以下API文档创建宜搭HTTP连接器，接口地址：xxx，请求方式：GET/POST，鉴权方式：API Key",
+      "skill": "connector"
+    },
+    {
+      "label": "查看连接器列表",
+      "prompt": "「调用技能connector」查看当前应用的所有HTTP连接器列表",
+      "skill": "connector"
+    }
+  ],
+  "配置同步": [
+    {
+      "label": "同步应用配置",
+      "prompt": "「调用技能config-sync」将应用【xxx】的系统配置信息同步到本地",
+      "skill": "config-sync"
+    },
+    {
+      "label": "同步表单配置",
+      "prompt": "「调用技能config-sync」将表单【xxx】的组件ID和表单结构同步到本地",
+      "skill": "config-sync"
+    },
+    {
+      "label": "同步表单结构",
+      "prompt": "「调用技能get-schema」将【xxx】表单的Schema同步到本地",
+      "skill": "get-schema"
+    },
+    {
+      "label": "同步业务规则",
+      "prompt": "「调用技能rule-sync」将【xxx】应用的业务规则（公式、联动、校验、动作代码）同步到本地",
+      "skill": "rule-sync"
+    },
+    {
+      "label": "一站式全量同步",
+      "prompt": "「调用技能project-sync」一键同步【xxx】应用的全部配置（配置+Schema+规则）",
+      "skill": "project-sync"
+    }
+  ],
+  "自定义页面": [
+    {
+      "label": "创建自定义页面",
+      "prompt": "「调用技能custom-page」基于应用【XXX】里的表单数据【xxx】制作一个名称为【xxx】的自定义页面，主要功能描述如下：",
+      "skill": "custom-page"
+    },
+    {
+      "label": "页面发布前安全检查",
+      "prompt": "「调用技能publish-guard」发布自定义页面前，先检查线上是否有未同步的改动，预览发布内容差异，确认后再发布",
+      "skill": "publish-guard"
+    },
+    {
+      "label": "Canvas页面开发",
+      "prompt": "「调用技能custom-page」使用Canvas代码画布开发一个现代化的React18自定义页面，支持hooks状态管理和ECharts可视化",
+      "skill": "custom-page"
+    }
+  ],
+  "数据架构": [
+    {
+      "label": "生成ER实体关系图",
+      "prompt": "「调用技能er-diagram」生成【xxx】应用的ER实体关系图，分析表单之间的关联关系、子表关系，检测孤立表单和循环依赖",
+      "skill": "er-diagram"
+    }
+  ],
+  "系统维护": [
+    {
+      "label": "重新登录",
+      "prompt": "「调用技能simulated-login」帮我重新登录宜搭平台",
+      "skill": "simulated-login"
+    },
+    {
+      "label": "多策略登录认证",
+      "prompt": "「调用技能auth-plus」使用多策略登录认证重新登录宜搭平台，支持CDP、环境变量、二维码等多种方式自动选择最优策略",
+      "skill": "auth-plus"
+    },
+    {
+      "label": "排查问题",
+      "prompt": "「调用技能skill-creator」宜搭AI助手遇到问题，帮我排查",
+      "skill": "skill-creator"
+    },
+    {
+      "label": "更新skill",
+      "prompt": "「调用技能skill-creator」总结问题，并更新到skill或文档中去，确保下次不再出现同样的问题",
+      "skill": "skill-creator"
+    },
+    {
+      "label": "本地服务安全加固",
+      "prompt": "「调用技能server-security」检查并加固本地HTTP服务的安全配置：127.0.0.1绑定、CORS白名单、写接口token校验",
+      "skill": "server-security"
+    }
+  ]
+}

@@ -127,6 +127,21 @@ body {
   color: var(--text-secondary);
 }
 
+/* 同步中：整页灰化 + 禁止交互 */
+.container.is-busy {
+  pointer-events: none;
+  opacity: 0.55;
+  filter: grayscale(0.4);
+  transition: opacity 0.2s, filter 0.2s;
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .section-hint {
   font-size: 13px;
   color: var(--text-muted);
@@ -323,6 +338,17 @@ body {
   border-color: var(--primary);
 }
 
+.btn-danger {
+  background: #ff4d4f;
+  color: #fff;
+  border-color: #ff4d4f;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #ff7875;
+  border-color: #ff7875;
+}
+
 .backup-format-select {
   padding: 6px 10px;
   border-radius: 6px;
@@ -463,8 +489,12 @@ body {
   background: linear-gradient(90deg, var(--primary), var(--primary-hover));
   border-radius: 4px;
   width: 0%;
-  transition: width 0.5s ease;
+  transition: width 0.3s ease;
   animation: progress-indeterminate 2s infinite;
+}
+
+.progress-fill.determinate {
+  animation: none;
 }
 
 @keyframes progress-indeterminate {
@@ -476,6 +506,42 @@ body {
 .progress-text {
   font-size: 14px;
   color: var(--text-secondary);
+}
+
+.sync-log {
+  margin-top: 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  text-align: left;
+  font-size: 12px;
+  font-family: 'SFMono-Regular', Consolas, monospace;
+  background: #f6f8fa;
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: none;
+}
+
+.sync-log.show {
+  display: block;
+}
+
+.sync-log-item {
+  padding: 2px 0;
+  color: var(--text-secondary);
+}
+
+.sync-log-item.success {
+  color: var(--success);
+}
+
+.sync-log-item.error {
+  color: #ff4d4f;
+}
+
+/* ========== Tooltip ========== */
+.tooltip-wrapper:hover .tooltip-text {
+  opacity: 1;
+  visibility: visible;
 }
 
 /* ========== Toast ========== */

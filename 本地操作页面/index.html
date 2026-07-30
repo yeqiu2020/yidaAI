@@ -1,95 +1,667 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>宜搭AI助手 - 组织管理门户</title>
   <link rel="stylesheet" href="css/style.css">
   <style>
-    .tab-nav { display: flex; gap: 0; border-bottom: 2px solid var(--border); margin-bottom: 24px; flex-wrap: wrap; }
-    .tab-btn { padding: 10px 16px; font-size: 14px; font-weight: 500; border: none; background: none; color: var(--text-secondary); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -2px; transition: all 0.2s; white-space: nowrap; }
-    .tab-btn:hover { color: var(--primary); }
-    .tab-btn.active { color: var(--primary); border-bottom-color: var(--primary); }
-    .tab-content { display: none; }
-    .tab-content.active { display: block; }
+    .tab-nav {
+      display: flex;
+      gap: 0;
+      border-bottom: 2px solid var(--border);
+      margin-bottom: 24px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      padding: 10px 16px;
+      font-size: 14px;
+      font-weight: 500;
+      border: none;
+      background: none;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .tab-btn:hover {
+      color: var(--primary);
+    }
+
+    .tab-btn.active {
+      color: var(--primary);
+      border-bottom-color: var(--primary);
+    }
+
+    .tab-content {
+      display: none;
+    }
+
+    .tab-content.active {
+      display: block;
+    }
 
     /* 开发流程 */
-    .flow-section { margin-bottom: 24px; }
-    .flow-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
-    .flow-steps { display: flex; flex-wrap: wrap; gap: 12px; }
-    .flow-step { background: var(--card-bg); border-radius: 8px; padding: 12px 16px; box-shadow: var(--shadow); flex: 1; min-width: 220px; border-left: 4px solid var(--primary); }
-    .flow-step-num { font-size: 12px; color: var(--primary); font-weight: 600; margin-bottom: 4px; }
-    .flow-step-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
-    .flow-step-skill { font-size: 12px; color: var(--text-muted); }
-    .flow-step-output { font-size: 11px; color: var(--success); margin-top: 4px; }
-    .flow-step-prompt { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--border); }
-    .flow-step-prompt-label { font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
-    .flow-step-prompt-text { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 11px; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; cursor: pointer; display: inline-block; max-width: 100%; word-break: break-all; }
-    .flow-step-prompt-text:hover { background: #e6f4ff; }
-    .flow-step-prompt-text:active { background: #bae0ff; }
-    .flow-arrow { display: flex; align-items: center; color: var(--text-muted); font-size: 20px; flex-shrink: 0; }
-    .flow-compare { background: #fff8e1; border-radius: var(--radius); padding: 16px 20px; margin-top: 16px; }
-    .flow-compare table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .flow-compare th { background: #fff3e0; padding: 8px 12px; text-align: left; }
-    .flow-compare td { padding: 8px 12px; border-bottom: 1px solid #ffe0b2; }
+    .flow-section {
+      margin-bottom: 24px;
+    }
+
+    .flow-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .flow-steps {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .flow-step {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 12px 16px;
+      box-shadow: var(--shadow);
+      flex: 1;
+      min-width: 220px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .flow-step-num {
+      font-size: 12px;
+      color: var(--primary);
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .flow-step-name {
+      font-size: 14px;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+
+    .flow-step-skill {
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .flow-step-output {
+      font-size: 11px;
+      color: var(--success);
+      margin-top: 4px;
+    }
+
+    .flow-step-prompt {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed var(--border);
+    }
+
+    .flow-step-prompt-label {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-bottom: 4px;
+    }
+
+    .flow-step-prompt-text {
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 11px;
+      background: #f5f5f5;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+      display: inline-block;
+      max-width: 100%;
+      word-break: break-all;
+    }
+
+    .flow-step-prompt-text:hover {
+      background: #e6f4ff;
+    }
+
+    .flow-step-prompt-text:active {
+      background: #bae0ff;
+    }
+
+    .flow-arrow {
+      display: flex;
+      align-items: center;
+      color: var(--text-muted);
+      font-size: 20px;
+      flex-shrink: 0;
+    }
+
+    .flow-compare {
+      background: #fff8e1;
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-top: 16px;
+    }
+
+    .flow-compare table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .flow-compare th {
+      background: #fff3e0;
+      padding: 8px 12px;
+      text-align: left;
+    }
+
+    .flow-compare td {
+      padding: 8px 12px;
+      border-bottom: 1px solid #ffe0b2;
+    }
 
     /* 提示词卡片 */
-    .prompt-category { margin-bottom: 24px; }
-    .prompt-category-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid var(--border); }
-    .prompt-category-title { font-size: 16px; font-weight: 600; }
-    .prompt-add-btn { font-size: 12px; padding: 4px 12px; border: 1px dashed var(--primary); border-radius: 4px; background: none; color: var(--primary); cursor: pointer; transition: all 0.2s; }
-    .prompt-add-btn:hover { background: var(--primary); color: #fff; border-color: var(--primary); }
-    .prompt-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .prompt-table th { background: var(--primary-bg); padding: 8px 12px; text-align: left; font-weight: 600; color: var(--primary); }
-    .prompt-table td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-    .prompt-table tr:hover td { background: #fafafa; }
-    .prompt-text { font-family: 'SFMono-Regular', Consolas, monospace; font-size: 12px; background: #f5f5f5; padding: 4px 8px; border-radius: 4px; cursor: pointer; }
-    .prompt-text:hover { background: #e6f4ff; }
-    .prompt-text:active { background: #bae0ff; }
-    .prompt-skill { font-size: 11px; color: var(--text-muted); }
-    .copy-hint { font-size: 11px; color: var(--text-muted); text-align: center; margin-top: 16px; }
+    .prompt-category {
+      margin-bottom: 24px;
+    }
+
+    .prompt-category-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .prompt-category-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .prompt-add-btn {
+      font-size: 12px;
+      padding: 4px 12px;
+      border: 1px dashed var(--primary);
+      border-radius: 4px;
+      background: none;
+      color: var(--primary);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .prompt-add-btn:hover {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .prompt-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .prompt-table th {
+      background: var(--primary-bg);
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .prompt-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .prompt-table tr:hover td {
+      background: #fafafa;
+    }
+
+    /* 提示词列（第3列）标识为可复制状态 */
+    .prompt-table td:nth-child(3) {
+      background: #f6f8fa;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+    }
+
+    .prompt-table tr:hover td:nth-child(3) {
+      background: #eef1f5;
+    }
+
+    .prompt-text {
+      display: inline-block;
+      width: 100%;
+      font-family: 'SFMono-Regular', Consolas, monospace;
+      font-size: 12px;
+      background: #f6f8fa;
+      border: 1px solid #52c41a;
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      box-sizing: border-box;
+    }
+
+    .prompt-text:hover {
+      background: #f6ffed;
+      border-color: #389e0d;
+    }
+
+    .prompt-text:active {
+      background: #d9f7be;
+      border-color: #389e0d;
+    }
+
+    .prompt-skill {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    .prompt-seq {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-align: center;
+      width: 60px;
+      white-space: nowrap;
+    }
+
+    .prompt-del-btn {
+      font-size: 11px;
+      padding: 2px 6px;
+      border: 1px solid #ff4d4f;
+      border-radius: 4px;
+      background: none;
+      color: #ff4d4f;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .prompt-del-btn:hover {
+      background: #ff4d4f;
+      color: #fff;
+    }
+
+    .prompt-edit-btn {
+      font-size: 11px;
+      padding: 2px 6px;
+      border: 1px solid #1677ff;
+      border-radius: 4px;
+      background: none;
+      color: #1677ff;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .prompt-edit-btn:hover {
+      background: #1677ff;
+      color: #fff;
+    }
+
+    .prompt-move-btn {
+      font-size: 11px;
+      padding: 2px 4px;
+      border: 1px solid #d9d9d9;
+      border-radius: 4px;
+      background: none;
+      color: #666;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+      line-height: 1;
+    }
+
+    .prompt-move-btn:hover {
+      background: #f0f0f0;
+    }
+
+    .prompt-move-btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+    }
+
+    .prompt-actions {
+      display: flex;
+      gap: 4px;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .prompt-save-btn {
+      font-size: 12px;
+      padding: 4px 16px;
+      border: 1px solid #52c41a;
+      border-radius: 4px;
+      background: none;
+      color: #52c41a;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .prompt-save-btn:hover {
+      background: #52c41a;
+      color: #fff;
+    }
+
+    .copy-hint {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-align: center;
+      margin-top: 16px;
+    }
 
     /* 工具卡片 */
-    .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .tool-card { background: var(--card-bg); border-radius: 8px; padding: 16px; box-shadow: var(--shadow); border-left: 4px solid var(--primary); }
-    .tool-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .tool-card-title { font-size: 14px; font-weight: 600; }
-    .tool-card-badge { font-size: 11px; padding: 2px 8px; border-radius: 10px; color: #fff; }
-    .tool-card-badge.auto { background: #52c41a; }
-    .tool-card-badge.prompt { background: #faad14; color: #333; }
-    .tool-card-desc { font-size: 12px; color: var(--text-muted); margin-bottom: 12px; }
-    .tool-card-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-    .tool-select { font-size: 12px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: #fff; max-width: 180px; }
-    .tool-btn { font-size: 12px; padding: 4px 12px; border: 1px solid var(--border); border-radius: 4px; cursor: pointer; color: #333; background: #fff; transition: all 0.2s; }
-    .tool-btn:hover { opacity: 0.85; }
-    .tool-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-    .tool-btn.primary { background: var(--primary); color: #fff; border-color: var(--primary); }
-    .tool-btn.danger { background: #ff4d4f; color: #fff; border-color: #ff4d4f; }
-    .tool-btn.success { background: #52c41a; color: #fff; border-color: #52c41a; }
-    .tool-btn.warning { background: #faad14; color: #333; border-color: #faad14; }
-    .tool-result { margin-top: 8px; padding: 8px; background: #f6f6f6; border-radius: 4px; font-size: 12px; font-family: monospace; max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; display: none; }
-    .tool-result.show { display: block; }
-    .tool-result.success { background: #f6ffed; border: 1px solid #b7eb8f; }
-    .tool-result.error { background: #fff2f0; border: 1px solid #ffccc7; }
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .tool-card {
+      background: var(--card-bg);
+      border-radius: 8px;
+      padding: 16px;
+      box-shadow: var(--shadow);
+      border-left: 4px solid var(--primary);
+    }
+
+    .tool-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+
+    .tool-card-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .tool-card-badge {
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      color: #fff;
+    }
+
+    .tool-card-badge.auto {
+      background: #52c41a;
+    }
+
+    .tool-card-badge.prompt {
+      background: #faad14;
+      color: #333;
+    }
+
+    .tool-card-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    .tool-card-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .tool-select {
+      font-size: 12px;
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      background: #fff;
+      max-width: 180px;
+    }
+
+    .tool-btn {
+      font-size: 12px;
+      padding: 4px 12px;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      cursor: pointer;
+      color: #333;
+      background: #fff;
+      transition: all 0.2s;
+    }
+
+    .tool-btn:hover {
+      opacity: 0.85;
+    }
+
+    .tool-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .tool-btn.primary {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+
+    .tool-btn.danger {
+      background: #ff4d4f;
+      color: #fff;
+      border-color: #ff4d4f;
+    }
+
+    .tool-btn.success {
+      background: #52c41a;
+      color: #fff;
+      border-color: #52c41a;
+    }
+
+    .tool-btn.warning {
+      background: #faad14;
+      color: #333;
+      border-color: #faad14;
+    }
+
+    .tool-result {
+      margin-top: 8px;
+      padding: 8px;
+      background: #f6f6f6;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: monospace;
+      max-height: 200px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+      display: none;
+    }
+
+    .tool-result.show {
+      display: block;
+    }
+
+    .tool-result.success {
+      background: #f6ffed;
+      border: 1px solid #b7eb8f;
+    }
+
+    .tool-result.error {
+      background: #fff2f0;
+      border: 1px solid #ffccc7;
+    }
+
+    /* 功能清单 */
+    .feature-phase {
+      margin-bottom: 28px;
+    }
+
+    .feature-phase-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      padding-left: 10px;
+      border-left: 4px solid var(--primary);
+    }
+
+    .feature-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .feature-table th {
+      background: var(--primary-bg);
+      padding: 8px 12px;
+      text-align: left;
+      font-weight: 600;
+      color: var(--primary);
+    }
+
+    .feature-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      line-height: 1.6;
+    }
+
+    .feature-table tr:hover td {
+      background: #fafafa;
+    }
+
+    .feature-seq {
+      width: 48px;
+      text-align: center;
+      color: var(--primary);
+      font-weight: 600;
+    }
+
+    .feature-name {
+      font-weight: 600;
+      white-space: nowrap;
+    }
+
+    .feature-name .feature-skill {
+      display: block;
+      font-size: 11px;
+      color: var(--text-muted);
+      font-weight: 400;
+      margin-top: 2px;
+    }
+
+    .feature-brief {
+      color: #333;
+      max-width: 180px;
+    }
+
+    .feature-desc {
+      color: var(--text-muted);
+    }
 
     /* 弹窗 */
-    .modal { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; justify-content: center; align-items: center; }
-    .modal-content { background: #fff; border-radius: 8px; max-width: 500px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-    .modal-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid var(--border); }
-    .modal-header h3 { font-size: 16px; margin: 0; }
-    .modal-close { font-size: 20px; cursor: pointer; color: #999; line-height: 1; }
-    .modal-close:hover { color: #333; }
-    .modal-body { padding: 20px; }
-    .modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--border); }
+    .modal {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content {
+      background: #fff;
+      border-radius: 8px;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .modal-header h3 {
+      font-size: 16px;
+      margin: 0;
+    }
+
+    .modal-close {
+      font-size: 20px;
+      cursor: pointer;
+      color: #999;
+      line-height: 1;
+    }
+
+    .modal-close:hover {
+      color: #333;
+    }
+
+    .modal-body {
+      padding: 20px;
+    }
+
+    .modal-footer {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 20px;
+      border-top: 1px solid var(--border);
+    }
 
     /* 确认对话框 */
-    .confirm-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.4); z-index: 1000; display: flex; justify-content: center; align-items: center; }
-    .confirm-box { background: #fff; border-radius: 8px; padding: 24px; max-width: 400px; width: 90%; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
-    .confirm-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; color: #ff4d4f; }
-    .confirm-msg { font-size: 14px; margin-bottom: 20px; color: #333; }
-    .confirm-actions { display: flex; gap: 12px; justify-content: flex-end; }
+    .confirm-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.4);
+      z-index: 1000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .confirm-box {
+      background: #fff;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 400px;
+      width: 90%;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .confirm-title {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 12px;
+      color: #ff4d4f;
+    }
+
+    .confirm-msg {
+      font-size: 14px;
+      margin-bottom: 20px;
+      color: #333;
+    }
+
+    .confirm-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
   </style>
 </head>
+
 <body>
   <div id="service-indicator" class="service-indicator" title="同步服务状态">
     <span class="indicator-dot"></span>
@@ -105,11 +677,12 @@
 
     <nav class="tab-nav">
       <button class="tab-btn active" data-tab="apps" onclick="switchTab('apps')">&#128241; 应用管理</button>
-      <button class="tab-btn" data-tab="flow" onclick="switchTab('flow')">&#128260; 开发流程</button>
-      <button class="tab-btn" data-tab="prompts" onclick="switchTab('prompts')">&#128221; 常用提示词</button>
-      <button class="tab-btn" data-tab="sync" onclick="switchTab('sync')">&#128260; 配置同步</button>
-      <button class="tab-btn" data-tab="data" onclick="switchTab('data')">&#128230; 数据管理</button>
-      <button class="tab-btn" data-tab="tools" onclick="switchTab('tools')">&#128295; 系统工具</button>
+      <button class="tab-btn" data-tab="prompts" onclick="switchTab('prompts')">&#128221; 表单管理</button>
+      <button class="tab-btn" data-tab="data" onclick="switchTab('data')">&#128202; 数据管理</button>
+      <button class="tab-btn" data-tab="system" onclick="switchTab('system')">&#128274; 系统关联</button>
+      <button class="tab-btn" data-tab="custom" onclick="switchTab('custom')">&#127912; 自定义页面</button>
+      <button class="tab-btn" data-tab="tools" onclick="switchTab('tools')">&#128295; 其他工具</button>
+      <button class="tab-btn" data-tab="features" onclick="switchTab('features')">&#128221; 功能清单</button>
     </nav>
 
     <!-- Tab 1: 应用管理 -->
@@ -117,63 +690,45 @@
       <section class="app-section">
         <div class="section-header">
           <div class="section-stats" id="appStats"></div>
-          <button class="btn btn-primary" id="createProjectBtn" onclick="showCreateProjectModal()">+ 创建新应用</button>
+          <div class="section-actions">
+            <button class="btn btn-primary" id="createProjectBtn" onclick="showCreateProjectModal()">+ 创建新应用</button>
+<button class="btn btn-outline" id="refreshOrgAppsBtn" onclick="refreshOrgApps(this)">&#128260;
+刷新应用信息</button>
+<div class="tooltip-wrapper" style="display:inline-block;position:relative;">
+<button class="btn btn-outline" id="refreshLoginBtn" onclick="refreshLoginState(this)">&#128274;
+刷新登录态</button>
+<span class="tooltip-text" style="position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#333;color:#fff;padding:8px 12px;border-radius:6px;font-size:12px;white-space:nowrap;opacity:0;visibility:hidden;transition:opacity 0.2s;z-index:9999;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,0.15);">&#128161; 建议每天刷新一次登录态，避免因 Cookie 过期导致同步失败或变慢</span>
+</div>
+          </div>
         </div>
-        <div class="app-list" id="appList"><div class="loading">加载中...</div></div>
+        <div class="app-list" id="appList">
+          <div class="loading">加载中...</div>
+        </div>
       </section>
     </div>
 
-    <!-- Tab 2: 开发流程 -->
-    <div class="tab-content" id="tab-flow">
-      <div class="copy-hint" style="margin-top:0; margin-bottom:16px;">&#128161; 点击提示词可复制到剪贴板，粘贴到AI对话框即可使用</div>
-      <div class="flow-section">
-        <div class="flow-title" style="color: #1976d2;">&#128640; 创建新应用流程（从零开始）</div>
-        <div class="flow-steps">
-          <div class="flow-step" style="border-left-color:#1976d2;"><div class="flow-step-num">步骤 1</div><div class="flow-step-name">组织初始化</div><div class="flow-step-skill">org-init</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">初始化组织信息到本地</span></div></div>
-          <div class="flow-arrow">&#10145;&#65039;</div>
-          <div class="flow-step" style="border-left-color:#1976d2;"><div class="flow-step-num">步骤 2</div><div class="flow-step-name">项目初始化</div><div class="flow-step-skill">project-creator</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">在本地创建一个项目，项目名称为【xxx】</span></div></div>
-          <div class="flow-arrow">&#10145;&#65039;</div>
-          <div class="flow-step" style="border-left-color:#388e3c;"><div class="flow-step-num">步骤 3</div><div class="flow-step-name">需求分析</div><div class="flow-step-skill">flow-to-form / excel-to-form</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">将流程图【粘贴图片路径】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。</span><div style="height:4px"></div><span class="flow-step-prompt-text" onclick="copyText(this)">将 Excel【xxx】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。</span></div></div>
-          <div class="flow-arrow">&#10145;&#65039;</div>
-          <div class="flow-step" style="border-left-color:#388e3c;"><div class="flow-step-num">步骤 4</div><div class="flow-step-name">原型设计</div><div class="flow-step-skill">form-to-prototype</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">按照【01需求梳理】，生成本地原型页面。</span></div></div>
-          <div class="flow-arrow">&#10145;&#65039;</div>
-          <div class="flow-step" style="border-left-color:#d84315;"><div class="flow-step-num">步骤 5</div><div class="flow-step-name">系统构建</div><div class="flow-step-skill">form_creator</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">按照【01需求梳理/字段清单.md】，生成宜搭表单并推送到宜搭创建应用。</span></div></div>
-          <div class="flow-arrow">&#10145;&#65039;</div>
-          <div class="flow-step" style="border-left-color:#d84315;"><div class="flow-step-num">步骤 6</div><div class="flow-step-name">配置同步</div><div class="flow-step-skill">yida-config-sync</div><div class="flow-step-prompt"><div class="flow-step-prompt-label">提示词</div><span class="flow-step-prompt-text" onclick="copyText(this)">将【xxx】的系统配置信息同步到本地。</span></div></div>
-        </div>
-        <div style="margin-top:12px;font-size:13px;color:var(--text-muted);">&#9888;&#65039; 步骤5创建后需等待3-5分钟再执行步骤6</div>
-      </div>
-      <div class="flow-section">
-        <div class="flow-title" style="color:#7b1fa2;">&#128736;&#65039; 操作老应用流程</div>
-        <div class="flow-steps">
-          <div class="flow-step" style="border-left-color:#7b1fa2;"><div class="flow-step-num">步骤 1</div><div class="flow-step-name">组织初始化</div><div class="flow-step-prompt"><span class="flow-step-prompt-text" onclick="copyText(this)">初始化组织信息到本地</span></div></div>
-          <div class="flow-arrow">&#10145;&#65039;</div>
-          <div class="flow-step" style="border-left-color:#7b1fa2;"><div class="flow-step-num">步骤 2</div><div class="flow-step-name">同步应用</div><div class="flow-step-prompt"><span class="flow-step-prompt-text" onclick="copyText(this)">将组织内应用【应用名称1, 应用名称2】同步到本地</span></div></div>
-        </div>
-      </div>
-      <div class="flow-compare">
-        <div style="font-weight:600;margin-bottom:8px;">两种模式关键对比</div>
-        <table><tr><th>对比项</th><th>创建新应用</th><th>操作老应用</th></tr><tr><td>起点</td><td>从0开始</td><td>宜搭已有应用</td></tr><tr><td>同步方向</td><td>本地 → 宜搭</td><td>宜搭 → 本地</td></tr></table>
-      </div>
-    </div>
-
-    <!-- Tab 3: 常用提示词 -->
+    <!-- Tab 2: 表单管理 -->
     <div class="tab-content" id="tab-prompts">
       <div class="copy-hint" style="margin-top:0;margin-bottom:16px;">&#128161; 点击提示词可复制到剪贴板，粘贴到AI对话框即可使用</div>
+      <div style="text-align:right;margin-bottom:12px;">
+        <button class="prompt-save-btn" onclick="saveAllPrompts()">&#128190; 保存所有更改</button>
+      </div>
       <div class="prompt-category" data-category="应用创建">
         <div class="prompt-category-header">
           <div class="prompt-category-title">&#128640; 应用创建</div>
           <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
         </div>
         <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>创建项目目录</td><td><span class="prompt-text" onclick="copyText(this)">在本地创建一个项目，项目名称为【xxx】</span></td><td class="prompt-skill">project-creator</td></tr>
-            <tr><td>流程图转字段清单</td><td><span class="prompt-text" onclick="copyText(this)">将流程图【粘贴图片路径】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。</span></td><td class="prompt-skill">flow-to-form</td></tr>
-            <tr><td>Excel转字段清单</td><td><span class="prompt-text" onclick="copyText(this)">将 Excel【xxx】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。</span></td><td class="prompt-skill">excel-to-form</td></tr>
-            <tr><td>生成原型页面</td><td><span class="prompt-text" onclick="copyText(this)">按照【01需求梳理】，生成本地原型页面。</span></td><td class="prompt-skill">form-to-prototype</td></tr>
-            <tr><td>创建应用到宜搭</td><td><span class="prompt-text" onclick="copyText(this)">按照【01需求梳理/字段清单.md】，生成宜搭表单并推送到宜搭创建应用。</span></td><td class="prompt-skill">form_creator</td></tr>
-          </tbody>
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </div>
       <div class="prompt-category" data-category="表单设计">
@@ -182,11 +737,16 @@
           <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
         </div>
         <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>设计新表单</td><td><span class="prompt-text" onclick="copyText(this)">在【xxx】目录下设计一个表单，表单名称叫做xxx，包含的字段有：</span></td><td class="prompt-skill">form_designer</td></tr>
-            <tr><td>更新表单字段</td><td><span class="prompt-text" onclick="copyText(this)">更新【xxx】目录下的【xxx】表单，添加xxx字段</span></td><td class="prompt-skill">form_designer</td></tr>
-          </tbody>
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </div>
       <div class="prompt-category" data-category="表单创建">
@@ -195,11 +755,16 @@
           <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
         </div>
         <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>在应用中创建表单</td><td><span class="prompt-text" onclick="copyText(this)">在【xxx】应用中创建【xxx】表单</span></td><td class="prompt-skill">form_creator</td></tr>
-            <tr><td>根据字段清单创建</td><td><span class="prompt-text" onclick="copyText(this)">根据【xxx/字段清单.md】，在【xxx】应用中创建【xxx】表单</span></td><td class="prompt-skill">form_creator</td></tr>
-          </tbody>
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </div>
       <div class="prompt-category" data-category="公式开发">
@@ -208,11 +773,16 @@
           <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
         </div>
         <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>生成公式提示词</td><td><span class="prompt-text" onclick="copyText(this)">设计一个提示词，根据【XXX】表单内容，实现公式功能，功能需求如下：</span></td><td class="prompt-skill">prompt-assistant</td></tr>
-            <tr><td>生成公式</td><td><span class="prompt-text" onclick="copyText(this)">根据【xxx】提示词，生成宜搭公式</span></td><td class="prompt-skill">formula-generator</td></tr>
-          </tbody>
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </div>
       <div class="prompt-category" data-category="代码开发">
@@ -221,37 +791,16 @@
           <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
         </div>
         <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>生成代码提示词</td><td><span class="prompt-text" onclick="copyText(this)">设计一个提示词，根据【XXX】表单内容，实现代码功能，功能需求如下：</span></td><td class="prompt-skill">prompt-assistant</td></tr>
-            <tr><td>生成代码</td><td><span class="prompt-text" onclick="copyText(this)">根据【xxx】提示词，生成宜搭代码</span></td><td class="prompt-skill">code-expert</td></tr>
-            <tr><td>生成自动化脚本</td><td><span class="prompt-text" onclick="copyText(this)">编写宜搭自动化脚本：1.输入input结构 2.输出output结构</span></td><td class="prompt-skill">code-expert</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="prompt-category" data-category="数据管理">
-        <div class="prompt-category-header">
-          <div class="prompt-category-title">&#128230; 数据管理</div>
-          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
-        </div>
-        <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>添加测试数据</td><td><span class="prompt-text" onclick="copyText(this)">在宜搭内的【xxx】系统里所有的表单里添加5条测试数据，模拟的城市是湖北武汉</span></td><td class="prompt-skill">yida-data-tester</td></tr>
-            <tr><td>删除数据</td><td><span class="prompt-text" onclick="copyText(this)">清空应用【xxx】里的所有数据</span></td><td class="prompt-skill">data-clean</td></tr>
-          </tbody>
-        </table>
-      </div>
-      <div class="prompt-category" data-category="自定义页面">
-        <div class="prompt-category-header">
-          <div class="prompt-category-title">&#127912; 自定义页面</div>
-          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
-        </div>
-        <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>创建自定义页面</td><td><span class="prompt-text" onclick="copyText(this)">基于应用【XXX】里的表单数据【xxx】制作一个名称为【xxx】的自定义页面，主要功能描述如下：</span></td><td class="prompt-skill">custom-page</td></tr>
-          </tbody>
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </div>
       <div class="prompt-category" data-category="表单配置">
@@ -260,10 +809,16 @@
           <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
         </div>
         <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>更新数据标题</td><td><span class="prompt-text" onclick="copyText(this)">更新【XXX】的数据标题</span></td><td class="prompt-skill">form-settings</td></tr>
-          </tbody>
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </div>
       <div class="prompt-category" data-category="流程配置">
@@ -272,10 +827,286 @@
           <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
         </div>
         <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>设置自动审批</td><td><span class="prompt-text" onclick="copyText(this)">把xxx的流程设置为自动通过</span></td><td class="prompt-skill">flow-settings</td></tr>
-          </tbody>
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 3: 数据报表 -->
+    <div class="tab-content" id="tab-data">
+      <div class="copy-hint" style="margin-top:0;margin-bottom:16px;">&#128161;
+        点击提示词可复制到剪贴板，粘贴到AI对话框即可使用。AI会自动判断单表或多表联合场景。</div>
+      <div class="prompt-category" data-category="数据操作">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128295; 数据操作</div>
+        </div>
+        <div class="tool-grid">
+          <!-- 数据测试 -->
+          <div class="tool-card" style="border-left-color:#52c41a;">
+            <div class="tool-card-header">
+              <div class="tool-card-title">&#129518; 模拟数据</div><span class="tool-card-badge prompt">提示词</span>
+            </div>
+            <div class="tool-card-desc">自动生成测试数据并提交到宜搭表单，验证功能</div>
+            <div class="tool-card-actions">
+              <span class="prompt-text" data-prompt-category="数据操作" data-prompt-label="模拟数据"
+                onclick="copyText(this)">「调用技能data-tester」在宜搭内的【XXX】系统里所有的普通表单（非流程表单）里都添加3条模拟数据，有子表的，子表内至少要有两行数据。模拟的城市是湖北武汉，行业是电子产品，场景是进销存管理</span>
+            </div>
+          </div>
+          <!-- JS代码测试 -->
+          <div class="tool-card" style="border-left-color:#fa8c16;">
+            <div class="tool-card-header">
+              <div class="tool-card-title">&#128187; JS代码测试</div><span class="tool-card-badge prompt">提示词</span>
+            </div>
+            <div class="tool-card-desc">自动化测试宜搭JS动作代码</div>
+            <div class="tool-card-actions">
+              <span class="prompt-text" data-prompt-category="数据操作" data-prompt-label="JS代码测试"
+                onclick="copyText(this)">测试宜搭表单JS动作代码</span>
+            </div>
+          </div>
+          <!-- 数据准备ETL -->
+          <div class="tool-card" style="border-left-color:#722ed1;">
+            <div class="tool-card-header">
+              <div class="tool-card-title">&#128269; 数据准备ETL</div><span class="tool-card-badge prompt">提示词</span>
+            </div>
+            <div class="tool-card-desc">创建可视化ETL数据流，实现多表数据加工、清洗、聚合</div>
+            <div class="tool-card-actions">
+              <span class="prompt-text" data-prompt-category="数据操作" data-prompt-label="数据准备ETL"
+                onclick="copyText(this)">创建一个数据准备ETL，将【xxx】和【xxx】表的数据按【关联字段】合并，输出到新数据集</span>
+            </div>
+          </div>
+          <!-- 数据清空 -->
+          <div class="tool-card" style="border-left-color:#ff4d4f;">
+            <div class="tool-card-header">
+              <div class="tool-card-title">&#128465; 数据清空</div><span class="tool-card-badge auto">自动</span>
+            </div>
+            <div class="tool-card-desc">清空表单数据（保留结构），危险操作需二次确认</div>
+            <div class="tool-card-actions">
+              <select class="tool-select" id="cleanDataApp"></select>
+              <button class="tool-btn danger" onclick="confirmCleanData(this)">清空所有数据</button>
+            </div>
+            <div class="tool-result" id="result-clean-data"></div>
+          </div>
+        </div>
+      </div>
+      <div class="prompt-category" data-category="报表设计">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128202; 报表设计</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+
+    </div>
+
+    <!-- Tab: 系统关联 -->
+    <div class="tab-content" id="tab-system">
+      <div class="copy-hint" style="margin-top:0;margin-bottom:16px;">&#128161; 点击提示词可复制到剪贴板，粘贴到AI对话框即可使用</div>
+      <div style="text-align:right;margin-bottom:12px;">
+        <button class="prompt-save-btn" onclick="saveAllPrompts()">&#128190; 保存所有更改</button>
+      </div>
+      <div class="prompt-category" data-category="业务规则">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128209; 业务规则（跨表高级函数）</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="集成自动化">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#9889; 集成自动化（逻辑流）</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="连接器管理">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128279; 连接器管理</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="prompt-category" data-category="配置同步">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128260; 配置同步</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 4: 自定义页面 -->
+    <div class="tab-content" id="tab-custom">
+      <div class="copy-hint" style="margin-top:0;margin-bottom:16px;">&#128161; 点击提示词可复制到剪贴板，粘贴到AI对话框即可使用</div>
+      <div class="prompt-category" data-category="自定义页面">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#127912; 自定义页面</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tab 5: 其他工具 -->
+    <div class="tab-content" id="tab-tools">
+      <div class="tool-grid">
+        <!-- 系统图谱 -->
+        <div class="tool-card" style="border-left-color:#722ed1;">
+          <div class="tool-card-header">
+            <div class="tool-card-title">&#128506; 系统图谱</div><span class="tool-card-badge auto">自动</span>
+          </div>
+          <div class="tool-card-desc">生成系统功能关系图谱（表单关系、字段依赖、数据联动）</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="systemMapApp"></select>
+            <button class="tool-btn primary" onclick="runTool('generate-system-map',this)">生成图谱</button>
+          </div>
+          <div class="tool-result" id="result-generate-system-map"></div>
+        </div>
+        <!-- ER实体关系图 -->
+        <div class="tool-card" style="border-left-color:#13c2c2;">
+          <div class="tool-card-header">
+            <div class="tool-card-title">&#128202; ER实体关系图</div><span class="tool-card-badge prompt">提示词</span>
+          </div>
+          <div class="tool-card-desc">从表单Schema生成实体关系图，检测孤立表单和循环依赖</div>
+          <div class="tool-card-actions">
+            <span class="prompt-text" data-prompt-category="数据架构" data-prompt-label="生成ER实体关系图"
+              onclick="copyText(this)">生成【xxx】应用的ER实体关系图，分析表单之间的关联关系、子表关系，检测孤立表单和循环依赖</span>
+          </div>
+        </div>
+        <!-- 表单设置 -->
+        <div class="tool-card" style="border-left-color:#1677ff;">
+          <div class="tool-card-header">
+            <div class="tool-card-title">&#9881;&#65039; 表单设置</div><span class="tool-card-badge auto">自动</span>
+          </div>
+          <div class="tool-card-desc">设置数据标题、复制流程、表单权限</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="formSettingsApp" onchange="loadFormList('formSettingsForm',this)"></select>
+            <select class="tool-select" id="formSettingsForm" style="display:none"></select>
+            <button class="tool-btn primary" onclick="runFormSettings('list-fields',this)">查看字段</button>
+          </div>
+          <div style="margin-top:4px"><span class="prompt-text" data-prompt-category="表单配置" data-prompt-label="更新数据标题"
+              onclick="copyText(this)">「调用技能form-settings」更新【XXX】的数据标题</span></div>
+          <div class="tool-result" id="result-form-settings"></div>
+        </div>
+        <!-- 流程设置 -->
+        <div class="tool-card" style="border-left-color:#13c2c2;">
+          <div class="tool-card-header">
+            <div class="tool-card-title">&#128260; 流程设置</div><span class="tool-card-badge auto">自动</span>
+          </div>
+          <div class="tool-card-desc">设置自动审批、流程配置</div>
+          <div class="tool-card-actions">
+            <select class="tool-select" id="flowSettingsApp" onchange="loadFormList('flowSettingsForm',this)"></select>
+            <select class="tool-select" id="flowSettingsForm" style="display:none"></select>
+            <button class="tool-btn primary" onclick="runFlowSettings('list-flow-forms',this)">查看流程表单</button>
+          </div>
+          <div style="margin-top:4px"><span class="prompt-text" data-prompt-category="流程配置" data-prompt-label="设置自动审批"
+              onclick="copyText(this)">把xxx的流程设置为自动通过</span></div>
+          <div class="tool-result" id="result-flow-settings"></div>
+        </div>
+        <!-- 服务管理 -->
+        <div class="tool-card" style="border-left-color:#52c41a;">
+          <div class="tool-card-header">
+            <div class="tool-card-title">&#127760; 服务管理</div><span class="tool-card-badge auto">自动</span>
+          </div>
+          <div class="tool-card-desc">查看服务状态、管理HTTP和同步服务</div>
+          <div class="tool-card-actions">
+            <button class="tool-btn success" onclick="checkServiceStatus()">检查状态</button>
+            <span class="prompt-text" data-prompt-category="系统维护" data-prompt-label="重新登录"
+              onclick="copyText(this)">「调用技能simulated-login」帮我重新登录宜搭平台</span>
+          </div>
+          <div class="tool-result" id="result-service-status"></div>
+        </div>
+      </div>
+      <div class="prompt-category" data-category="数据架构">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128202; 数据架构</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </div>
       <div class="prompt-category" data-category="系统维护">
@@ -284,157 +1115,45 @@
           <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
         </div>
         <table class="prompt-table">
-          <thead><tr><th>你想做什么</th><th>提示词（点击复制）</th><th>技能</th></tr></thead>
-          <tbody>
-            <tr><td>重新登录</td><td><span class="prompt-text" onclick="copyText(this)">帮我重新登录宜搭平台</span></td><td class="prompt-skill">simulated-login</td></tr>
-            <tr><td>排查问题</td><td><span class="prompt-text" onclick="copyText(this)">宜搭AI助手遇到问题，帮我排查</span></td><td class="prompt-skill">skill-creator</td></tr>
-            <tr><td>更新skill</td><td><span class="prompt-text" onclick="copyText(this)">总结问题，并更新到skill或文档中去，确保下次不再出现同样的问题</span></td><td class="prompt-skill">skill-creator</td></tr>
-          </tbody>
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
         </table>
       </div>
     </div>
 
-    <!-- Tab 4: 配置同步 -->
-    <div class="tab-content" id="tab-sync">
-      <div class="tool-grid">
-        <!-- 一站式同步 -->
-        <div class="tool-card" style="border-left-color:#722ed1;">
-          <div class="tool-card-header"><div class="tool-card-title">&#128640; 一站式同步</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">同步配置+Schema+规则+原型页面，一步到位</div>
-          <div class="tool-card-actions">
-            <select class="tool-select" id="projectSyncApp"></select>
-            <button class="tool-btn primary" onclick="runTool('project-sync',this)">执行同步</button>
-          </div>
-          <div class="tool-result" id="result-project-sync"></div>
-        </div>
-        <!-- 配置同步 -->
-        <div class="tool-card" style="border-left-color:#1677ff;">
-          <div class="tool-card-header"><div class="tool-card-title">&#128203; 配置同步</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">同步应用ID、表单UUID、组件ID到本地</div>
-          <div class="tool-card-actions">
-            <select class="tool-select" id="configSyncApp"></select>
-            <button class="tool-btn primary" onclick="runTool('sync-config',this)">同步配置</button>
-          </div>
-          <div class="tool-result" id="result-sync-config"></div>
-        </div>
-        <!-- Schema同步 -->
-        <div class="tool-card" style="border-left-color:#13c2c2;">
-          <div class="tool-card-header"><div class="tool-card-title">&#128196; Schema同步</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">同步表单结构到本地JSON，记录变更历史</div>
-          <div class="tool-card-actions">
-            <select class="tool-select" id="schemaSyncApp"></select>
-            <button class="tool-btn primary" onclick="runTool('sync-schema',this)">同步Schema</button>
-          </div>
-          <div class="tool-result" id="result-sync-schema"></div>
-        </div>
-        <!-- 规则同步 -->
-        <div class="tool-card" style="border-left-color:#eb2f96;">
-          <div class="tool-card-header"><div class="tool-card-title">&#128221; 规则同步</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">同步公式、联动、校验、代码等业务规则</div>
-          <div class="tool-card-actions">
-            <select class="tool-select" id="ruleSyncApp"></select>
-            <button class="tool-btn primary" onclick="runTool('sync-rules',this)">同步规则</button>
-          </div>
-          <div class="tool-result" id="result-sync-rules"></div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab 5: 数据管理 -->
-    <div class="tab-content" id="tab-data">
-      <div class="tool-grid">
-        <!-- 数据清空 -->
-        <div class="tool-card" style="border-left-color:#ff4d4f;">
-          <div class="tool-card-header"><div class="tool-card-title">&#128465; 数据清空</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">清空表单数据（保留结构），危险操作需二次确认</div>
-          <div class="tool-card-actions">
-            <select class="tool-select" id="cleanDataApp"></select>
-            <button class="tool-btn danger" onclick="confirmCleanData(this)">清空所有数据</button>
-          </div>
-          <div class="tool-result" id="result-clean-data"></div>
-        </div>
-        <!-- 数据测试 -->
-        <div class="tool-card" style="border-left-color:#52c41a;">
-          <div class="tool-card-header"><div class="tool-card-title">&#129518; 数据测试</div><span class="tool-card-badge prompt">提示词</span></div>
-          <div class="tool-card-desc">自动生成测试数据并提交到宜搭表单，验证功能</div>
-          <div class="tool-card-actions">
-            <span class="prompt-text" onclick="copyText(this)">在宜搭内的【xxx】系统里所有的表单里添加5条测试数据，模拟的城市是湖北武汉</span>
-          </div>
-        </div>
-        <!-- JS代码测试 -->
-        <div class="tool-card" style="border-left-color:#fa8c16;">
-          <div class="tool-card-header"><div class="tool-card-title">&#128187; JS代码测试</div><span class="tool-card-badge prompt">提示词</span></div>
-          <div class="tool-card-desc">自动化测试宜搭JS动作代码</div>
-          <div class="tool-card-actions">
-            <span class="prompt-text" onclick="copyText(this)">测试宜搭表单JS动作代码</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Tab 6: 系统工具 -->
-    <div class="tab-content" id="tab-tools">
-      <div class="tool-grid">
-        <!-- 系统图谱 -->
-        <div class="tool-card" style="border-left-color:#722ed1;">
-          <div class="tool-card-header"><div class="tool-card-title">&#128506; 系统图谱</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">生成系统功能关系图谱（表单关系、字段依赖、数据联动）</div>
-          <div class="tool-card-actions">
-            <select class="tool-select" id="systemMapApp"></select>
-            <button class="tool-btn primary" onclick="runTool('generate-system-map',this)">生成图谱</button>
-          </div>
-          <div class="tool-result" id="result-generate-system-map"></div>
-        </div>
-        <!-- 表单设置 -->
-        <div class="tool-card" style="border-left-color:#1677ff;">
-          <div class="tool-card-header"><div class="tool-card-title">&#9881;&#65039; 表单设置</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">设置数据标题、复制流程、表单权限</div>
-          <div class="tool-card-actions">
-            <select class="tool-select" id="formSettingsApp" onchange="loadFormList('formSettingsForm',this)"></select>
-            <select class="tool-select" id="formSettingsForm" style="display:none"></select>
-            <button class="tool-btn primary" onclick="runFormSettings('list-fields',this)">查看字段</button>
-          </div>
-          <div style="margin-top:4px"><span class="prompt-text" onclick="copyText(this)">更新【XXX】的数据标题</span></div>
-          <div class="tool-result" id="result-form-settings"></div>
-        </div>
-        <!-- 流程设置 -->
-        <div class="tool-card" style="border-left-color:#13c2c2;">
-          <div class="tool-card-header"><div class="tool-card-title">&#128260; 流程设置</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">设置自动审批、流程配置</div>
-          <div class="tool-card-actions">
-            <select class="tool-select" id="flowSettingsApp" onchange="loadFormList('flowSettingsForm',this)"></select>
-            <select class="tool-select" id="flowSettingsForm" style="display:none"></select>
-            <button class="tool-btn primary" onclick="runFlowSettings('list-flow-forms',this)">查看流程表单</button>
-          </div>
-          <div style="margin-top:4px"><span class="prompt-text" onclick="copyText(this)">把xxx的流程设置为自动通过</span></div>
-          <div class="tool-result" id="result-flow-settings"></div>
-        </div>
-        <!-- 服务管理 -->
-        <div class="tool-card" style="border-left-color:#52c41a;">
-          <div class="tool-card-header"><div class="tool-card-title">&#127760; 服务管理</div><span class="tool-card-badge auto">自动</span></div>
-          <div class="tool-card-desc">查看服务状态、管理HTTP和同步服务</div>
-          <div class="tool-card-actions">
-            <button class="tool-btn success" onclick="checkServiceStatus()">检查状态</button>
-            <span class="prompt-text" onclick="copyText(this)">启动http服务和同步服务</span>
-          </div>
-          <div class="tool-result" id="result-service-status"></div>
-        </div>
-      </div>
+    <!-- Tab 6: 功能清单 -->
+    <div class="tab-content" id="tab-features">
+      <div class="copy-hint" style="margin-top:0;margin-bottom:16px;">&#128161; 以下为系统提供的全部能力（Skill），按「开发执行顺序」分为 11
+        个阶段排列，包含序号、功能名称、简述与详细描述。共 <span id="featureCount">0</span> 项。</div>
+      <div id="featureList"></div>
     </div>
 
     <footer class="portal-footer">
-      <p>宜搭AI助手 &copy; 2026 | 组织管理门户 v2.1.0</p>
+      <p>宜搭AI助手 &copy; 2026 | 组织管理门户 v2.6.0</p>
     </footer>
   </div>
 
   <div id="syncModal" class="modal" style="display:none;">
     <div class="modal-overlay"></div>
     <div class="modal-content">
-      <div class="modal-header"><h3 id="syncModalTitle">同步中...</h3></div>
+      <div class="modal-header">
+        <h3 id="syncModalTitle">同步中...</h3>
+      </div>
       <div class="modal-body">
         <div class="sync-progress">
-          <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+          <div class="progress-bar">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
           <p class="progress-text" id="progressText">正在同步，请稍候...</p>
+          <div class="sync-log" id="syncLog"></div>
         </div>
       </div>
     </div>
@@ -450,15 +1169,18 @@
       <div class="modal-body">
         <div style="margin-bottom:16px">
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">你想做什么</label>
-          <input type="text" id="addPromptLabel" class="form-input" placeholder="如：导出表单数据" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+          <input type="text" id="addPromptLabel" class="form-input" placeholder="如：导出表单数据"
+            style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
         </div>
         <div style="margin-bottom:16px">
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">提示词内容</label>
-          <textarea id="addPromptText" rows="4" placeholder="如：将【xxx】表单的数据导出为Excel文件" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
+          <textarea id="addPromptText" rows="4" placeholder="如：将【xxx】表单的数据导出为Excel文件"
+            style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;font-family:inherit;resize:vertical;"></textarea>
         </div>
         <div style="margin-bottom:16px">
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">关联技能（可选）</label>
-          <input type="text" id="addPromptSkill" class="form-input" placeholder="如：data-clean" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+          <input type="text" id="addPromptSkill" class="form-input" placeholder="如：data-clean"
+            style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
         </div>
       </div>
       <div class="modal-footer">
@@ -478,9 +1200,11 @@
       <div class="modal-body">
         <div style="margin-bottom:16px">
           <label style="display:block;font-size:13px;font-weight:600;margin-bottom:4px;">应用名称</label>
-          <input type="text" id="createProjectName" class="form-input" placeholder="如：进销存管理" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+          <input type="text" id="createProjectName" class="form-input" placeholder="如：进销存管理"
+            style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
         </div>
-        <div style="font-size:12px;color:var(--text-muted);background:var(--primary-bg);padding:10px 12px;border-radius:6px;">
+        <div
+          style="font-size:12px;color:var(--text-muted);background:var(--primary-bg);padding:10px 12px;border-radius:6px;">
           <div style="font-weight:600;margin-bottom:4px;">将自动创建以下内容：</div>
           <ul style="margin:0;padding-left:16px;line-height:1.8;">
             <li>项目目录（根目录下）</li>
@@ -499,7 +1223,7 @@
 
   <div id="toast" class="toast" style="display:none;"></div>
 
-  <script src="js/dashboard.js"></script>
+  <script src="js/dashboard.js?v=1.6.0"></script>
   <script>
     // ========== 全局变量 ==========
     let orgApps = []; // {name, appId, synced}
@@ -522,7 +1246,7 @@
     function fallbackCopy(text) {
       const ta = document.createElement('textarea'); ta.value = text; ta.style.cssText = 'position:fixed;opacity:0';
       document.body.appendChild(ta); ta.select();
-      try { document.execCommand('copy'); showToast('已复制到剪贴板', 'success'); } catch(_) { showToast('复制失败', 'error'); }
+      try { document.execCommand('copy'); showToast('已复制到剪贴板', 'success'); } catch (_) { showToast('复制失败', 'error'); }
       document.body.removeChild(ta);
     }
 
@@ -533,7 +1257,7 @@
         const data = await res.json();
         if (!data.success) return;
         orgApps = data.apps || [];
-        const selects = ['projectSyncApp','configSyncApp','schemaSyncApp','ruleSyncApp','cleanDataApp','systemMapApp','formSettingsApp','flowSettingsApp'];
+        const selects = ['projectSyncApp', 'configSyncApp', 'schemaSyncApp', 'ruleSyncApp', 'cleanDataApp', 'systemMapApp', 'formSettingsApp', 'flowSettingsApp'];
         selects.forEach(id => {
           const sel = document.getElementById(id);
           if (!sel) return;
@@ -541,7 +1265,7 @@
             `<option value="${a.appId}" data-name="${a.name}">${a.name}</option>`
           ).join('');
         });
-      } catch(e) { console.log('加载应用列表失败:', e); }
+      } catch (e) { console.log('加载应用列表失败:', e); }
     }
 
     // ========== 加载表单列表 ==========
@@ -562,7 +1286,7 @@
         } else {
           formSel.innerHTML = '<option value="">请先同步应用</option>';
         }
-      } catch(e) {
+      } catch (e) {
         formSel.innerHTML = '<option value="">加载失败</option>';
       }
     }
@@ -593,7 +1317,7 @@
           if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '执行失败'; }
           showToast('执行失败: ' + (data.error || ''), 'error');
         }
-      } catch(e) {
+      } catch (e) {
         if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
         showToast('请求失败', 'error');
       }
@@ -625,7 +1349,7 @@
         } else {
           if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '查询失败'; }
         }
-      } catch(e) {
+      } catch (e) {
         if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
       }
       btn.disabled = false;
@@ -658,13 +1382,38 @@
         } else {
           if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '查询失败'; }
         }
-      } catch(e) {
+      } catch (e) {
         if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
       }
       btn.disabled = false;
     }
 
     // ========== 数据清空（二次确认） ==========
+    // dryRun=true 时仅预览(--dry-run)，否则真正删除(--confirm)
+    async function runCleanData(btn, appId, appName, dryRun) {
+      const resultEl = document.getElementById('result-clean-data');
+      btn.disabled = true; btn.textContent = '执行中...';
+      if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = (dryRun ? '正在预览(不会删除)...' : '正在清空数据，请稍候...'); }
+      try {
+        const res = await fetch('http://127.0.0.1:3457/clean-data', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appId, appName, mode: 'all', confirm: !dryRun, dryRun })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (resultEl) { resultEl.className = 'tool-result show success'; resultEl.textContent = truncate(data.data || (dryRun ? '预览完成' : '清空成功'), 2000); }
+          showToast(dryRun ? '预览完成(未删除)' : '清空成功', 'success');
+        } else {
+          if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '操作失败'; }
+          showToast('操作失败: ' + (data.error || ''), 'error');
+        }
+      } catch (e) {
+        if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
+        showToast('请求失败', 'error');
+      }
+      btn.disabled = false; btn.textContent = btn.dataset.origText || '清空所有数据';
+    }
+
     function confirmCleanData(btn) {
       const sel = document.getElementById('cleanDataApp');
       const appId = sel.value;
@@ -674,36 +1423,21 @@
       const overlay = document.createElement('div'); overlay.className = 'confirm-overlay';
       overlay.innerHTML = `<div class="confirm-box">
         <div class="confirm-title">&#9888;&#65039; 危险操作确认</div>
-        <div class="confirm-msg">确定要清空应用【${appName}】的所有数据吗？<br><br>此操作不可撤销，数据将被永久删除！</div>
+        <div class="confirm-msg">确定要清空应用【${appName}】的所有数据吗？<br><br>此操作不可撤销，数据将被永久删除！<br>建议先点「预览」查看将删除的内容。</div>
         <div class="confirm-actions">
           <button class="tool-btn" style="background:#999" onclick="this.closest('.confirm-overlay').remove()">取消</button>
+          <button class="tool-btn" id="previewCleanBtn">预览(dry-run)</button>
           <button class="tool-btn danger" id="confirmCleanBtn">确认清空</button>
         </div>
       </div>`;
       document.body.appendChild(overlay);
+      document.getElementById('previewCleanBtn').onclick = async () => {
+        overlay.remove();
+        await runCleanData(btn, appId, appName, true);
+      };
       document.getElementById('confirmCleanBtn').onclick = async () => {
         overlay.remove();
-        const resultEl = document.getElementById('result-clean-data');
-        btn.disabled = true; btn.textContent = '执行中...';
-        if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = '正在清空数据，请稍候...'; }
-        try {
-          const res = await fetch('http://127.0.0.1:3457/clean-data', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ appId, appName, mode: 'all' })
-          });
-          const data = await res.json();
-          if (data.success) {
-            if (resultEl) { resultEl.className = 'tool-result show success'; resultEl.textContent = truncate(data.data || '清空成功', 2000); }
-            showToast('清空成功', 'success');
-          } else {
-            if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = data.error || '清空失败'; }
-            showToast('清空失败: ' + (data.error || ''), 'error');
-          }
-        } catch(e) {
-          if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '请求失败: ' + e.message; }
-          showToast('请求失败', 'error');
-        }
-        btn.disabled = false; btn.textContent = btn.dataset.origText || '清空所有数据';
+        await runCleanData(btn, appId, appName, false);
       };
     }
 
@@ -718,7 +1452,7 @@
           resultEl.className = 'tool-result show success';
           resultEl.textContent = `HTTP服务: 运行中 (端口 8080)\n同步服务: 运行中 (端口 3457)\n版本: ${data.version || '未知'}\n工作目录: ${data.cwd || '未知'}`;
         }
-      } catch(e) {
+      } catch (e) {
         if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '服务未运行，请在对话框输入"启动宜搭服务"'; }
       }
     }
@@ -754,12 +1488,161 @@
       if (!currentPromptCategory) return;
 
       const tableBody = currentPromptCategory.querySelector('table tbody');
+      const newSeq = tableBody.querySelectorAll('tr').length + 1;
       const newRow = document.createElement('tr');
-      newRow.innerHTML = `<td>${escapeHtml(label)}</td><td><span class="prompt-text" onclick="copyText(this)">${escapeHtml(text)}</span></td>${skill ? `<td class="prompt-skill">${escapeHtml(skill)}</td>` : '<td class="prompt-skill"></td>'}`;
+      newRow.innerHTML = `<td class="prompt-seq">${newSeq}</td><td>${escapeHtml(label)}</td><td><span class="prompt-text" onclick="copyText(this)">${escapeHtml(text)}</span></td>${skill ? `<td class="prompt-skill">${escapeHtml(skill)}</td>` : '<td class="prompt-skill"></td>'}<td><div class="prompt-actions"><button class="prompt-move-btn" onclick="moveRow(this,-1)" title="上移">&#9650;</button><button class="prompt-move-btn" onclick="moveRow(this,1)" title="下移">&#9660;</button><button class="prompt-edit-btn" onclick="editPromptRow(this)">编辑</button><button class="prompt-del-btn" onclick="deletePromptRow(this)">删除</button></div></td>`;
       tableBody.appendChild(newRow);
+      updateMoveButtons(tableBody);
 
       closeAddPromptModal();
-      showToast('提示词已添加', 'success');
+      showToast('提示词已添加并自动保存', 'success');
+      // 自动保存到本地
+      saveAllPrompts();
+    }
+
+    function deletePromptRow(btn) {
+      const row = btn.closest('tr');
+      const tbody = row.closest('tbody');
+      row.remove();
+      // 重新编号
+      tbody.querySelectorAll('tr').forEach((r, i) => {
+        r.querySelector('.prompt-seq').textContent = i + 1;
+      });
+      updateMoveButtons(tbody);
+      // 自动保存删除操作
+      saveAllPrompts();
+    }
+
+    function moveRow(btn, direction) {
+      const row = btn.closest('tr');
+      const tbody = row.closest('tbody');
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const idx = rows.indexOf(row);
+      const targetIdx = idx + direction;
+      if (targetIdx < 0 || targetIdx >= rows.length) return;
+      if (direction === -1) {
+        tbody.insertBefore(row, rows[targetIdx]);
+      } else {
+        tbody.insertBefore(rows[targetIdx], row);
+      }
+      // 重新编号
+      tbody.querySelectorAll('tr').forEach((r, i) => {
+        r.querySelector('.prompt-seq').textContent = i + 1;
+      });
+      updateMoveButtons(tbody);
+      // 自动保存移动操作
+      saveAllPrompts();
+    }
+
+    function updateMoveButtons(tbody) {
+      const rows = tbody.querySelectorAll('tr');
+      rows.forEach((row, i) => {
+        const upBtn = row.querySelector('.prompt-move-btn[title="上移"]');
+        const downBtn = row.querySelector('.prompt-move-btn[title="下移"]');
+        if (upBtn) upBtn.disabled = (i === 0);
+        if (downBtn) downBtn.disabled = (i === rows.length - 1);
+      });
+    }
+
+    function editPromptRow(btn) {
+      const row = btn.closest('tr');
+      const labelTd = row.children[1];
+      const promptTd = row.children[2];
+      const skillTd = row.children[3];
+
+      const label = labelTd.textContent.trim();
+      const promptText = promptTd.querySelector('.prompt-text') ? promptTd.querySelector('.prompt-text').textContent : promptTd.textContent.trim();
+      const skill = skillTd.textContent.trim();
+
+      const actionsTd = row.children[4];
+
+      // 切换为编辑模式
+      labelTd.innerHTML = `<input type="text" value="${escapeAttr(label)}" style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" class="edit-label-input">`;
+      promptTd.innerHTML = `<textarea rows="3" style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;font-family:inherit;resize:vertical;" class="edit-prompt-input">${escapeHtml(promptText)}</textarea>`;
+      skillTd.innerHTML = `<input type="text" value="${escapeAttr(skill)}" style="width:100%;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;" class="edit-skill-input">`;
+      actionsTd.innerHTML = `<div class="prompt-actions"><button class="prompt-save-btn" onclick="saveEditRow(this)" style="padding:2px 10px;font-size:11px;">保存</button><button class="prompt-del-btn" onclick="cancelEditRow(this)" style="padding:2px 6px;font-size:11px;">取消</button></div>`;
+    }
+
+    function saveEditRow(btn) {
+      const row = btn.closest('tr');
+      const labelInput = row.querySelector('.edit-label-input');
+      const promptInput = row.querySelector('.edit-prompt-input');
+      const skillInput = row.querySelector('.edit-skill-input');
+
+      const label = labelInput.value.trim();
+      const promptText = promptInput.value.trim();
+      const skill = skillInput.value.trim();
+
+      if (!label) { showToast('请输入"你想做什么"的内容', 'error'); return; }
+      if (!promptText) { showToast('请输入提示词内容', 'error'); return; }
+
+      const labelTd = row.children[1];
+      const promptTd = row.children[2];
+      const skillTd = row.children[3];
+      const actionsTd = row.children[4];
+
+      labelTd.textContent = label;
+      if (promptText === '无提示词，页面操作') {
+        promptTd.textContent = promptText;
+      } else {
+        promptTd.innerHTML = `<span class="prompt-text" onclick="copyText(this)">${escapeHtml(promptText)}</span>`;
+      }
+      skillTd.className = 'prompt-skill';
+      skillTd.textContent = skill;
+      actionsTd.innerHTML = `<div class="prompt-actions"><button class="prompt-move-btn" onclick="moveRow(this,-1)" title="上移">&#9650;</button><button class="prompt-move-btn" onclick="moveRow(this,1)" title="下移">&#9660;</button><button class="prompt-edit-btn" onclick="editPromptRow(this)">编辑</button><button class="prompt-del-btn" onclick="deletePromptRow(this)">删除</button></div>`;
+
+      updateMoveButtons(row.closest('tbody'));
+      showToast('保存成功并已自动保存', 'success');
+      // 自动保存到本地
+      saveAllPrompts();
+    }
+
+    function cancelEditRow(btn) {
+      const row = btn.closest('tr');
+      const tbody = row.closest('tbody');
+      // 恢复原始按钮
+      const actionsTd = row.children[4];
+      actionsTd.innerHTML = `<div class="prompt-actions"><button class="prompt-move-btn" onclick="moveRow(this,-1)" title="上移">&#9650;</button><button class="prompt-move-btn" onclick="moveRow(this,1)" title="下移">&#9660;</button><button class="prompt-edit-btn" onclick="editPromptRow(this)">编辑</button><button class="prompt-del-btn" onclick="deletePromptRow(this)">删除</button></div>`;
+      updateMoveButtons(tbody);
+    }
+
+    async function saveAllPrompts() {
+      const categories = document.querySelectorAll('#tab-prompts .prompt-category, #tab-custom .prompt-category, #tab-tools .prompt-category, #tab-system .prompt-category');
+      const allData = {};
+
+      categories.forEach(cat => {
+        const categoryName = cat.dataset.category;
+        const rows = cat.querySelectorAll('table tbody tr');
+        const items = [];
+        rows.forEach(row => {
+          items.push({
+            label: row.children[1].textContent.trim(),
+            prompt: row.children[2].querySelector('.prompt-text') ? row.children[2].querySelector('.prompt-text').textContent : row.children[2].textContent.trim(),
+            skill: row.children[3].textContent.trim()
+          });
+        });
+        allData[categoryName] = items;
+      });
+
+      try {
+        const res = await fetch('http://127.0.0.1:3457/save-prompts', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(allData)
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast('所有提示词已保存到本地', 'success');
+        } else {
+          showToast('保存失败: ' + (data.error || ''), 'error');
+        }
+      } catch (e) {
+        showToast('保存失败: ' + e.message, 'error');
+      }
+    }
+
+    function escapeAttr(str) {
+      return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function escapeHtml(str) {
@@ -817,12 +1700,161 @@
     }
 
     // 回车键触发创建
-    document.getElementById('createProjectName')?.addEventListener('keydown', function(e) {
+    document.getElementById('createProjectName')?.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') doCreateProject();
     });
 
+    // ========== 加载提示词 ==========
+    async function loadPrompts() {
+      try {
+        const res = await fetch('http://127.0.0.1:3457/get-prompts');
+        const data = await res.json();
+        if (!data.success || !data.data) return;
+
+        const promptsData = data.data;
+        const categories = document.querySelectorAll('#tab-prompts .prompt-category, #tab-custom .prompt-category, #tab-tools .prompt-category, #tab-system .prompt-category, #tab-data .prompt-category');
+
+        categories.forEach(cat => {
+          const categoryName = cat.dataset.category;
+          const items = promptsData[categoryName];
+          if (!items || items.length === 0) return;
+
+          const tbody = cat.querySelector('table tbody');
+          if (!tbody) return;
+          tbody.innerHTML = '';
+
+          items.forEach((item, i) => {
+            const tr = document.createElement('tr');
+            const promptContent = item.prompt === '无提示词，页面操作'
+              ? '无提示词，页面操作'
+              : `<span class="prompt-text" onclick="copyText(this)">${escapeHtml(item.prompt)}</span>`;
+            tr.innerHTML = `<td class="prompt-seq">${i + 1}</td><td>${escapeHtml(item.label)}</td><td>${promptContent}</td><td class="prompt-skill">${escapeHtml(item.skill)}</td><td><div class="prompt-actions"><button class="prompt-move-btn" onclick="moveRow(this,-1)" title="上移">&#9650;</button><button class="prompt-move-btn" onclick="moveRow(this,1)" title="下移">&#9660;</button><button class="prompt-edit-btn" onclick="editPromptRow(this)">编辑</button><button class="prompt-del-btn" onclick="deletePromptRow(this)">删除</button></div></td>`;
+            tbody.appendChild(tr);
+          });
+          updateMoveButtons(tbody);
+        });
+
+        // 更新 tool-card 里的提示词
+        document.querySelectorAll('.prompt-text[data-prompt-category]').forEach(el => {
+          const category = el.dataset.promptCategory;
+          const label = el.dataset.promptLabel;
+          const item = promptsData[category]?.find(i => i.label === label);
+          if (item) {
+            el.textContent = item.prompt;
+          }
+        });
+      } catch (e) {
+        console.log('加载提示词失败:', e);
+      }
+    }
+
+    // ========== 功能清单（全量 Skill 列表，按执行顺序） ==========
+    const featurePhases = [
+      {
+        title: '一、环境初始化与登录', items: [
+          { name: '组织初始化', skill: 'org-init', brief: '获取组织信息及应用列表', desc: '自动从宜搭平台获取组织信息及应用列表，更新到「组织及应用信息.md」配置文件中，为后续同步和开发提供基础数据。' },
+          { name: '多策略登录认证', skill: 'auth-plus', brief: '多策略登录 + Cookie隔离', desc: '提供 CDP 浏览器登录、环境变量注入、终端二维码登录、Playwright 降级等多种登录策略，支持 Cookie 环境隔离与组织切换，替代单一 Playwright 依赖。' },
+          { name: '模拟登录', skill: 'simulated-login', brief: '浏览器自动化登录宜搭', desc: '通过浏览器自动化完成宜搭平台的登录流程，自动处理「立即登录」按钮点击、组织选择等操作。' },
+          { name: '本地服务管理', skill: 'server-manager', brief: '启动/管理本地服务', desc: '一键启动和管理宜搭开发所需的本地服务，支持原型页面访问服务、同步配置服务（端口3457）、检查服务状态。' }
+        ]
+      },
+      {
+        title: '二、需求分析与架构设计', items: [
+          { name: '系统架构师', skill: 'architect', brief: '需求梳理与架构设计', desc: '将模糊的业务需求转化为标准的「业务逻辑图」「关键功能清单」「字段定义表」和「自动化逻辑规则」，直接指导表单和流程配置。' },
+          { name: '流程图转字段清单', skill: 'flow-to-form', brief: '思维导图/流程图转字段', desc: '识别业务流程思维导图中的模块、表单、字段、流程、子表明细与状态流转，输出标准 Markdown 字段定义文件和业务规则清单。' },
+          { name: 'Excel 转表单', skill: 'excel-to-form', brief: 'Excel 转字段清单', desc: '将用户填写的 Excel 表单基础信息转换为标准的「字段清单.md」和「规则清单.md」，智能推断字段类型与业务规则。' }
+        ]
+      },
+      {
+        title: '三、项目与表单创建', items: [
+          { name: '项目创建', skill: 'project-creator', brief: '初始化项目目录结构', desc: '初始化标准化的宜搭应用项目目录结构（含 01需求梳理 等），只创建目录不生成表单，为后续开发搭建骨架。' },
+          { name: '表单设计器', skill: 'form_designer', brief: '设计/更新表单字段', desc: '在指定目录下设计新表单或更新现有表单的字段结构，只更新文档不创建宜搭表单，与 form_creator 配合使用。' },
+          { name: '表单 / 应用创建', skill: 'form_creator', brief: '生成宜搭表单并推送', desc: '根据自然语言或字段表生成宜搭表单 JSON 配置，支持「创建新应用+所有表单」「向已有应用添加表单」等场景，并推送到宜搭创建。' },
+          { name: '宜搭 API 客户端', skill: 'api-client', brief: '静默登录+创建应用', desc: '提供静默式登录、创建应用、创建表单的能力，支持 Cookie 持久化和 CSRF Token 自动管理。' }
+        ]
+      },
+      {
+        title: '四、表单配置与流程', items: [
+          { name: '表单设置', skill: 'form-settings', brief: '配置数据标题/权限', desc: '通过 API 配置表单的数据标题、复制流程、打印、导航、权限等全局设置。' },
+          { name: '流程配置', skill: 'flow-settings', brief: '配置自动审批等', desc: '通过 API 批量配置流程表单的全局设置，包括自动审批规则（发起人合并、审批人去重）、流程基本设置（撤回/协作/暂存）。' },
+          { name: 'HTTP 连接器管理', skill: 'connector', brief: '创建/管理连接器', desc: '支持自然语言描述 API 创建连接器、cURL 智能解析、API 文档自动解析、连接器动作与连接账号管理、安全动作模板。' },
+          { name: '集成自动化', skill: 'integration', brief: '创建/管理逻辑流', desc: '通过 API 创建、修改、查询、启停集成自动化（逻辑流），支持表单事件触发、新增/获取数据节点、连接器调用、消息通知。' },
+          { name: '字段清单转原型', skill: 'form-to-prototype', brief: '生成 HTML 表单原型', desc: '根据字段清单自动生成 HTML 原型页面，模拟宜搭表单界面风格，支持字段 ID 显示与点击复制、同步配置。' }
+        ]
+      },
+      {
+        title: '五、代码与公式开发', items: [
+          { name: '提示词助手', skill: 'prompt-assistant', brief: '生成规范提示词', desc: '将自然语言需求转换为规范的提示词文件，支持公式类和代码类提示词生成，自动读取系统配置和组件 ID 清单。' },
+          { name: '公式生成', skill: 'formula-generator', brief: '生成宜搭公式', desc: '生成表单公式、报表公式、自动化公式，包含精确的 marks 位置计算，覆盖计算、联动等场景。' },
+          { name: '代码开发', skill: 'code-expert', brief: '宜搭 JS 代码开发', desc: '生成表单动作代码、字段校验规则、自动化脚本、自定义页面代码，宜搭低代码平台代码开发专家。' }
+        ]
+      },
+      {
+        title: '六、测试验证', items: [
+          { name: '数据测试', skill: 'data-tester', brief: '模拟数据/测试表单', desc: '自动化测试表单数据提交、公式计算、校验规则、流程审批，支持在表单中模拟生成/批量插入测试数据。' },
+          { name: 'JS 代码测试', skill: 'js-action-tester', brief: '测试 JS 动作代码', desc: '自动化测试宜搭表单内的 JS 动作代码，支持自动创建测试表单、上传代码、绑定事件、执行测试并生成报告。' }
+        ]
+      },
+      {
+        title: '七、数据管理', items: [
+          { name: '数据准备 ETL', skill: 'data-prep', brief: '可视化 ETL 数据流', desc: '创建可视化 ETL 数据流实现多表数据加工，支持输入/处理/输出节点（关联/合并/聚合/清洗/计算），生成可用数据集 cubeCode。' },
+          { name: '数据集制作', skill: 'dataset', brief: '多表联合查询', desc: '创建视图表和数据集，实现多表联合查询，生成可在报表中使用的 cubeCode，支持按关联字段合并多表。' },
+          { name: '报表制作', skill: 'report', brief: '创建统计报表/看板', desc: '通过报表引擎调用宜搭 API 创建原生报表页面，支持指标卡、柱状/折线/饼图等 16 种图表组件与筛选器联动，单表或多表联合。' },
+          { name: '数据备份', skill: 'data-backup', brief: '备份/导出应用数据', desc: '备份指定应用中所有表单的实例数据，支持 JSON 和 Excel 两种输出格式。' },
+          { name: '数据清空', skill: 'data-clean', brief: '清空数据(保留结构)', desc: '清空表单数据（保留表单结构），仅删除数据记录，危险操作需二次确认。' }
+        ]
+      },
+      {
+        title: '八、自定义页面', items: [
+          { name: '自定义页面', skill: 'custom-page', brief: '开发自定义页面', desc: '使用 export function renderJsx() 模式编写完整自定义页面代码，支持 JSX 渲染、状态管理、API 调用和复杂交互，含 Canvas 画布开发。' },
+          { name: '发布守卫', skill: 'publish-guard', brief: '发布前安全检查', desc: '发布自定义页面前检查线上未同步改动、预览发布内容 diff、强制覆盖开关确认、发布后 health check，防止多人协作盲覆盖事故。' }
+        ]
+      },
+      {
+        title: '九、配置同步', items: [
+          { name: '配置同步', skill: 'config-sync', brief: '同步应用ID/组件ID', desc: '从宜搭平台获取应用 ID、表单 UUID、流程 Code 及组件 ID，自动生成系统配置清单和组件 ID 清单。' },
+          { name: 'Schema 获取', skill: 'get-schema', brief: '同步表单结构', desc: '从宜搭平台获取表单 Schema 并同步到本地 JSON 文件，支持单表单和批量同步，自动记录结构变更历史。' },
+          { name: '规则同步', skill: 'rule-sync', brief: '导出业务规则', desc: '从宜搭平台获取业务规则数据（公式、联动、校验、动作代码），生成系统规则清单文档（纯只读操作）。' },
+          { name: '一站式同步', skill: 'project-sync', brief: '一键全量同步', desc: '整合 config-sync + get-schema + rule-sync 三个 Skill，一键完成配置、Schema、规则的全量同步。' }
+        ]
+      },
+      {
+        title: '十、系统图谱与文档', items: [
+          { name: '系统图谱', skill: 'system-map', brief: '生成系统功能图谱', desc: '生成和维护宜搭系统功能图谱，单文件记录所有表单的 7 类重点功能，可视化业务逻辑关系。' },
+          { name: 'ER 实体关系图', skill: 'er-diagram', brief: '生成 ER 关系图', desc: '从表单 Schema 提取表单实体及关联关系（子表/关联表单/数据联动），生成 mermaid 关系图和 JSON 结构化数据，检测孤立表单与循环依赖。' }
+        ]
+      },
+      {
+        title: '十一、工具与维护', items: [
+          { name: '系统问题诊断', skill: 'system-troubleshooter', brief: '诊断环境与配置', desc: '提供问题诊断、解决方案推荐、知识库查询和预防措施建议，处理终端乱码、编码错误、脚本失败、配置错误等。' },
+          { name: 'Skill 创建', skill: 'skill-creator', brief: '创建/优化 Skill', desc: '创建新 Skill、修改优化已有 Skill、运行评测测试 Skill 性能、优化 Skill 描述以提升触发准确率。' },
+          { name: '反馈收集', skill: 'feedback-collector', brief: '收集用户反馈', desc: '收集用户遇到的问题、功能建议和使用反馈，并发送到叶秋建议收集系统。' },
+          { name: '浏览器自动化', skill: 'playwright-cli', brief: 'Playwright 测试', desc: '自动化浏览器交互、测试网页和编写 Playwright 测试，辅助其他宜搭 Skill 完成浏览器操作。' },
+          { name: '服务安全加固', skill: 'server-security', brief: '本地服务安全加固', desc: '检查并加固本地 HTTP 服务的安全配置，包括 127.0.0.1 绑定、CORS 白名单、写接口 token 校验。' },
+          { name: '示例 Skill（测试）', skill: 'hello-world-custom', brief: '测试 Skill 加载', desc: '示例自定义 Skill，用于测试 .agents/skills 目录的自动加载功能，返回友好问候并展示 Skill 加载信息。' }
+        ]
+      }
+    ];
+
+    function renderFeatureList() {
+      const container = document.getElementById('featureList');
+      if (!container) return;
+      let html = '';
+      let seq = 0;
+      featurePhases.forEach(phase => {
+        html += `<section class="feature-phase"><div class="feature-phase-title">${escapeHtml(phase.title)}</div>`;
+        html += `<table class="feature-table"><thead><tr><th class="feature-seq">序号</th><th>功能名称 / Skill</th><th>简述</th><th>详细描述</th></tr></thead><tbody></tbody></table></section>`;
+      });
+      container.innerHTML = html;
+      const countEl = document.getElementById('featureCount');
+      if (countEl) countEl.textContent = seq;
+    }
+
     // ========== 初始化 ==========
     loadAppSelects();
+    loadPrompts();
+    renderFeatureList();
   </script>
 </body>
+
 </html>

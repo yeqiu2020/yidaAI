@@ -1,6 +1,6 @@
 /**
  * 宜搭组织管理门户 - Dashboard JS
- * v1.3.0
+ * v1.6.0
  */
 const SYNC_SERVICE = 'http://localhost:3457';
 const HTTP_SERVICE = 'http://127.0.0.1:8080';
@@ -87,7 +87,7 @@ function parseOrgMarkdown(content) {
   const domainMatch = content.match(/\|\s*域名前缀\s*\|\s*([^|\n]+)/);
   if (domainMatch) orgInfo.domainPrefix = domainMatch[1].trim();
   const fullDomainMatch = content.match(/\|\s*完整域名\s*\|\s*([^|\n]+)/);
-  if (fullDomainMatch) orgInfo.fullDomain = fullDomainMatch[1].trim();
+  if (fullDomainMatch) orgInfo.fullDomain = cleanUrlValue(fullDomainMatch[1]);
   const corpIdMatch = content.match(/\|\s*corpId\s*\|\s*([^|\n]+)/);
   if (corpIdMatch) orgInfo.corpId = corpIdMatch[1].trim();
 
@@ -127,12 +127,27 @@ function parseOrgMarkdown(content) {
   };
 }
 
+// 清洗 URL 字段值（兼容 Markdown 自动链接语法 <URL> 和 HTML 转义）
+function cleanUrlValue(raw) {
+  if (!raw) return raw;
+  return raw
+    .replace(/^&lt;/, '')
+    .replace(/&gt;$/, '')
+    .replace(/^</, '')
+    .replace(/>$/, '')
+    .trim();
+}
+
 // ========== 渲染组织头部 ==========
 function renderOrgHeader(orgInfo) {
   document.getElementById('orgName').textContent = orgInfo.orgName || '未知组织';
 
   const metaParts = [];
-  if (orgInfo.fullDomain) metaParts.push(`<span>&#127760; ${orgInfo.fullDomain}</span>`);
+  if (orgInfo.fullDomain) {
+    const cleanUrl = cleanUrlValue(orgInfo.fullDomain);
+    const displayUrl = cleanUrl.replace(/^https?:\/\//, '');
+    metaParts.push(`<a href="${cleanUrl}" target="_blank" style="color:#fff;text-decoration:none;cursor:pointer;" title="点击在浏览器中打开">&#127760; ${displayUrl}</a>`);
+  }
   if (orgInfo.corpId) metaParts.push(`<span>&#128273; ${orgInfo.corpId.substring(0, 12)}...</span>`);
 
   document.getElementById('orgMeta').innerHTML = metaParts.join('');
@@ -163,23 +178,26 @@ function renderAppList(apps) {
 
     if (app.synced) {
       // 已同步的应用：显示进入应用 + 同步更新
+      // 指向本地原型页面
       const entryUrl = (app.hasPrototype && app.prototypeUrl)
         ? app.prototypeUrl
-        : `http://127.0.0.1:8080/${encodeURIComponent(app.name)}/01需求梳理/原型页面/templates/guide.html`;
+        : `http://127.0.0.1:8080/${encodeURIComponent(app.name)}/01需求梳理/原型页面/index.html`;
 
       actionsHtml = `
         <a href="${entryUrl}" class="btn btn-outline" target="_blank">&#128194; 进入应用</a>
-        <button class="btn btn-ghost" onclick="syncAppToLocal('${app.name}', '${app.appId}', this)">&#128260; 同步更新</button>
+        <button class="btn btn-ghost" onclick="syncAppToLocal('${app.name}', '${app.appId}', this)">&#128260; 更新应用</button>
         <button class="btn btn-ghost" onclick="backupAppData('${app.name}', '${app.appId}', this)">&#128190; 备份数据</button>
         <select class="backup-format-select" title="备份格式" onchange="event.stopPropagation()">
           <option value="excel" selected>Excel</option>
           <option value="json">JSON</option>
         </select>
+        <button class="btn btn-danger" onclick="confirmDeleteLocalApp('${app.name.replace(/'/g, "\\'")}', '${app.appId.replace(/'/g, "\\'")}', this)">&#128465; 删除</button>
       `;
     } else {
-      // 未同步的应用：只显示同步到本地
+      // 未同步的应用：显示同步到本地 + 删除
       actionsHtml = `
         <button class="btn btn-primary" onclick="syncAppToLocal('${app.name}', '${app.appId}', this)">&#11015;&#65039; 同步到本地</button>
+        <button class="btn btn-danger" onclick="confirmDeleteLocalApp('${app.name.replace(/'/g, "\\'")}', '${app.appId.replace(/'/g, "\\'")}', this)">&#128465; 删除</button>
       `;
     }
 
@@ -209,8 +227,8 @@ function renderAppList(apps) {
   }).join('');
 }
 
-// ========== 同步应用到本地 ==========
-async function syncAppToLocal(appName, appId, btnEl) {
+// ========== 同步应用到本地（SSE 流式版） ==========
+function syncAppToLocal(appName, appId, btnEl) {
   if (!serviceRunning) {
     showToast('同步服务未启动，请在对话框中输入"启动宜搭服务"', 'error');
     return;
@@ -231,21 +249,102 @@ async function syncAppToLocal(appName, appId, btnEl) {
 
   // 显示进度弹窗
   showSyncModal(`正在同步【${appName}】...`);
+  const progressText = document.getElementById('progressText');
+  const progressFill = document.getElementById('progressFill');
+  if (progressFill) progressFill.style.width = '0%';
 
-  try {
-    const res = await fetch(`${SYNC_SERVICE}/sync-app-to-local`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ appName, appId })
-    });
+  // 使用 SSE 流式接收同步进度
+  const sseUrl = `${SYNC_SERVICE}/sync-app-to-local-stream`;
+  const es = new EventSource(sseUrl + '?appName=' + encodeURIComponent(appName) + '&appId=' + encodeURIComponent(appId));
+  const syncLog = document.getElementById('syncLog');
+  if (syncLog) syncLog.classList.add('show');
 
-    const data = await res.json();
+  // 辅助函数：添加日志条目
+  function addLog(message, type) {
+    if (!syncLog) return;
+    const item = document.createElement('div');
+    item.className = 'sync-log-item' + (type ? ' ' + type : '');
+    item.textContent = message;
+    syncLog.appendChild(item);
+    syncLog.scrollTop = syncLog.scrollHeight;
+  }
 
+  let formTotal = 0;
+  let formDone = 0;
+
+  es.addEventListener('start', (e) => {
+    const data = JSON.parse(e.data);
+    if (progressText) progressText.textContent = data.message;
+    addLog(data.message);
+  });
+
+  es.addEventListener('step', (e) => {
+    const data = JSON.parse(e.data);
+    if (progressText) progressText.textContent = `[步骤 ${data.step}/${data.totalSteps}] ${data.message}`;
+    if (progressFill) {
+      progressFill.classList.add('determinate');
+      const pct = Math.round((data.step / data.totalSteps) * 100);
+      progressFill.style.width = pct + '%';
+    }
+    addLog(`[步骤 ${data.step}/${data.totalSteps}] ${data.message}`);
+  });
+
+  es.addEventListener('form-start', (e) => {
+    const data = JSON.parse(e.data);
+    formTotal = data.total;
+    if (progressText) progressText.textContent = `正在同步表单 [${data.current}/${data.total}]: ${data.formName}`;
+    if (progressFill && formTotal > 0) {
+      progressFill.classList.add('determinate');
+      const pct = Math.round(((data.current - 1) / formTotal) * 100);
+      progressFill.style.width = pct + '%';
+    }
+    addLog(`[${data.current}/${data.total}] 开始同步: ${data.formName}`);
+  });
+
+  es.addEventListener('form-done', (e) => {
+    const data = JSON.parse(e.data);
+    formDone++;
+    if (progressText) progressText.textContent = data.message;
+    if (progressFill && formTotal > 0) {
+      const pct = Math.round((formDone / formTotal) * 100);
+      progressFill.style.width = pct + '%';
+    }
+    addLog(data.message, data.status);
+  });
+
+  es.addEventListener('log', (e) => {
+    const data = JSON.parse(e.data);
+    if (progressText) progressText.textContent = data.message;
+    addLog(data.message);
+  });
+
+  es.addEventListener('error', (e) => {
+    let errorMsg = '同步过程中发生错误';
+    try {
+      if (e.data) {
+        const data = JSON.parse(e.data);
+        errorMsg = data.error || errorMsg;
+      }
+    } catch (_) {}
+    es.close();
+    hideSyncModal();
+    showToast(`同步失败：${errorMsg}`, 'error');
+    btnEl.disabled = false;
+    btnEl.innerHTML = originalText;
+    if (statusEl) {
+      statusEl.className = 'app-status not-synced';
+      statusEl.innerHTML = '&#10007; 同步失败';
+    }
+  });
+
+  es.addEventListener('done', (e) => {
+    es.close();
+    const data = JSON.parse(e.data);
     if (data.success) {
-      hideSyncModal();
-      showToast(`应用【${appName}】同步完成！`, 'success');
-      // 刷新页面数据
-      setTimeout(() => loadOrgInfo(), 1000);
+      if (progressFill) { progressFill.classList.add('determinate'); progressFill.style.width = '100%'; }
+      addLog('同步完成！', 'success');
+      setTimeout(() => { hideSyncModal(); showToast(`应用【${appName}】同步完成！`, 'success'); }, 800);
+      setTimeout(() => loadOrgInfo(), 1500);
     } else {
       hideSyncModal();
       showToast(`同步失败：${data.error || '未知错误'}`, 'error');
@@ -256,16 +355,22 @@ async function syncAppToLocal(appName, appId, btnEl) {
         statusEl.innerHTML = '&#10007; 同步失败';
       }
     }
-  } catch (error) {
-    hideSyncModal();
-    showToast(`请求失败：${error.message}`, 'error');
-    btnEl.disabled = false;
-    btnEl.innerHTML = originalText;
-    if (statusEl) {
-      statusEl.className = 'app-status not-synced';
-      statusEl.innerHTML = '&#9675; 未同步';
+  });
+
+  // SSE 连接超时保底（10分钟）
+  setTimeout(() => {
+    if (es.readyState !== EventSource.CLOSED) {
+      es.close();
+      hideSyncModal();
+      showToast('同步超时，请稍后重试', 'error');
+      btnEl.disabled = false;
+      btnEl.innerHTML = originalText;
+      if (statusEl) {
+        statusEl.className = 'app-status not-synced';
+        statusEl.innerHTML = '&#9675; 未同步';
+      }
     }
-  }
+  }, 600000);
 }
 
 // ========== 备份应用数据 ==========
@@ -313,11 +418,144 @@ async function backupAppData(appName, appId, btnEl) {
   }
 }
 
+// ========== 删除本地应用 ==========
+function confirmDeleteLocalApp(appName, appId, btnEl) {
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  overlay.innerHTML = `<div class="confirm-box">
+    <div class="confirm-title">&#9888;&#65039; 删除本地应用</div>
+    <div class="confirm-msg">确定要删除应用【${appName}】的本地相关信息吗？<br><br>此操作会从本地配置中移除该应用记录，并删除本地项目文件夹（如果存在），不会影响宜搭平台上的应用数据，不可撤销！</div>
+    <div class="confirm-actions">
+      <button class="tool-btn" style="background:#999" onclick="this.closest('.confirm-overlay').remove()">取消</button>
+      <button class="tool-btn danger" id="confirmDeleteBtn">确认删除</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  document.getElementById('confirmDeleteBtn').onclick = () => {
+    overlay.remove();
+    doDeleteLocalApp(appName, appId, btnEl);
+  };
+}
+
+async function doDeleteLocalApp(appName, appId, btnEl) {
+  if (!serviceRunning) {
+    showToast('同步服务未启动，请在对话框中输入"启动宜搭服务"', 'error');
+    return;
+  }
+
+  const originalText = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.innerHTML = '&#8987; 删除中...';
+
+  try {
+    const res = await fetch(`${SYNC_SERVICE}/delete-local-app`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appName, appId })
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      showToast(`应用【${appName}】本地信息已清除`, 'success');
+      setTimeout(() => loadOrgInfo(), 500);
+    } else {
+      const details = [];
+      if (data.removedFromConfig) details.push('已移除配置记录');
+      if (data.removedFolder) details.push('已删除项目文件夹');
+      if (data.removedOrphanRows > 0) details.push(`已清理 ${data.removedOrphanRows} 条错位记录`);
+      const detailText = details.length > 0 ? `（${details.join('、')}）` : '';
+      showToast(`删除失败：${data.error || '未找到可删除的本地应用信息'}${detailText}`, 'error');
+      btnEl.disabled = false;
+      btnEl.innerHTML = originalText;
+    }
+  } catch (error) {
+    showToast(`请求失败：${error.message}`, 'error');
+    btnEl.disabled = false;
+    btnEl.innerHTML = originalText;
+  }
+}
+
+// ========== 刷新登录态 ==========
+async function refreshLoginState(btnEl) {
+  if (!serviceRunning) {
+    showToast('同步服务未启动，请在对话框中输入"启动宜搭服务"', 'error');
+    return;
+  }
+
+  const originalText = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.innerHTML = '&#8987; 刷新中...';
+
+  showToast('正在刷新登录态，请稍候...', 'info');
+
+  try {
+    const res = await fetch(`${SYNC_SERVICE}/refresh-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      showToast(`登录态刷新成功${data.userName ? '（' + data.userName + '）' : ''}`, 'success');
+    } else {
+      showToast(`刷新失败：${data.error || '未知错误'}`, 'error');
+    }
+  } catch (error) {
+    showToast(`请求失败：${error.message}`, 'error');
+  } finally {
+    btnEl.disabled = false;
+    btnEl.innerHTML = originalText;
+  }
+}
+
+// ========== 刷新组织应用信息 ==========
+async function refreshOrgApps(btnEl) {
+  if (!serviceRunning) {
+    showToast('同步服务未启动，请在对话框中输入"启动宜搭服务"', 'error');
+    return;
+  }
+
+  const originalText = btnEl.innerHTML;
+  btnEl.disabled = true;
+  btnEl.innerHTML = '&#8987; 刷新中...';
+
+  // 灰化整个 portal 内容区
+  const container = document.querySelector('.container');
+  if (container) container.classList.add('is-busy');
+
+  showToast('正在从宜搭同步应用列表...', 'info');
+
+  try {
+    const res = await fetch(`${SYNC_SERVICE}/refresh-org-apps`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      showToast('应用信息刷新完成', 'success');
+      await loadOrgInfo();
+    } else {
+      showToast('刷新失败：' + (data.error || '未知错误'), 'error');
+    }
+  } catch (error) {
+    showToast('请求失败：' + error.message, 'error');
+  } finally {
+    if (container) container.classList.remove('is-busy');
+    btnEl.disabled = false;
+    btnEl.innerHTML = originalText;
+  }
+}
+
 // ========== 弹窗控制 ==========
 function showSyncModal(title) {
   const modal = document.getElementById('syncModal');
   document.getElementById('syncModalTitle').textContent = title;
   document.getElementById('progressText').textContent = '正在同步应用配置，请稍候...';
+  const fill = document.getElementById('progressFill');
+  if (fill) { fill.style.width = '0%'; fill.classList.remove('determinate'); }
+  const log = document.getElementById('syncLog');
+  if (log) { log.innerHTML = ''; log.classList.remove('show'); }
   modal.style.display = 'flex';
 }
 
