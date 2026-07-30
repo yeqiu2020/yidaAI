@@ -1,0 +1,39 @@
+{
+  "_comment": "通用视图表配置示例。复制本文件改名后填入你的应用/表单即可。所有字段均为配置驱动，脚本不含任何硬编码。",
+  "appType": "APP_FDK8IG9UIDEFV2PTPDYL",
+  "cubeName": "财务收支三方联合",
+  "mainTable": {
+    "name": "收款登记",
+    "uuid": "FORM_54EB9DA8E0BF41C48A40286A4CC67C28C007"
+  },
+  "joinField": {
+    "main": "textField_4c11h67t",
+    "remark": "项目名称"
+  },
+  "associatedTables": [
+    {
+      "name": "开票登记",
+      "uuid": "FORM_BFA4A9499F354371BA5BE99CFC080820N3T6",
+      "joinField": "textField_4ejg3s01",
+      "joinRemark": "项目名称"
+    },
+    {
+      "name": "费用报销",
+      "uuid": "FORM_BE97B0B3C3934CF5A60E8D7C2CCA60C9IN3O",
+      "joinField": "textField_49kv1nkh",
+      "joinRemark": "项目名称"
+    }
+  ],
+  "fields": [
+    { "code": "textField_4c11h67t",   "label": "项目名称",   "type": "STRING", "table": "main", "suffix": false },
+    { "code": "textField_mpwn8hk7",   "label": "委托方名称", "type": "STRING", "table": "main", "suffix": false },
+    { "code": "numberField_4c11hcwj", "label": "收款总金额", "type": "DOUBLE", "table": "main", "suffix": false },
+    { "code": "selectField_4c11b9ir", "label": "收款方式",   "type": "STRING", "table": "main", "suffix": true  },
+    { "code": "dateField_4c11spad",   "label": "收款日期",   "type": "DATE",   "table": "main", "suffix": false },
+    { "code": "selectField_4c11v3t5", "label": "发票状态",   "type": "STRING", "table": "main", "suffix": true  },
+    { "code": "numberField_4ejg3074", "label": "价税合计",   "type": "DOUBLE", "table": "assoc_0", "suffix": false },
+    { "code": "dateField_4ejgmfsx",   "label": "开票日期",   "type": "DATE",   "table": "assoc_0", "suffix": false },
+    { "code": "numberField_49kvt35x", "label": "报销总金额", "type": "DOUBLE", "table": "assoc_1", "suffix": false },
+    { "code": "dateField_49kvflyj",   "label": "报销日期",   "type": "DATE",   "table": "assoc_1", "suffix": false }
+  ]
+}

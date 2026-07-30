@@ -1,0 +1,14 @@
+{
+  "template": "UPSERT({库存},AND(EQ({库存.仓库},{仓库名称}),EQ({库存.产品},{明细.产品名称})),\"\",{库存.仓库},{仓库名称},{库存.产品},{明细.产品名称},{库存.数量},{库存.数量}+{明细.数量})",
+  "mapping": {
+    "库存": {"display": "库存信息", "value": "FORM-BF0E85D555D4460EBAB64DBF1F449D19Z7G7/"},
+    "库存.仓库": {"display": "库存信息.仓库名称", "value": "FORM-BF0E85D555D4460EBAB64DBF1F449D19Z7G7/textField_xxx"},
+    "库存.产品": {"display": "库存信息.产品名称", "value": "FORM-BF0E85D555D4460EBAB64DBF1F449D19Z7G7/textField_yyy"},
+    "库存.数量": {"display": "库存信息.库存数量", "value": "FORM-BF0E85D555D4460EBAB64DBF1F449D19Z7G7/numberField_zzz"},
+    "仓库名称": {"display": "仓库名称", "value": "textField_src_1"},
+    "明细": {"display": "入库明细", "value": "tableField_sub"},
+    "明细.产品名称": {"display": "入库明细.产品名称", "value": "textField_sub_1"},
+    "明细.数量": {"display": "入库明细.入库数量", "value": "numberField_sub_2"}
+  },
+  "output": "业务规则/采购入库-增加库存.json"
+}

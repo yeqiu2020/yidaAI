@@ -1,17 +1,50 @@
 {
   "_comment": "宜搭AI助手 Skill 配置文件",
   "_description": "本文件用于配置Skill的全局行为和启用/禁用状态",
-  "version": "1.8.0",
-  "lastUpdated": "2026-05-28",
+  "version": "2.0.0",
+  "lastUpdated": "2026-07-30",
   "disabledSkills": [],
+  "_exemptedSkills_comment": "豁免登记的目录：不进入 skills 数组，但必须写明豁免理由。校验脚本 scripts/validate-skill-config.js 以此为唯一事实源做反向校验（含 SKILL.md 的目录要么登记、要么在此豁免，否则报错）",
+  "exemptedSkills": [
+    {
+      "name": "hello-world-custom",
+      "reason": "demo 技能：仅用于验证 .agents/skills 目录自动加载功能，不承载业务能力，不参与技能索引与触发登记"
+    },
+    {
+      "name": "skill-self-improve",
+      "reason": "placeholder 占位目录：无 SKILL.md，保留目录用于后续技能自我改进机制建设"
+    },
+    {
+      "name": "knowledge-base",
+      "reason": "placeholder 占位目录：无 SKILL.md，保留目录用于后续知识库沉淀"
+    }
+  ],
   "skills": [
     {
-      "name": "yida-report",
-      "description": "宜搭报表制作技能。通过自包含的报表引擎直接调用宜搭API创建原生报表页面，支持指标卡、柱状图、折线图、饼图、表格、透视表、仪表盘、漏斗图、组合图等16种图表组件，支持筛选器联动配置。当用户说'创建报表'、'制作报表'、'数据报表'、'统计报表'、'数据看板'、'报表设计'时触发此skill。关键词：报表、统计图表、数据报表、报表创建、报表制作、报表设计",
-      "path": ".agents/skills/yida-report",
-      "version": "1.3.0",
+      "name": "report",
+      "description": "宜搭报表制作技能。通过自包含的报表引擎直接调用宜搭API创建原生报表页面，支持指标卡、柱状图、折线图、饼图、表格、透视表、仪表盘、漏斗图、组合图等16种图表组件，支持筛选器联动配置。支持使用表单formUuid或数据集cubeCode作为数据源。当用户说'创建报表'、'制作报表'、'数据报表'、'统计报表'、'数据看板'、'报表设计'时触发此skill。关键词：报表、统计图表、数据报表、报表创建、报表制作、报表设计",
+      "path": ".agents/skills/report",
+      "version": "1.5.1",
       "category": "report",
-      "tags": ["宜搭", "报表", "统计图表", "数据可视化", "报表创建"],
+      "tags": ["宜搭", "报表", "统计图表", "数据可视化", "报表创建", "数据集"],
+      "enabled": true
+    },
+    {
+      "name": "dataset",
+      "description": "宜搭数据集制作技能，用于创建视图表和数据集，实现多表联合查询。当用户说'创建视图表'、'多表联合'、'多表关联'、'数据集'、'视图表'、'view table'、'多表数据合并'、'跨表数据整合'、'把多张表合成一张表'、'财务收支汇总'时触发此skill。支持创建视图表（多表关联/合并），生成可在报表中使用的cubeCode。关键词：视图表、数据集、多表联合、多表关联、数据合并、跨表整合、cubeCode",
+      "path": ".agents/skills/dataset",
+      "version": "1.1.0",
+      "category": "dataset",
+      "tags": ["宜搭", "数据集", "视图表", "多表关联", "cubeCode"],
+      "enabled": true
+    },
+    {
+      "name": "data-prep",
+      "description": "宜搭数据准备制作技能，用于创建可视化ETL数据流，实现多表数据加工。当用户说'创建数据准备'、'数据准备'、'ETL'、'数据加工'、'数据清洗'、'数据聚合'、'合并多张表'、'数据流'、'可视化ETL'、'数据预处理'时触发此skill。支持输入节点（表单/数据源）、处理节点（关联/合并/聚合/清洗/计算）、输出节点（输出到新数据集），生成可在报表中使用的cubeCode。关键词：数据准备、ETL、数据加工、数据清洗、数据聚合、数据流、cubeCode",
+      "path": ".agents/skills/data-prep",
+      "version": "1.1.0",
+      "category": "dataset",
+      "tags": ["宜搭", "数据准备", "ETL", "数据加工", "数据流", "cubeCode"],
       "enabled": true
     },
     {
@@ -56,9 +89,9 @@
       "enabled": true
     },
     {
-      "name": "yida-architect",
+      "name": "architect",
       "description": "专为宜搭低代码开发设计的系统架构师。当用户说'梳理需求'、'设计系统架构'、'分析业务流程'、'做需求分析'、'规划系统功能'时触发此skill。能够将模糊的业务需求转化为标准的'业务逻辑图'、'关键功能清单'、'字段定义表'和'自动化逻辑规则'，直接指导开发人员配置宜搭表单和流程。适用于装修、零售、教育、制造等行业的客户管理、进销存、学员管理等场景。",
-      "path": ".agents/skills/yida-architect",
+      "path": ".agents/skills/architect",
       "version": "1.5.0",
       "category": "低代码开发",
       "tags": ["宜搭", "低代码", "表单设计", "业务流程", "系统架构"],
@@ -96,9 +129,9 @@
       "enabled": true
     },
     {
-      "name": "yida-api-client",
+      "name": "api-client",
       "description": "宜搭API客户端，提供静默式登录、创建应用、创建表单的能力，支持Cookie持久化和CSRF Token自动管理。",
-      "path": ".agents/skills/yida-api-client",
+      "path": ".agents/skills/api-client",
       "version": "1.1.0",
       "category": "api-integration",
       "tags": ["宜搭", "API", "登录", "应用创建", "表单创建"],
@@ -122,7 +155,7 @@
     },
     {
       "name": "js-action-tester",
-      "description": "宜搭表单JS动作代码自动化测试工具。当用户说'测试JS动作'、'测试表单代码'、'自动化测试JS'、'验证JS动作'、'测试字段联动代码'时触发此skill。专门用于测试宜搭表单内的JS动作代码，支持自动创建测试表单、上传代码、绑定事件、执行测试并生成报告。注意：说'测试表单'或'生成测试数据'时触发yida-data-tester而非本Skill。",
+      "description": "宜搭表单JS动作代码自动化测试工具。当用户说'测试JS动作'、'测试表单代码'、'自动化测试JS'、'验证JS动作'、'测试字段联动代码'时触发此skill。专门用于测试宜搭表单内的JS动作代码，支持自动创建测试表单、上传代码、绑定事件、执行测试并生成报告。注意：说'测试表单'或'生成测试数据'时触发data-tester而非本Skill。",
       "path": ".agents/skills/js-action-tester",
       "version": "1.0.77",
       "category": "testing",
@@ -153,25 +186,25 @@
       "enabled": true
     },
     {
-      "name": "yida-config-sync",
-      "description": "宜搭应用配置同步工具。当用户说'同步配置'、'同步表单列表'、'获取组件ID'、'同步应用ID'时触发。从宜搭平台获取应用ID、表单UUID、流程Code以及表单内组件ID，自动生成系统配置清单和组件ID清单。注意：本Skill只同步配置信息（ID、UUID），不同步业务规则。说'同步规则'时触发 yida-rule-sync，说'一站式同步'时触发 yida-project-sync。",
-      "path": ".agents/skills/yida-config-sync",
+      "name": "config-sync",
+      "description": "宜搭应用配置同步工具。当用户说'同步配置'、'同步表单列表'、'获取组件ID'、'同步应用ID'时触发。从宜搭平台获取应用ID、表单UUID、流程Code以及表单内组件ID，自动生成系统配置清单和组件ID清单。注意：本Skill只同步配置信息（ID、UUID），不同步业务规则。说'同步规则'时触发 rule-sync，说'一站式同步'时触发 project-sync。",
+      "path": ".agents/skills/config-sync",
       "version": "3.13.1",
       "category": "configuration",
       "enabled": true
     },
     {
-      "name": "yida-data-tester",
+      "name": "data-tester",
       "description": "宜搭数据测试专家。当用户说'测试表单'、'宜搭测试'、'数据提交测试'、'公式验证'、'流程测试'、'验证校验规则'、'模拟数据'、'生成测试数据'、'批量插入数据'、'在XX表单中模拟生成XX条数据'时触发。注意：仅当用户要求'测试'或'生成测试数据'时触发，说'清空数据'或'删除数据'时触发 data-clean 而非本Skill。",
-      "path": ".agents/skills/yida-data-tester",
-      "version": "2.2.1",
+      "path": ".agents/skills/data-tester",
+      "version": "3.1.0",
       "category": "testing",
       "enabled": true
     },
     {
-      "name": "yida-get-schema",
+      "name": "get-schema",
       "description": "宜搭表单Schema获取与同步技能。当用户说'同步表单结构'、'获取Schema'、'同步表结构'、'导出表单JSON'、'获取表单定义'时触发此skill。从宜搭平台获取表单结构并同步到本地JSON文件，支持单表单和批量同步，自动记录结构变更历史。",
-      "path": ".agents/skills/yida-get-schema",
+      "path": ".agents/skills/get-schema",
       "version": "1.0.2",
       "author": "叶秋",
       "contact": "15270209736",
@@ -180,33 +213,33 @@
       "enabled": true
     },
     {
-      "name": "yida-project-sync",
+      "name": "project-sync",
       "description": "宜搭已有项目一站式同步工具。当用户说'一站式同步'、'同步项目'、'同步整个项目'、'一键同步'、'全部同步'、'完整同步'、'同步已有应用'时触发此skill。整合 config-sync + get-schema + rule-sync 三个Skill的同步能力，一键完成配置、Schema、规则的全量同步。注意：本Skill是三个同步Skill的整合入口，单独同步配置/规则/Schema时请使用对应的独立Skill。",
-      "path": ".agents/skills/yida-project-sync",
+      "path": ".agents/skills/project-sync",
       "version": "1.0.0",
       "category": "configuration",
       "enabled": true
     },
     {
-      "name": "yida-rule-sync",
-      "description": "宜搭规则同步工具（只读）。当用户说'同步规则'、'获取业务规则'、'导出规则'、'同步公式和联动'、'导出表单规则'时触发。从宜搭平台获取业务规则数据（公式、联动、校验、动作代码），生成系统规则清单文档。注意：本Skill是纯只读操作，绝不修改宜搭平台数据。说'同步配置'时触发 yida-config-sync，说'一站式同步'时触发 yida-project-sync。",
-      "path": ".agents/skills/yida-rule-sync",
+      "name": "rule-sync",
+      "description": "宜搭规则同步工具（只读）。当用户说'同步规则'、'获取业务规则'、'导出规则'、'同步公式和联动'、'导出表单规则'时触发。从宜搭平台获取业务规则数据（公式、联动、校验、动作代码），生成系统规则清单文档。注意：本Skill是纯只读操作，绝不修改宜搭平台数据。说'同步配置'时触发 config-sync，说'一站式同步'时触发 project-sync。",
+      "path": ".agents/skills/rule-sync",
       "version": "1.0.1",
       "category": "configuration",
       "enabled": true
     },
     {
-      "name": "yida-system-map",
+      "name": "system-map",
       "description": "当用户说'生成系统图谱'、'创建功能图谱'、'系统关系图'、'表单关系图'、'导出系统架构'时触发此skill。生成和维护宜搭系统功能图谱，单文件记录所有表单的7类重点功能。",
-      "path": ".agents/skills/yida-system-map",
+      "path": ".agents/skills/system-map",
       "version": "4.0.0",
       "category": "documentation",
       "enabled": true
     },
     {
-      "name": "yida-server-manager",
+      "name": "server-manager",
       "description": "宜搭服务管理器 - 一键启动和管理宜搭开发所需的本地服务。当用户需要启动宜搭原型页面访问服务、启动同步配置服务、检查服务状态、或遇到'同步服务未启动'、'同步配置按钮不能用'、'无法访问原型页面'等问题时，立即调用此skill。适用于所有宜搭应用的原型页面预览和配置同步场景。触发词：'启动宜搭服务'、'启动同步服务'、'启动HTTP服务'、'服务没启动'、'同步配置失败'、'启动原型页面服务'。",
-      "path": ".agents/skills/yida-server-manager",
+      "path": ".agents/skills/server-manager",
       "version": "2.2.0",
       "category": "server-management",
       "enabled": true
@@ -222,7 +255,7 @@
     },
     {
       "name": "data-clean",
-      "description": "宜搭表单数据清空专家。当用户说'清空数据'、'删除数据'、'清空表单数据'、'批量删除数据'、'清理数据'时触发。保留表单结构，仅删除数据记录。注意：仅当用户要求'清空'或'删除数据'时触发，说'测试数据'或'生成数据'时触发 yida-data-tester 而非本Skill。",
+      "description": "宜搭表单数据清空专家。当用户说'清空数据'、'删除数据'、'清空表单数据'、'批量删除数据'、'清理数据'时触发。保留表单结构，仅删除数据记录。注意：仅当用户要求'清空'或'删除数据'时触发，说'测试数据'或'生成数据'时触发 data-tester 而非本Skill。",
       "path": ".agents/skills/data-clean",
       "version": "1.0.0",
       "category": "data-management",
@@ -230,9 +263,9 @@
     },
     {
       "name": "integration",
-      "description": "宜搭集成自动化（逻辑流）管理工具。当用户说'集成自动化'、'创建自动化'、'逻辑流'、'创建逻辑流'、'自动化规则'、'表单触发'、'消息通知'、'连接器调用'时触发。通过API创建、修改、查询、启停集成自动化，支持表单事件触发、新增数据、获取单条/多条数据、连接器调用、消息通知等节点。",
+      "description": "宜搭集成自动化（逻辑流）管理工具。当用户说'集成自动化'、'创建自动化'、'逻辑流'、'创建逻辑流'、'自动化规则'、'表单触发'、'消息通知'、'连接器调用'、'获取自身'、'发起审批'、'体检逻辑流'、'检查自动化配置'时触发。通过API创建、修改、查询、启停集成自动化，支持表单事件触发、获取自身、获取单条/多条数据、新增数据、发起审批、连接器调用、消息通知等节点。自带保存前体检门禁（拦截占位符/空壳节点/空公式/断链），并可审计任意已有逻辑流（含其他AI/设计器创建的）。禁止手写 processJson/viewJson 或直调 saveProcess 接口。",
       "path": ".agents/skills/integration",
-      "version": "1.0.2",
+      "version": "2.5.0",
       "category": "automation",
       "enabled": true
     },
@@ -270,22 +303,128 @@
       "enabled": true
     },
     {
-      "name": "custom-page-designer",
-      "description": "【已废弃】已合并到统一的 custom-page Skill。请使用 custom-page 代替。",
-      "path": ".agents/skills/custom-page-designer",
-      "version": "1.6.0",
-      "category": "custom-page",
-      "tags": ["宜搭", "自定义页面", "已废弃"],
-      "enabled": false
+      "name": "business-rule",
+      "description": "宜搭表单业务关联规则（跨表高级函数）配置技能。当用户说'业务关联规则'、'表单事件公式执行'、'高级函数'、'INSERT'、'UPDATE'、'DELETE'、'UPSERT'、'跨表增删改'、'提交后改其他表'、'单据提交联动'时触发。使用 INSERT/UPDATE/DELETE/UPSERT 实现跨表新增/更新/删除。注意：区别于 integration（集成自动化/逻辑流）与 formula-generator（字段公式），本Skill专指表单设置→表单事件→公式执行里的业务关联规则高级函数。",
+      "path": ".agents/skills/business-rule",
+      "version": "3.0.1",
+      "category": "form-configuration",
+      "tags": ["宜搭", "业务关联规则", "高级函数", "跨表", "INSERT", "UPSERT", "表单事件"],
+      "enabled": true
     },
     {
-      "name": "custom-page-coder",
-      "description": "【已废弃】已合并到统一的 custom-page Skill。请使用 custom-page 代替。",
-      "path": ".agents/skills/custom-page-coder",
-      "version": "1.2.0",
+      "name": "auth-plus",
+      "description": "多策略登录认证工具，提供CDP浏览器登录、环境变量注入、终端二维码登录、Playwright降级等多种登录策略，支持Cookie环境隔离和组织切换。替代单一Playwright依赖，支持自动恢复和环境隔离。",
+      "path": ".agents/skills/auth-plus",
+      "version": "1.0.0",
+      "category": "authentication",
+      "tags": ["宜搭", "登录", "认证", "CDP", "Cookie"],
+      "enabled": true
+    },
+    {
+      "name": "connector",
+      "description": "宜搭 HTTP 连接器创建与管理。支持自然语言描述 API 创建连接器、cURL 智能解析、API 文档自动解析、连接器动作管理、连接账号管理和安全动作模板。当用户需要接入外部接口、配置鉴权、创建或管理连接器时触发。",
+      "path": ".agents/skills/connector",
+      "version": "1.0.0",
+      "category": "api-integration",
+      "tags": ["宜搭", "连接器", "HTTP", "外部接口", "鉴权"],
+      "enabled": true
+    },
+    {
+      "name": "data-backup",
+      "description": "宜搭应用数据备份工具。备份指定应用中所有表单的实例数据，支持 JSON 和 Excel 两种输出格式。当用户说'备份数据'、'导出数据'、'数据备份'时触发。注意：说'清空数据'时触发 data-clean，说'生成测试数据'时触发 data-tester。",
+      "path": ".agents/skills/data-backup",
+      "version": "1.0.0",
+      "category": "data-management",
+      "tags": ["宜搭", "数据备份", "导出数据", "JSON", "Excel"],
+      "enabled": true
+    },
+    {
+      "name": "er-diagram",
+      "description": "宜搭应用表单实体关系图（ER 图）生成器。从表单 Schema 中提取表单实体及其关联关系（子表/关联表单/数据联动），生成 mermaid 关系图和 JSON 结构化数据。当用户需要可视化表单间关系、梳理数据架构、发现孤立表单或循环依赖时触发。",
+      "path": ".agents/skills/er-diagram",
+      "version": "1.0.0",
+      "category": "documentation",
+      "tags": ["宜搭", "ER图", "表单关系", "mermaid", "数据架构"],
+      "enabled": true
+    },
+    {
+      "name": "publish-guard",
+      "description": "宜搭自定义页面发布守卫。在发布自定义页面之前检查线上是否有未同步改动、预览发布内容 diff、强制覆盖开关确认、发布后 health check。当用户需要发布页面、覆盖线上页面、或需要防止多人协作时的盲覆盖事故时触发。作为 publish-page.js 的前置检查层，不替换发布能力。",
+      "path": ".agents/skills/publish-guard",
+      "version": "1.0.0",
       "category": "custom-page",
-      "tags": ["宜搭", "自定义页面", "已废弃"],
-      "enabled": false
+      "tags": ["宜搭", "自定义页面", "发布", "守卫", "diff"],
+      "enabled": true
+    },
+    {
+      "name": "server-security",
+      "description": "宜搭本地服务安全加固补丁。以 Monkey-patch 方式接管 sync_server.js，不修改原文件任何代码：绑定 127.0.0.1、CORS 白名单、写接口 token 校验、清空数据二次确认。当用户说“安全加固”、“加固本地服务”、“服务安全补丁”、“启动加固服务”、“本地服务不安全”时触发此skill。适用于启动 sync_server.js 本地同步服务时防止外部访问、跨域滥用和误清空数据的场景。",
+      "path": ".agents/skills/server-security",
+      "version": "1.0.0",
+      "category": "server-management",
+      "tags": ["宜搭", "本地服务", "安全加固", "CORS", "token"],
+      "enabled": true
+    }
+  ],
+  "_disambiguationGroups_comment": "易混技能消歧组（集中负信号）。由 scripts/generate-skill-index.js 渲染为 README 《易混技能消歧表》。when=用户意图，use=应触发技能，not=易被误触发但不该用的技能",
+  "disambiguationGroups": [
+    {
+      "topic": "公式 / 代码 / 提示词 / 规则",
+      "rules": [
+        { "when": "写字段公式、报表公式、计算公式", "use": "formula-generator", "not": "code-expert / prompt-assistant" },
+        { "when": "写 JS 动作、字段校验、自动化脚本、自定义页面代码", "use": "code-expert", "not": "formula-generator / prompt-assistant" },
+        { "when": "只要生成规范提示词文件、不要直接出成品", "use": "prompt-assistant", "not": "code-expert / formula-generator" },
+        { "when": "跨表增删改（INSERT/UPDATE/DELETE/UPSERT）、单据提交后改其他表", "use": "business-rule", "not": "integration / formula-generator" },
+        { "when": "逻辑流、消息通知、定时触发、连接器调用等自动化", "use": "integration", "not": "business-rule" }
+      ]
+    },
+    {
+      "topic": "建项目 / 设计表单 / 生成表单",
+      "rules": [
+        { "when": "创建项目、新建 XX 系统（只建目录结构、不建表单）", "use": "project-creator", "not": "form_creator" },
+        { "when": "在某目录下设计表单字段（只改本地文档、不调用宜搭）", "use": "form_designer", "not": "form_creator" },
+        { "when": "生成表单、创建应用（真正生成宜搭表单并部署）", "use": "form_creator", "not": "form_designer / project-creator" }
+      ]
+    },
+    {
+      "topic": "测试 / 清空数据",
+      "rules": [
+        { "when": "测试表单、生成测试数据、批量插入数据、验证公式/校验规则", "use": "data-tester", "not": "js-action-tester / data-clean" },
+        { "when": "测试表单内 JS 动作代码、字段联动代码", "use": "js-action-tester", "not": "data-tester" },
+        { "when": "清空数据、删除数据、批量删除（保留表结构）", "use": "data-clean", "not": "data-tester" }
+      ]
+    },
+    {
+      "topic": "同步类（拉取宜搭→本地）",
+      "rules": [
+        { "when": "同步配置：应用ID、表单UUID、组件ID", "use": "config-sync", "not": "rule-sync / get-schema" },
+        { "when": "同步表单 Schema 结构、导出表单 JSON", "use": "get-schema", "not": "config-sync" },
+        { "when": "同步业务规则（公式/联动/校验/动作代码，只读）", "use": "rule-sync", "not": "config-sync" },
+        { "when": "一站式/一键/完整同步整个项目", "use": "project-sync", "not": "config-sync / rule-sync / get-schema" }
+      ]
+    },
+    {
+      "topic": "报表 / 数据集 / 数据准备",
+      "rules": [
+        { "when": "创建报表、图表、数据看板（可视化展示）", "use": "report", "not": "dataset / data-prep" },
+        { "when": "创建视图表、多表联合查询、把多表合成一表", "use": "dataset", "not": "data-prep / report" },
+        { "when": "可视化 ETL、数据加工/清洗/聚合、数据流", "use": "data-prep", "not": "dataset" }
+      ]
+    },
+    {
+      "topic": "原型 / 自定义页面",
+      "rules": [
+        { "when": "生成 HTML 原型、预览界面（不写真实页面代码）", "use": "form-to-prototype", "not": "custom-page" },
+        { "when": "写真实自定义页面 JSX 代码并发布到宜搭", "use": "custom-page", "not": "form-to-prototype" }
+      ]
+    },
+    {
+      "topic": "需求输入→字段清单",
+      "rules": [
+        { "when": "上传流程图/思维导图截图转字段清单", "use": "flow-to-form", "not": "excel-to-form / architect" },
+        { "when": "把 Excel 表格转字段清单 + 规则清单", "use": "excel-to-form", "not": "flow-to-form" },
+        { "when": "模糊业务需求要梳理成架构/字段/自动化规则", "use": "architect", "not": "flow-to-form / excel-to-form" }
+      ]
     }
   ],
   "settings": {
