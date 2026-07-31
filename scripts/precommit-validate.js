@@ -4,7 +4,7 @@ const { execFileSync, spawnSync } = require('child_process');
 
 /**
  * precommit-validate.js
- * 版本: v1.1.0
+ * 版本: v1.2.0
  *
  * 硬规则3-4（写入前/写入后必须校验）的确定性触发点。
  * 之前 check-before-write / check-after-write 依赖 AI/人工记得手动执行，
@@ -17,13 +17,18 @@ const { execFileSync, spawnSync } = require('child_process');
  *   追加执行 npm test 与 node scripts/validate-skill-config.js，失败则拦截提交。
  *   纯业务产出物提交（未命中代码路径）行为与旧版完全一致。
  *
+ * v1.2.0 逃生口审计留痕：
+ *   SKIP_YIDA_VALIDATE=1 必须同时提供 SKIP_YIDA_REASON（跳过原因），缺失则拒绝跳过、
+ *   照常执行校验；跳过成功时将时间/原因追加写入 logs/gate-bypass-audit.log。
+ *
  * 用法:
  *   node scripts/precommit-validate.js --staged        校验本次 git 暂存区中的业务产出物 + 代码门禁
  *   node scripts/precommit-validate.js --all           扫描整个工作区的业务产出物（业务目录多被 gitignore，CI/手动全量用这个）
  *   node scripts/precommit-validate.js <文件路径...>    校验指定文件
  *
  * 退出码: 0=全部通过, 1=存在违规（触发器应中断提交/流水线）
- * 逃生口: 设置环境变量 SKIP_YIDA_VALIDATE=1 可跳过（仅限用户明确批准的场景）
+ * 逃生口: 设置环境变量 SKIP_YIDA_VALIDATE=1 且提供 SKIP_YIDA_REASON=<原因> 可跳过
+ *        （仅限用户明确批准的场景，跳过记录写入审计日志）
  */
 
 const REPO_ROOT = path.resolve(__dirname, '..');
@@ -36,6 +41,7 @@ const {
   validateSerialPrefixes,
   validateFillRuleSyntax
 } = require('./ai-validator.js');
+const { appendGateBypassAudit } = require('../lib/core/gate-audit.js');
 
 // 工具/文档/缓存目录：其中的 md/json 合法包含 FORM-XXX、TODO 等示例占位符，
 // 属于技能源码而非业务产出物，不在硬规则3-4校验范围内
@@ -164,8 +170,21 @@ function validateFile(relPath) {
 
 function main() {
   if (process.env.SKIP_YIDA_VALIDATE === '1') {
-    console.log('⚠️  SKIP_YIDA_VALIDATE=1，已跳过硬规则3-4校验（仅限用户明确批准的场景）');
-    return;
+    const skipReason = (process.env.SKIP_YIDA_REASON || '').trim();
+    if (!skipReason) {
+      console.error('⛔ SKIP_YIDA_VALIDATE=1 但未提供 SKIP_YIDA_REASON（跳过原因），拒绝跳过，继续执行校验。');
+      console.error('   跳过用法: SKIP_YIDA_VALIDATE=1 SKIP_YIDA_REASON="<原因>" git commit ...');
+    } else {
+      const auditPath = appendGateBypassAudit({
+        gate: 'SKIP_YIDA_VALIDATE',
+        script: 'scripts/precommit-validate.js',
+        args: process.argv.slice(2).join(' ') || '--staged',
+        reason: skipReason
+      });
+      console.log(`⚠️  SKIP_YIDA_VALIDATE=1，已跳过硬规则3-4校验（原因: ${skipReason}）`);
+      console.log(`   审计留痕已写入: ${path.relative(REPO_ROOT, auditPath)}`);
+      return;
+    }
   }
 
   const args = process.argv.slice(2);
@@ -223,7 +242,7 @@ function main() {
   if (codeGateNeeded) {
     console.log('\n🚧 暂存变更命中代码路径（.agents/**/*.js、lib/**、scripts/**、tests/**），追加执行代码门禁');
     if (!runCodeQualityGate()) {
-      console.error('\n⛔ 代码门禁未通过，已拦截提交。修复后重试，或经用户明确批准后使用 SKIP_YIDA_VALIDATE=1 跳过。');
+      console.error('\n⛔ 代码门禁未通过，已拦截提交。修复后重试，或经用户明确批准后使用 SKIP_YIDA_VALIDATE=1 并提供 SKIP_YIDA_REASON=<原因> 跳过。');
       process.exitCode = 1;
     } else {
       console.log('\n✅ 代码门禁通过（npm test + validate-skill-config）');
