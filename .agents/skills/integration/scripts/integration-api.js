@@ -40,14 +40,21 @@ async function getFormSchema(authRef, params) {
   // 鲁棒采集：只要节点带 props.fieldId 就视为字段收集；无论是否布局容器，只要有 children 就递归。
   // （旧逻辑靠 layoutTypes 白名单递归 → 遇到不在名单里的容器（如流程表单某些包裹/子表）就停止递归，
   //   导致 childList 只拿到外层包裹节点（无 fieldId）→ 新增/更新数据节点字段谱为空 → 设计器报“无效表单”。）
-  function collectFields(children) {
+  function collectFields(children, parentLabel) {
     for (const child of children) {
       if (!child || typeof child !== 'object') continue;
       if (child.props && child.props.fieldId) {
+        // 添加 __parentLabel 元数据，用于公式 __display 构建 "子表名.字段名"
+        if (parentLabel) {
+          child.props.__parentLabel = parentLabel;
+        }
         fieldComponents.push(child);
       }
       if (Array.isArray(child.children) && child.children.length > 0) {
-        collectFields(child.children);
+        // 子表容器(TableField)的 label 作为子表字段的 parentLabel
+        const childLabel = child.props && child.props.label;
+        const labelText = typeof childLabel === 'object' ? (childLabel.zh_CN || childLabel.en_US) : childLabel;
+        collectFields(child.children, labelText || parentLabel);
       }
     }
   }
@@ -55,7 +62,7 @@ async function getFormSchema(authRef, params) {
   for (const page of pages) {
     const rootNode = page.componentsTree && page.componentsTree[0];
     if (rootNode && Array.isArray(rootNode.children)) {
-      collectFields(rootNode.children);
+      collectFields(rootNode.children, null);
     }
   }
 

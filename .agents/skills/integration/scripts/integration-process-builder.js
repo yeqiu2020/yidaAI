@@ -349,10 +349,18 @@ function buildProcessJson(options) {
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
+    // 数据来源类型：form(默认,从表单查询) 或 subform(从触发数据子表获取)
+    // bundle 验证：originalType="sub_table" 时 sourceId="#{formUuid}"，subSourceId=子表字段ID
+    dataSourceType, dataSubFieldId,
+    // 循环体内更新数据节点（用于 --cycle + --cycle-update-form-uuid 组合）
+    // 场景：遍历触发子表行，逐行 UPSERT 目标表单记录
+    cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments,
+    cycleUpdateNoneOperation, cycleUpdateDataNodeId,
   } = options;
 
   const hasAddDataNode = Boolean(addDataFormUuid);
-  const hasDataNode = Boolean(dataFormUuid);
+  // subform 模式下即使没有 dataFormUuid 也需要创建 GetBatchDataNode 从触发子表获取数据
+  const hasDataNode = Boolean(dataFormUuid) || dataSourceType === 'subform';
   const hasInitiateApprovalNode = Boolean(initiateApprovalFormUuid);
   const hasUpdateDataNode = Boolean(updateFormUuid);
   const hasDeleteNode = Boolean(hasDeleteDataNode);
@@ -360,6 +368,7 @@ function buildProcessJson(options) {
   const hasScript = Boolean(hasScriptNode);
   const hasCondition = Boolean(hasConditionNode);
   const hasCycle = Boolean(hasCycleNode);
+  const hasCycleUpdateNode = Boolean(cycleUpdateFormUuid) && Boolean(cycleUpdateDataNodeId);
   const normalizedConnectorMode = resolveConnectorMode(connectorId, connectorMode);
   const connectorProcessType = normalizedConnectorMode === 5 ? 'httpConnector' : 'innerConnector';
   const includeMessageNode = hasMessageNode !== false;
@@ -503,6 +512,9 @@ function buildProcessJson(options) {
   ];
 
   // 获取单条/多条数据节点（可选）
+  // bundle 验证（0.2.241）：originalType 合法值含 form/process/process_form/node/association/sub_table/data_service
+  //   originalType="sub_table" 时：sourceId="#{触发表formUuid}"，subSourceId=触发子表字段ID(tableField_xxx)
+  //   用于从触发数据子表获取多条数据，配合 CycleContainer 逐行处理
   if (hasDataNode && dataNodeId) {
     const conditions = dataConditions && dataConditions.length > 0
       ? buildDataRetrieveCondition(dataConditions)
@@ -510,6 +522,11 @@ function buildProcessJson(options) {
 
     const dataRetrieveQuantity = dataQueryIsMultiple ? String(dataQuantity || 100) : '1';
     const dataRetrieveNextId = nextAfter('dataRetrieve');
+
+    const isSubformSource = dataSourceType === 'subform';
+    const dataOriginalType = isSubformSource ? 'sub_table' : 'form';
+    const dataSourceIdValue = isSubformSource ? `#{${formUuid}}` : dataFormUuid;
+    const dataSubSourceIdValue = isSubformSource ? (dataSubFieldId || '') : '';
 
     nodes.push({
       name: { zh_CN: dataQueryIsMultiple ? '获取多条数据' : '获取单条数据', en_US: '' },
@@ -523,10 +540,10 @@ function buildProcessJson(options) {
         type: dataQueryIsMultiple ? 'batch' : 'single',
         filterType: 'condition',
         sort: { type: 'none', column: '' },
-        sourceId: dataFormUuid,
-        appType,
-        originalType: 'form',
-        subSourceId: '',
+        sourceId: dataSourceIdValue,
+        appType: isSubformSource ? '' : appType,
+        originalType: dataOriginalType,
+        subSourceId: dataSubSourceIdValue,
         condition: conditions,
         quantity: dataRetrieveQuantity,
         dataRules: {
@@ -814,29 +831,63 @@ function buildProcessJson(options) {
     };
   }
 
+  // 循环体内更新数据节点（可选）
+  // 场景：遍历触发子表行（通过 GetBatchDataNode originalType=sub_table 获取），
+  //   循环体内逐行 UPSERT 目标表单记录（如：触发表子表各行 → 各自对应的目标表主表记录）
+  // ⚠️ processJson props 必须扁平展开 updateDataRules（与主链 UpdateDataNode 一致，bundle Jb）
+  //   循环体末节点 nextId 回指容器自身形成回环（Fb）
+  let cycleUpdateNode = null;
+  if (hasCycleUpdateNode && cycleUpdateDataNodeId) {
+    const cycleUpdateMainCondition = buildUpdateConditions(cycleUpdateConditions || []);
+    cycleUpdateNode = {
+      name: { zh_CN: '更新数据', en_US: '' },
+      description: '请设置要更新的数据',
+      type: 'dataUpdate',
+      nodeId: cycleUpdateDataNodeId,
+      prevId: '',
+      nextId: [cycleNodeId],
+      props: {
+        type: 'direct_form',
+        sourceId: cycleUpdateFormUuid,
+        subSourceId: '',
+        condition: cycleUpdateMainCondition,
+        subCondition: {},
+        assignments: buildDataUpdateAssignments(cycleUpdateAssignments || []),
+        noneOperation: cycleUpdateNoneOperation || 'add',
+        rulesFilter: cycleUpdateMainCondition.rules || [],
+        tableRulesFilter: [],
+      },
+      childNodes: [],
+    };
+  }
+
   // 循环容器（可选）
   // ⚠️ 权威结构源于 bundle Jct/Yct/ny/Fb：
   //   CycleContainer -> type "foreach"；nextId = [第一个子节点id, 下一个兄弟节点id]，额外有 jumpId = 下一个兄弟节点id
   //   props = viewJson 的 cycleContainerRules 直接透传（ny）：{ sourceId: 前置获取多条节点id, blockType, outputs }
   //   循环体末节点 nextId 回指容器自身形成回环（Fb）
   if (hasCycle && cycleNodeId) {
+    // 循环体节点：优先更新数据节点，其次消息通知节点
+    const cycleBodyNode = cycleUpdateNode || messageNode;
     nodes.push({
       name: { zh_CN: '循环', en_US: '' },
       description: '',
       type: 'foreach',
       nodeId: cycleNodeId,
       prevId: '',
-      nextId: [messageNodeId, endNodeId],
+      nextId: cycleBodyNode ? [cycleBodyNode.nodeId, endNodeId] : [endNodeId],
       jumpId: endNodeId,
       props: {
         sourceId: dataNodeId,
         blockType: 'continue',
         outputs: [],
       },
-      childNodes: messageNode ? [messageNode] : [],
+      childNodes: cycleBodyNode ? [cycleBodyNode] : [],
     });
   } else if (messageNode) {
     nodes.push(messageNode);
+  } else if (cycleUpdateNode) {
+    nodes.push(cycleUpdateNode);
   }
 
   nodes.push({

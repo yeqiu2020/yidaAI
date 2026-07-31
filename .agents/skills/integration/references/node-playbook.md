@@ -66,12 +66,61 @@
 13. **🔴 `ConnectorNode.connectorRules.currentStep` 必须为 2（向导已完成态）**：view-builder 之前硬编码 `currentStep: 1`，导致设计器校验判定「请完善连接器节点配置」，保存被前端拦截（只弹 toast，不发 saveProcess POST）。修复：`currentStep: 2`（2026-07-28 组合场景D实测并修复）。
 14. **🔴 连接器入参若为 `EmployeeField`/`DepartmentField`/`DepartmentSelectField` 类型，其 `literal` 值必须是 `[{id, name}]` 数组，不能是普通字符串**：设计器保存序列化器（bundle `qb`）对这三类组件的 `literal` 值直接调用 `value.map(e=>e.id)`，传字符串会抛 `t.map is not a function`，保存静默失败（无 toast、无 POST，2026-07-28 组合场景D实测）。修复：`connector-presets.js` 的 `buildConnectorRulesFromInputs` 在设置 value 时，对人员/部门字段的字符串值自动包装为 `[{id: val, name: val}]` 数组。
 15. **🔴 连接器节点 6 项必填入参（以钉钉待办为例）**：`unionId`(任务所有者)、`subject`(标题)、`creatorId`(待办发布者)、`dueTime`(截止时间Unix毫秒)、`priority`(优先级)、`executorIds`(执行人)。只映射部分入参 → 设计器校验拦截保存。缺字段可通过 bundle `ConnectorDataSetter` 的 `validateRequiredInputs` 找到。
+16. **🔴🔴 公式赋值三字段格式（viewJson `assignments[]`，`valueType=column` 时）— 6 个历史踩坑全部修复**：
+    - **背景**：公式赋值在 viewJson 中需要同时写 `__display`、`__source`、`value` 三个字段。bundle 逆向确认：`__display` 给设置面板 `<Input>` 显示；`__source` 给公式编辑器弹窗 CodeMirror 重建状态；`value` 给执行引擎。
+    - **正确格式**（照抄，不要自由发挥）：
+      ```
+      __display = "目标表字段.库存数量+入库明细.入库数量"   ← 纯文本字符串
+      __source  = "#{FORM-xxx/fieldId}+#{fieldId}"        ← 与 CLI 传入公式完全相同
+      value     = "#{FORM-xxx/fieldId}+#{fieldId}"        ← 与 __source 完全相同
+      ```
+    - **6 个踩坑（每个都实际发生过）**：
+      1. `__display` 存成 JS 对象 → 设置面板显示 `[object Object]`
+      2. `__display` 存成 `JSON.stringify({...})` 字符串 → 设置面板显示 JSON 原文
+      3. `__source` 缺失 → 公式编辑器弹窗空白（无法重建编辑器状态）
+      4. `__source` 触发表单字段加 `//` 后缀 → 弹窗标记 `invalid:true` 显示"无效字段"
+      5. `__source` 跨表引用用 `//`（双斜杠）而非 `/`（单斜杠）→ 验证器报"二元表达式操作符+的左参数类型不合法"
+      6. `value` 做点号转换（`#{FORM-xxx}.fieldId`）→ 多余且与 `__source` 不一致
+    - **根因**：bundle `parseListFieldsToVars` 中 `formSuffix = "Object"===type ? "//" : "targetForm"===type ? "/" : ""`。direct_form 模式下目标表单是 `targetForm` 类型，formSuffix 是 `/`（单斜杠），不是 `//`。`handleDialogEnter` 的 value 转换只处理 `//`，不处理 `/`，所以单斜杠格式原样保留到 `value`。
+    - ✅ 已修复：`buildFormulaFields()` 函数直接用原始公式作为 `__source` 和 `value`，只替换 `#{...}` 为字段名生成 `__display` 纯文本。
 
 ---
 
-## 2. ★★★ 黄金配方：子表"逐行匹配更新"累加（direct_form，已上线验证）
+## 2. ★★★ 黄金配方：direct_form 直接更新（已上线验证，覆盖 90% 同步场景）
 
-**业务场景**：A 表提交完成后，把 A 子表各行的某数量，按行匹配累加到 B 表子表对应行的字段（如：采购入库 → 累加更新 采购订单.采购明细.已入库数量）。B 是流程表单不能用业务规则，故用集成自动化。
+> **⚠️ 方案选择铁律**：数据同步场景默认用 direct_form（直接更新），3 节点搞定。
+> 只有"触发表子表各行→各自对应的目标表主表记录"才需要循环容器（5 节点）。
+> 详见 SKILL.md 方案选择决策树。**历史上曾有 AI 把"采购入库同步库存"误用循环容器，实际只需 direct_form 直接更新。**
+
+### 2a. 主表直接更新（最常用，如：审批通过后同步更新目标表）
+
+**业务场景**：A 表审批通过后，按主表字段匹配 B 表主表记录，累加更新数量，未匹配则新增（upsert）。
+
+**最简架构（3 节点）**：
+`StartNode(A表·processFinish审批通过)` → `UpdateDataNode(direct_form 直接更新主表)` → `EndNode`
+
+**CLI 命令**：
+```bash
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后同步更新" \
+  --events processFinish --approval-actions agree \
+  --update-form-uuid FORM-TARGET \
+  --update-condition "textField_target_key1:目标匹配字段1:textField_trig_key1:TextField:Equal::processVar" \
+  --update-condition "textField_target_key2:目标匹配字段2:textField_trig_key2:TextField:Equal::processVar" \
+  --update-assignment "numberField_target_val:column:#{FORM-TARGET/numberField_target_val}+#{numberField_trig_val}" \
+  --update-assignment "textField_target_key1:processVar:textField_trig_key1" \
+  --update-assignment "textField_target_key2:processVar:textField_trig_key2" \
+  --update-none-operation add
+```
+
+**关键点**：
+- 不需要 `--update-sub-source-id`（主表更新没有子表）
+- 不需要 `--update-sub-condition`（主表更新没有子条件）
+- 不需要获取节点、不需要循环容器
+- `--update-none-operation add` = 未匹配时新增（upsert）
+
+### 2b. 子表逐行匹配更新（如：采购入库.入库明细→采购订单.采购明细.已入库数量）
+
+**业务场景**：A 表提交完成后，把 A 子表各行的某数量，按行匹配累加到 B 表子表对应行的字段。B 是流程表单不能用业务规则，故用集成自动化。
 
 **最简架构（3 节点，无需 GetSingle / JavaScript）**：
 `StartNode(A表·processFinish提交完成)` → `UpdateDataNode(直接更新·子表)` → `EndNode`
@@ -117,9 +166,10 @@
 - `condition` = 主条件（定位主表记录）；`subCondition` = 子条件（引擎对触发子表数组**逐行迭代匹配**）；`assignments` = 更新赋值；`noneOperation` = 未匹配到时 `ignored`跳过 / `add`新增。
 
 **公式编码规则（关键，写错就取不到值）**：
-- 跨表引用目标表字段 = `#{<目标formUuid>/<fieldId>}`（**带 formUuid 前缀**）
+- 跨表引用目标表字段 = `#{<目标formUuid>/<fieldId>}`（**带 formUuid 前缀，单斜杠 `/`**）
 - 引用触发数据字段 = `#{<fieldId>}`（当前触发表单，**无前缀**）
 - `assignments[].valueType="column"` 表示该值是公式；累加即 `#{目标/已入库}+#{触发/入库数量}`
+- ⚠️ **viewJson 三字段**：`__display`=`"目标表字段.字段名+触发字段名"`（纯文本）；`__source` 和 `value` 都 = 原始公式（与 CLI 传入完全相同，不做任何转换）。详见避坑清单第 16 条。
 
 **设计器四步配置（Playwright/手动路径）**：
 1. 选更新方式：◉ 直接更新表单数据；选「子表」→ 选目标表单 → 选子表（树形：采购订单→采购明细）

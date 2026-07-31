@@ -3,6 +3,7 @@
 const path = require('path');
 const coreUtils = require('../../../../lib/core/utils');
 const { loadCookieData, resolveBaseUrl } = coreUtils;
+const { appendGateBypassAudit } = require('../../../../lib/core/gate-audit');
 const { triggerLogin } = require(path.resolve(__dirname, '../../api-client/scripts/api_client'));
 const { generateNodeId } = require('./integration-node-ids');
 const { getFormSchema, getFormType, createLogicflow, saveProcess } = require('./integration-api');
@@ -109,6 +110,12 @@ async function run(args) {
     console.error('  --branch-condition <cond>          条件分支条件（可多次，格式fieldId:fieldName:opCode:value[:componentType[:valueType]]）');
     console.error('  --branch-logic <and|or>            条件分支多条件之间的逻辑（默认and）');
     console.error('  --cycle                            循环容器(CycleContainer)：需--data-query-type multiple，循环体为消息节点');
+    console.error('  --data-source-type <type>          获取数据来源: form(默认,表单查询)/subform(触发子表)');
+    console.error('  --data-sub-field-id <fieldId>      子表来源时的触发子表字段ID(tableField_xxx)');
+    console.error('  --cycle-update-form-uuid <uuid>    循环体内更新数据目标表单(逐行UPSERT)');
+    console.error('  --cycle-update-condition <cond>    循环体更新主条件(可多次,格式同--update-condition)');
+    console.error('  --cycle-update-assignment <assign> 循环体更新赋值(可多次,格式同--update-assignment)');
+    console.error('  --cycle-update-none-operation <op>  循环体未匹配处理: ignored/add(默认add=upsert)');
     console.error('  --connector-id <id>               连接器ID');
     console.error('  --action-id <id>                   连接器动作ID');
     console.error('  --connector-name <name>            连接器名称');
@@ -119,6 +126,8 @@ async function run(args) {
     console.error('  --connector-inputs <path>          连接器入参schema文件');
     console.error('  --connector-assignment <assign>     连接器入参映射（可多次）');
     console.error('  --publish                          创建后直接发布');
+    console.error('  --force-save                       跳过保存前体检门禁（仅限用户明确批准，写入审计日志）');
+    console.error('  --force-save-reason <reason>       跳过门禁的原因（随审计日志留痕）');
     process.exit(0);
   }
 
@@ -143,8 +152,9 @@ async function run(args) {
   const approvalNodeIdsRaw = parseFlag(subArgs, '--approval-node-ids') || '';
   const triggerRecursively = hasFlag(subArgs, '--trigger-recursively');
   const shouldPublish = hasFlag(subArgs, '--publish');
-  // 保存前体检门禁的逃生口：仅限人工确认过的特殊场景
+  // 保存前体检门禁的逃生口：仅限人工确认过的特殊场景（生效时写入审计日志）
   const forceSave = hasFlag(subArgs, '--force-save');
+  const forceSaveReason = (parseFlag(subArgs, '--force-save-reason') || '').trim();
 
   // 获取自身节点参数
   const getSelf = hasFlag(subArgs, '--get-self');
@@ -199,6 +209,9 @@ async function run(args) {
   const dataFormUuid = getSelf ? formUuid : (parseFlag(subArgs, '--data-form-uuid') || null);
   const dataQueryType = parseFlag(subArgs, '--data-query-type') || 'single';
   const dataQuantity = parseInt(parseFlag(subArgs, '--data-quantity') || '100', 10);
+  // 数据来源类型：form(默认,从指定表单查询) 或 subform(从触发数据子表获取)
+  const dataSourceType = parseFlag(subArgs, '--data-source-type') || 'form';
+  const dataSubFieldId = parseFlag(subArgs, '--data-sub-field-id') || '';
 
   const dataConditions = [];
   if (getSelf) {
@@ -310,6 +323,13 @@ async function run(args) {
   if (updateFormUuid && updateSubSourceId && updateSubConditions.length === 0) {
     console.error('警告: 子表更新建议提供 --update-sub-condition，否则子表每行都会命中');
   }
+
+  // 循环体内更新数据节点参数（用于 --cycle + --cycle-update-form-uuid 组合）
+  // 场景：遍历触发子表行，逐行 UPSERT 目标表单记录
+  const cycleUpdateFormUuid = parseFlag(subArgs, '--cycle-update-form-uuid') || null;
+  const cycleUpdateConditions = parseUpdateConditionList('--cycle-update-condition');
+  const cycleUpdateAssignments = parseAssignments(subArgs, '--cycle-update-assignment');
+  const cycleUpdateNoneOperation = (parseFlag(subArgs, '--cycle-update-none-operation') || 'ignored') === 'add' ? 'add' : 'ignored';
 
   // 删除数据节点参数（官方语义：删除前必须先用获取数据节点拿到数据）
   const hasDeleteDataNode = hasFlag(subArgs, '--delete-data');
@@ -426,15 +446,21 @@ async function run(args) {
 
   const hasMessageNode = receiverUserIds.length > 0 || userFields.length > 0;
 
-  // 循环容器（CycleContainer）：以前置获取多条节点为数据源，循环体为消息通知节点
+  // 循环容器（CycleContainer）：以前置获取多条节点为数据源，循环体为消息通知节点或更新数据节点
   const hasCycleNode = hasFlag(subArgs, '--cycle');
+  const hasCycleUpdateNode = Boolean(cycleUpdateFormUuid);
   if (hasCycleNode) {
-    if (!dataFormUuid || dataQueryType !== 'multiple') {
+    if (dataSourceType === 'subform') {
+      if (!dataSubFieldId) {
+        console.error('错误: --data-source-type subform 时必须提供 --data-sub-field-id <子表字段ID>');
+        process.exit(1);
+      }
+    } else if (!dataFormUuid || dataQueryType !== 'multiple') {
       console.error('错误: --cycle 需要前置获取多条数据节点，请同时提供 --data-form-uuid 和 --data-query-type multiple');
       process.exit(1);
     }
-    if (!hasMessageNode) {
-      console.error('错误: --cycle 的循环体为消息通知节点，请同时提供 --receivers 或 --user-fields（循环体为空会报 EMPTY_CycleContainer）');
+    if (!hasMessageNode && !hasCycleUpdateNode) {
+      console.error('错误: --cycle 的循环体需要消息通知节点或更新数据节点，请提供 --receivers/--user-fields 或 --cycle-update-form-uuid');
       process.exit(1);
     }
   }
@@ -447,7 +473,8 @@ async function run(args) {
   // 生成节点 ID（顺序：canvasId, trigger, dataRetrieve, addData, initiateApproval, updateData, deleteData, script, connector, condition, message, end）
   const canvasId = generateNodeId();
   const triggerNodeId = generateNodeId();
-  const dataNodeId = dataFormUuid ? generateNodeId() : null;
+  // subform 模式下即使没有 dataFormUuid 也需要创建 GetBatchDataNode 从触发子表获取数据
+  const dataNodeId = (dataFormUuid || dataSourceType === 'subform') ? generateNodeId() : null;
   const addDataNodeId = addDataFormUuid ? generateNodeId() : null;
   const initiateApprovalNodeId = initiateApprovalFormUuid ? generateNodeId() : null;
   const updateDataNodeId = updateFormUuid ? generateNodeId() : null;
@@ -458,6 +485,7 @@ async function run(args) {
   // 条件分支子节点ID（不入 nodeIds 序列，经 options 传入两个 builder 保证 process/view 一致）
   const conditionBranchIds = hasConditionNode ? { yes: generateNodeId(), fallback: generateNodeId() } : null;
   const cycleNodeId = hasCycleNode ? generateNodeId() : null;
+  const cycleUpdateDataNodeId = hasCycleUpdateNode ? generateNodeId() : null;
   const messageNodeId = hasMessageNode ? generateNodeId() : null;
   const endNodeId = generateNodeId();
 
@@ -705,6 +733,46 @@ async function run(args) {
     }
   }
 
+  // 获取循环体内更新数据的目标表单 Schema
+  let cycleUpdateFormSchema = [];
+  // 触发表单 Schema（用于 __display 中将触发字段ID替换为字段名称）
+  let triggerFormSchema = [];
+  if (cycleUpdateFormUuid) {
+    try {
+      stepLog('获取循环更新目标表单Schema');
+      cycleUpdateFormSchema = await getFormSchema(authRef, { appType, formUuid: cycleUpdateFormUuid.toString() });
+      console.error('获取Schema成功: ' + cycleUpdateFormSchema.length + ' 个字段');
+    } catch (error) {
+      console.error('获取Schema失败: ' + error.message + '（继续执行）');
+    }
+    // subform 模式下公式中会引用触发表单的子表字段，需要触发表单 Schema 来构建 __display
+    if (dataSourceType === 'subform') {
+      try {
+        stepLog('获取触发表单Schema');
+        triggerFormSchema = await getFormSchema(authRef, { appType, formUuid: formUuid.toString() });
+        console.error('触发表单Schema成功: ' + triggerFormSchema.length + ' 个字段');
+      } catch (error) {
+        console.error('触发表单Schema失败: ' + error.message + '（继续执行）');
+      }
+    }
+  }
+
+  // 公式赋值中引用了触发表单字段时，需要触发表单 Schema 来构建 __display（CodeMirror marks）
+  // 适用于 direct_form 更新和循环更新两种场景
+  if (updateFormUuid && triggerFormSchema.length === 0) {
+    const hasFormulaAssignment = (updateAssignments || []).some(a => a.valueType === 'column')
+      || (cycleUpdateAssignments || []).some(a => a.valueType === 'column');
+    if (hasFormulaAssignment) {
+      try {
+        stepLog('获取触发表单Schema');
+        triggerFormSchema = await getFormSchema(authRef, { appType, formUuid: formUuid.toString() });
+        console.error('触发表单Schema成功: ' + triggerFormSchema.length + ' 个字段');
+      } catch (error) {
+        console.error('触发表单Schema失败: ' + error.message + '（继续执行）');
+      }
+    }
+  }
+
   // 批量新增数据源：'get' 表示前置获取节点（取其画布 id），否则为触发表子表字段ID
   let addDataSourceId = addDataSourceIdRaw;
   if (addDataSourceIdRaw === 'get') {
@@ -752,6 +820,8 @@ async function run(args) {
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
+    dataSourceType, dataSubFieldId,
+    cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments, cycleUpdateNoneOperation, cycleUpdateDataNodeId,
     connectorId: connectorIdArg, actionId: actionIdArg,
     connectorAssignments, connectorDescription: connectorNameArg || undefined,
     connectorMode: connectorModeArg, connectionId: connectionIdArg,
@@ -778,6 +848,10 @@ async function run(args) {
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
+    dataSourceType, dataSubFieldId,
+    cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments, cycleUpdateNoneOperation, cycleUpdateDataNodeId,
+    cycleUpdateFormSchema,
+    triggerFormSchema,
     connectorId: connectorIdArg, actionId: actionIdArg,
     connectorAssignments, connectorName: connectorNameArg,
     connectorDisplayName: connectorDisplayNameArg,
@@ -807,6 +881,16 @@ async function run(args) {
       process.exit(1);
     }
     console.error('⚠️ --force-save 已指定，跳过体检门禁继续保存');
+    const auditPath = appendGateBypassAudit({
+      gate: 'integration-create --force-save',
+      processCode,
+      appType,
+      formUuid,
+      flowName,
+      errorCount: validation.errors.length,
+      reason: forceSaveReason || '(未提供原因)',
+    });
+    console.error('审计留痕已写入: ' + auditPath);
   }
 
   // Step: 保存逻辑流（草稿）

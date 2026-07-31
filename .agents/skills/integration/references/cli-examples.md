@@ -2,9 +2,45 @@
 
 > 本文件从 SKILL.md 拆分而来（渐进式披露）。按需加载：组装 `integration-create.js` 复杂参数、或使用 list/check/get/validate 的进阶选项时查阅。参数逐项说明见 SKILL.md「六、使用方式」参数表。
 
+## 0. ★ 方案选择决策树（选错方案=白建逻辑流，务必先看）
+
+```
+触发单据审批通过后，需要同步更新另一张表的数据？
+├─ 触发表单【主表字段】→ 目标表单【主表字段】（如：采购入库主表→库存信息主表）
+│  ✅ 首选方案：direct_form 直接更新（3 节点：触发→更新→结束）
+│     --update-form-uuid + --update-condition + --update-assignment + --update-none-operation add
+│     ⚠️ 禁止用循环容器！直接更新引擎自动处理，无需获取节点、无需循环
+│
+├─ 触发表单【子表行】→ 目标表单【子表行】（如：采购入库.入库明细→采购订单.采购明细.已入库数量）
+│  ✅ 首选方案：direct_form 子表更新（3 节点：触发→更新→结束）
+│     --update-sub-source-id + --update-condition + --update-sub-condition + --update-assignment
+│     ⚠️ 禁止用循环容器！引擎对子表数组逐行迭代匹配，无需手动循环
+│
+├─ 触发表单【子表行】→ 目标表单【主表记录】（如：采购入库.入库明细各行→各自对应的库存信息主表记录）
+│  ⚠️ 仅此场景才用循环容器（5 节点：触发→获取多条→循环→循环体内更新→结束）
+│     --data-source-type subform + --cycle + --cycle-update-*
+│     ❗ 这是唯一需要循环容器的场景，其他场景一律用 direct_form
+│
+└─ 不确定？默认用 direct_form（直接更新），能覆盖 90% 的同步场景
+```
+
 ## 1. integration-create.js 创建示例
 
 ```bash
+# ★★★ 黄金配方：审批通过后同步更新目标表（direct_form 直接更新，最常用、最简方案）
+# 通用模式：A表审批通过 → 按条件匹配B表记录 → 目标字段公式累加 → 未匹配则新增(upsert)
+# 架构：3 节点（触发→更新→结束），不需要获取节点、不需要循环容器
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后同步更新" \
+  --events processFinish --approval-actions agree \
+  --update-form-uuid FORM-TARGET \
+  --update-condition "textField_target_key1:目标匹配字段1:textField_trig_key1:TextField:Equal::processVar" \
+  --update-condition "textField_target_key2:目标匹配字段2:textField_trig_key2:TextField:Equal::processVar" \
+  --update-assignment "numberField_target_val:column:#{FORM-TARGET/numberField_target_val}+#{numberField_trig_val}" \
+  --update-assignment "textField_target_key1:processVar:textField_trig_key1" \
+  --update-assignment "textField_target_key2:processVar:textField_trig_key2" \
+  --update-none-operation add \
+  --publish
+
 # 创建简单的消息通知自动化（数据创建时通知指定用户）
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "新数据通知" \
   --events insert \
@@ -131,10 +167,19 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
   --branch-field textField_xxx --branch-operator Equal --branch-value "张三" --branch-field-name "姓名" \
   --receivers "user001"
 
-# 创建带循环容器的自动化（循环体=消息节点，逐条发通知）
-node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "循环通知" \
-  --data-form-uuid FORM-YYY --data-query-type multiple --cycle \
-  --receivers "user001"
+# ⚠️ 循环容器（仅限：触发表子表各行 → 各自对应的目标表主表记录，每行需独立 UPSERT）
+# ❗ 这是唯一需要循环容器的场景！库存同步等常见场景请用上面的 direct_form 黄金配方
+# bundle 验证：GetBatchDataNode originalType=sub_table 从触发子表获取多条数据
+# CycleContainer 遍历每行，循环体内 UpdateDataNode 逐行 UPSERT 目标表单
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "子表逐行入库" \
+  --events processFinish --approval-actions agree \
+  --data-form-uuid FORM-XXX --data-query-type multiple \
+  --data-source-type subform --data-sub-field-id tableField_sub \
+  --cycle \
+  --cycle-update-form-uuid FORM-ZZZ \
+  --cycle-update-condition "textField_target:目标匹配字段:textField_sub_trig" \
+  --cycle-update-assignment "numberField_qty:column:#{FORM-ZZZ/numberField_qty}+#{numberField_sub_src}" \
+  --cycle-update-none-operation add
 
 # 创建并直接发布
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "发布流程" \

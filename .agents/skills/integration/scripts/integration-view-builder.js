@@ -18,6 +18,93 @@ const {
   buildFallbackInputsFromAssignments,
 } = require('./connector-presets');
 
+const ZWSP = '\u200b';
+
+/**
+ * 构建公式赋值的三个显示字段：__display（纯文本）、__source、value
+ *
+ * bundle 逆向结论（parseListFieldsToVars + handleDialogEnter + renderInputArea）：
+ *
+ *   formSuffix = "Object"===type ? "//" : "targetForm"===type ? "/" : ""
+ *
+ * direct_form 模式下目标表单 = targetForm 类型 → formSuffix = "/"（单斜杠）
+ *   所以 __source 中跨表引用 = "#{FORM-xxx/fieldId}"（单斜杠，与 CLI 传入格式一致）
+ *   触发表单字段 formSuffix = "" → __source 中 = "#{fieldId}"（无后缀）
+ *
+ *   __source  = "#{FORM-xxx/fieldId}+#{fieldId}"  — 直接用原始公式，不做任何转换
+ *   __display = "目标表字段.库存数量+入库明细.入库数量"  — 纯文本（renderInputArea 传给 <Input value>）
+ *   value     = "#{FORM-xxx/fieldId}+#{fieldId}"  — 与 __source 相同（handleDialogEnter 不转换单斜杠格式）
+ *
+ * 历史踩坑（全部已修复）：
+ *   1. __display 存成对象 → 设置面板显示 [object Object]
+ *   2. __display 存成 JSON.stringify 字符串 → 设置面板显示 JSON 原文
+ *   3. __source 缺失 → 公式编辑器弹窗空白
+ *   4. __source 触发字段加 // 后缀 → 弹窗 invalid:true "无效字段"
+ *   5. __source 跨表引用用 // 而非 / → 验证器报"类型不合法"
+ *   6. value 做点号转换 → 多余且与 __source 不一致
+ *
+ * @param {string} formula - CLI 传入的公式，如 "#{FORM-xxx/fieldId}+#{fieldId}"
+ * @param {Array} targetSchemaFields - 目标表单字段列表
+ * @param {Array} triggerSchemaFields - 触发表单字段列表（含 __parentLabel）
+ * @returns {{__display: string, __source: string, value: string}}
+ */
+function buildFormulaFields(formula, targetSchemaFields, triggerSchemaFields) {
+  // 构建目标表单字段 label 映射
+  const targetFieldMap = {};
+  (targetSchemaFields || []).forEach((comp) => {
+    const fid = comp.props && comp.props.fieldId;
+    const lbl = comp.props && comp.props.label;
+    const text = typeof lbl === 'object' ? (lbl.zh_CN || lbl.en_US || fid) : (lbl || fid);
+    if (fid) { targetFieldMap[fid] = text; }
+  });
+
+  // 构建触发表单字段 label 映射（子表字段带 "子表名.字段名" 前缀）
+  const triggerFieldMap = {};
+  (triggerSchemaFields || []).forEach((comp) => {
+    const fid = comp.props && comp.props.fieldId;
+    const lbl = comp.props && comp.props.label;
+    const text = typeof lbl === 'object' ? (lbl.zh_CN || lbl.en_US || fid) : (lbl || fid);
+    const parentLbl = comp.props && comp.props.__parentLabel;
+    if (fid) {
+      triggerFieldMap[fid] = parentLbl ? `${parentLbl}.${text}` : text;
+    }
+  });
+
+  // __display：把 #{FORM-xxx/fieldId} 替换为 "目标表字段.字段名"，#{fieldId} 替换为 "字段名"
+  let displayText = '';
+  const regex = /#\{([^}]+)\}/g;
+  let lastIndex = 0;
+  let match;
+  while ((match = regex.exec(formula)) !== null) {
+    if (match.index > lastIndex) {
+      displayText += formula.substring(lastIndex, match.index);
+    }
+    const ref = match[1];
+    if (ref.includes('/')) {
+      // 跨表引用: FORM-xxx/fieldId
+      const slashIdx = ref.indexOf('/');
+      const fieldId = ref.substring(slashIdx + 1);
+      const label = targetFieldMap[fieldId] || fieldId;
+      displayText += `目标表字段.${label}`;
+    } else {
+      // 触发表单引用: fieldId
+      const label = triggerFieldMap[ref] || ref;
+      displayText += label;
+    }
+    lastIndex = regex.lastIndex;
+  }
+  if (lastIndex < formula.length) {
+    displayText += formula.substring(lastIndex);
+  }
+
+  // __source 和 value 直接用原始公式，不做任何转换
+  return {
+    __display: displayText,
+    __source: formula,
+    value: formula,
+  };
+}
+
 /**
  * integration-view-builder.js - 构建逻辑流画布定义（viewJson）
  *
@@ -80,10 +167,17 @@ function buildViewJson(options) {
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
+    // 数据来源类型：form(默认) 或 subform(从触发数据子表获取，bundle 验证 originalType="sub_table")
+    dataSourceType, dataSubFieldId,
+    // 循环体内更新数据节点（用于 --cycle + --cycle-update-form-uuid 组合）
+    cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments,
+    cycleUpdateNoneOperation, cycleUpdateDataNodeId, cycleUpdateFormSchema,
+    triggerFormSchema,
   } = options;
 
   const hasAddDataNode = Boolean(addDataFormUuid);
-  const hasDataNode = Boolean(dataFormUuid);
+  // subform 模式下即使没有 dataFormUuid 也需要创建 GetBatchDataNode 从触发子表获取数据
+  const hasDataNode = Boolean(dataFormUuid) || dataSourceType === 'subform';
   const hasInitiateApprovalNode = Boolean(initiateApprovalFormUuid);
   const hasUpdateDataNode = Boolean(updateFormUuid);
   const hasDeleteNode = Boolean(hasDeleteDataNode);
@@ -91,6 +185,7 @@ function buildViewJson(options) {
   const hasScript = Boolean(hasScriptNode);
   const hasCondition = Boolean(hasConditionNode);
   const hasCycle = Boolean(hasCycleNode);
+  const hasCycleUpdateNode = Boolean(cycleUpdateFormUuid) && Boolean(cycleUpdateDataNodeId);
   const includeMessageNode = hasMessageNode !== false;
   const dataQueryIsMultiple = dataQueryType === 'multiple';
   const isApprovalNodeEvent = formEventTypes.includes('activityTask');
@@ -180,6 +275,8 @@ function buildViewJson(options) {
 
   // 获取单条/多条数据节点
   // ⚠️ 多条 componentName 必须是 GetBatchDataNode（getData.type='batch'），错名画布静默不渲染
+  // bundle 验证（0.2.241）：originalType="sub_table" 时从触发数据子表获取
+  //   sourceId="#{formUuid}"，subSourceId=子表字段ID，appType=""，targetItem={}
   if (hasDataNode && dataNodeId) {
     const conditions = dataConditions && dataConditions.length > 0
       ? buildDataRetrieveCondition(dataConditions)
@@ -189,6 +286,11 @@ function buildViewJson(options) {
     const dataRetrieveType = dataQueryIsMultiple ? 'batch' : 'single';
     const componentName = dataQueryIsMultiple ? 'GetBatchDataNode' : 'GetSingleDataNode';
     const nodeDisplayName = dataQueryIsMultiple ? '获取多条数据' : '获取单条数据';
+
+    const isSubformSource = dataSourceType === 'subform';
+    const dataOriginalType = isSubformSource ? 'sub_table' : 'form';
+    const dataSourceIdValue = isSubformSource ? `#{${formUuid}}` : dataFormUuid;
+    const dataSubSourceIdValue = isSubformSource ? (dataSubFieldId || '') : '';
 
     children.push({
       componentName,
@@ -200,10 +302,10 @@ function buildViewJson(options) {
         type: dataRetrieveType,
         getData: {
           type: dataRetrieveType,
-          originalType: 'form',
-          appType,
-          sourceId: dataFormUuid,
-          targetItem: {
+          originalType: dataOriginalType,
+          appType: isSubformSource ? '' : appType,
+          sourceId: dataSourceIdValue,
+          targetItem: isSubformSource ? {} : {
             appType,
             appName: '',
             formItem: {
@@ -215,7 +317,7 @@ function buildViewJson(options) {
               hasTableField: null,
             },
           },
-          subSourceId: '',
+          subSourceId: dataSubSourceIdValue,
           relativeItem: {},
           filterType: 'condition',
           condition: conditions,
@@ -359,29 +461,15 @@ function buildViewJson(options) {
       subCondition,
       assignments: (updateAssignments || []).map((a) => {
         const base = buildDataUpdateAssignments([a])[0] || {};
-        // Build __display: replace #{FORM-xxx/fieldId} with "表单名.字段名" and #{fieldId} with "字段名"
+        // 公式赋值需要三个字段（bundle handleDialogEnter 权威来源）：
+//   __display = "目标表字段.库存数量+入库明细.入库数量" 纯文本 — 设置面板输入框显示
+//   __source  = "#{FORM-xxx/fieldId}+#{fieldId}" 原始公式 — 公式编辑器弹窗重建
+//   value     = "#{FORM-xxx/fieldId}+#{fieldId}" 原始公式 — 执行引擎
         if (base.valueType === 'column' && base.value && typeof base.value === 'string') {
-          const schemaFields = Array.isArray(updateFormSchema) ? updateFormSchema : [];
-          const fieldLabelMap = {};
-          schemaFields.forEach((comp) => {
-            const fid = comp.props && comp.props.fieldId;
-            const lbl = comp.props && comp.props.label;
-            const text = typeof lbl === 'object' ? (lbl.zh_CN || lbl.en_US || fid) : (lbl || fid);
-            if (fid) { fieldLabelMap[fid] = text; }
-          });
-          let display = base.value;
-          // Replace cross-form references: #{FORM-xxx/fieldId}
-          display = display.replace(/#\{([^/]+)\/([^}]+)\}/g, (match, formPart, fieldId) => {
-            const label = fieldLabelMap[fieldId] || fieldId;
-            return (updateFormName || '目标表单') + '.' + label;
-          });
-          // Replace trigger form references: #{fieldId}
-          display = display.replace(/#\{([^/}]+)\}/g, (match, fieldId) => {
-            return fieldLabelMap[fieldId] || fieldId;
-          });
-          // Replace operators with readable form
-          display = display.replace(/\+/g, '+').replace(/-/g, '-').replace(/\*/g, '×').replace(/\//g, '÷');
-          base.__display = display;
+          const ff = buildFormulaFields(base.value, updateFormSchema, triggerFormSchema);
+          base.__display = ff.__display;
+          base.__source = ff.__source;
+          base.value = ff.value;
         }
         return base;
       }),
@@ -610,8 +698,51 @@ function buildViewJson(options) {
     };
   }
 
+  // 循环体内更新数据节点（可选）
+  // 场景：遍历触发子表行（GetBatchDataNode originalType=sub_table），循环体内逐行 UPSERT 目标表单
+  // viewJson 中 UpdateDataNode 的 props 必须嵌套 updateDataRules（与主链 UpdateDataNode 一致）
+  let cycleUpdateNode = null;
+  if (hasCycleUpdateNode && cycleUpdateDataNodeId) {
+    const cycleMainCondition = buildUpdateConditions(cycleUpdateConditions || []);
+    const cycleFormDisplayName = '目标表单';
+
+      const cycleAssignments = (cycleUpdateAssignments || []).map((a) => {
+        const base = buildDataUpdateAssignments([a])[0] || {};
+        if (base.valueType === 'column' && base.value && typeof base.value === 'string') {
+          const ff = buildFormulaFields(base.value, cycleUpdateFormSchema, triggerFormSchema);
+          base.__display = ff.__display;
+          base.__source = ff.__source;
+          base.value = ff.value;
+        }
+        return base;
+      });
+
+    cycleUpdateNode = {
+      componentName: 'UpdateDataNode',
+      id: cycleUpdateDataNodeId,
+      props: {
+        name: '更新数据',
+        nodeName: 'UpdateDataNode',
+        description: `在 [${cycleFormDisplayName}] 中更新数据`,
+        updateDataRules: {
+          type: 'direct_form',
+          sourceId: cycleUpdateFormUuid,
+          subSourceId: '',
+          condition: cycleMainCondition,
+          subCondition: {},
+          assignments: cycleAssignments,
+          noneOperation: cycleUpdateNoneOperation || 'add',
+          rulesFilter: cycleMainCondition.rules || [],
+          tableRulesFilter: [],
+        },
+      },
+      title: '更新数据',
+    };
+  }
+
   // 循环容器：children 为循环体节点，sourceId 只能指向前置 GetBatchDataNode
   if (hasCycle && cycleNodeId) {
+    const cycleBodyNode = cycleUpdateNode || messageNode;
     children.push({
       componentName: 'CycleContainer',
       id: cycleNodeId,
@@ -625,10 +756,12 @@ function buildViewJson(options) {
           outputs: [],
         },
       },
-      children: messageNode ? [messageNode] : [],
+      children: cycleBodyNode ? [cycleBodyNode] : [],
     });
   } else if (messageNode) {
     children.push(messageNode);
+  } else if (cycleUpdateNode) {
+    children.push(cycleUpdateNode);
   }
 
   children.push({

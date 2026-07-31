@@ -1,6 +1,6 @@
 ---
 name: integration
-description: 当用户说"集成自动化"、"创建自动化"、"逻辑流"、"创建逻辑流"、"自动化规则"、"表单触发"、"消息通知"、"连接器调用"、"新增数据节点"、"获取数据节点"、"发起审批"、"获取自身"时触发此skill。宜搭集成自动化（逻辑流）管理工具 - 通过API创建、修改、查询、启停集成自动化，支持表单事件触发、获取自身、获取单条/多条数据、新增数据、发起审批、连接器调用、消息通知等节点。
+description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集成自动化'、'创建自动化'、'逻辑流'、'创建逻辑流'、'自动化规则'、'表单触发'、'消息通知'、'连接器调用'、'获取自身'、'发起审批'、'体检逻辑流'、'检查自动化配置'时触发。通过API创建、修改、查询、启停集成自动化，支持表单事件触发、获取自身、获取单条/多条数据、新增数据、发起审批、连接器调用、消息通知等节点。自带保存前体检门禁（拦截占位符/空壳节点/空公式/断链），并可审计任意已有逻辑流（含其他AI/设计器创建的）。禁止手写 processJson/viewJson 或直调 saveProcess 接口。
 ---
 
 ## 硬规则（绝对不可违反）
@@ -14,6 +14,11 @@ description: 当用户说"集成自动化"、"创建自动化"、"逻辑流"、"
 2. **脚本(JavaScriptNode)/条件分支/循环容器：API 直建已回归验证（2026-07-28）** — 与更新数据/删除数据/子表新增一样均可由 `integration-create.js` 直建（3 条回归流保存成功 + 设计器回读通过，见「十、已知限制」）；仅并行分支仍需走设计器路径；Groovy 已 CLI 封装（离线断言通过，线上直建待回归）
 3. **修改模式必须展示当前配置供确认** — 修改已有逻辑流时先展示当前配置
 4. **🔴 配置数据节点前必须校验「目标表单类型」匹配** — 新增数据(AddDataNode)只能选普通表单(receipt)，发起审批(InitiateApprovalNode)只能选流程表单(process)。类型不对，设计器必报"表单不存在/无效表单"。create 脚本已内置 `assertFormType` 硬拦截，禁止绕过（详见 node-playbook.md 避坑清单第 9 条）
+5. **🔴 公式赋值三字段格式（viewJson `assignments[]`）** — `valueType=column` 的赋值规则必须同时写入三个字段，缺一或多改都会导致设计器 UI 异常：
+   - `__display`：**纯文本字符串**（如 `"目标表字段.库存数量+入库明细.入库数量"`），用于设置面板输入框显示。❌ 不能是 JSON 对象（显示 `[object Object]`）、❌ 不能是 `JSON.stringify` 字符串（显示 JSON 原文）、❌ 不能省略（设置面板显示空）
+   - `__source`：**与 CLI 传入公式完全相同**（如 `"#{FORM-xxx/fieldId}+#{fieldId}"`），用于公式编辑器弹窗重建编辑器状态。❌ 跨表引用不能用 `//`（双斜杠），direct_form 模式下目标表单是 `targetForm` 类型，`formSuffix="/"`（单斜杠），双斜杠会导致验证器报"类型不合法"；❌ 触发表单字段不能加 `//` 后缀（formSuffix=""，加后缀会导致弹窗标记 invalid:true "无效字段"）
+   - `value`：**与 `__source` 完全相同**，不做任何转换。❌ 不需要做点号转换（`#{FORM-xxx}.fieldId` 是多余且错误的）
+   - bundle 逆向佐证：`parseListFieldsToVars` 中 `formSuffix = "Object"===type ? "//" : "targetForm"===type ? "/" : ""`；`handleDialogEnter` 的 value 转换只处理 `//`（双斜杠），不处理 `/`（单斜杠），所以单斜杠格式的 `__source` 会原样保留到 `value`
 
 ---
 
@@ -176,14 +181,51 @@ integration/
 node .agents/skills/integration/scripts/integration-create.js <appType> <formUuid> <flowName> [选项]
 ```
 
+**★ 方案选择决策树（选错方案=白建逻辑流，务必先看）**：
+
+```
+触发单据审批通过后，需要同步更新另一张表的数据？
+├─ 触发表单【主表字段】→ 目标表单【主表字段】（如：采购入库主表→库存信息主表）
+│  ✅ 首选方案：direct_form 直接更新（3 节点：触发→更新→结束）
+│     --update-form-uuid + --update-condition + --update-assignment + --update-none-operation add
+│     ⚠️ 禁止用循环容器！直接更新引擎自动处理，无需获取节点、无需循环
+│
+├─ 触发表单【子表行】→ 目标表单【子表行】（如：采购入库.入库明细→采购订单.采购明细.已入库数量）
+│  ✅ 首选方案：direct_form 子表更新（3 节点：触发→更新→结束）
+│     --update-sub-source-id + --update-condition + --update-sub-condition + --update-assignment
+│     ⚠️ 禁止用循环容器！引擎对子表数组逐行迭代匹配，无需手动循环
+│
+├─ 触发表单【子表行】→ 目标表单【主表记录】（如：采购入库.入库明细各行→各自对应的库存信息主表记录）
+│  ⚠️ 仅此场景才用循环容器（5 节点：触发→获取多条→循环→循环体内更新→结束）
+│     --data-source-type subform + --cycle + --cycle-update-*
+│     ❗ 这是唯一需要循环容器的场景，其他场景一律用 direct_form
+│
+└─ 不确定？默认用 direct_form（直接更新），能覆盖 90% 的同步场景
+```
+
 **代表性示例**（约 20 个完整示例见 [references/cli-examples.md](references/cli-examples.md)）：
 
 ```bash
+# ★★★ 黄金配方：审批通过后同步更新目标表（direct_form 直接更新，最常用、最简方案）
+# 通用模式：A表审批通过 → 按条件匹配B表记录 → 目标字段公式累加 → 未匹配则新增(upsert)
+# 架构：3 节点（触发→更新→结束），不需要获取节点、不需要循环容器
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后同步更新" \
+  --events processFinish --approval-actions agree \
+  --update-form-uuid FORM-TARGET \
+  --update-condition "textField_target_key1:目标匹配字段1:textField_trig_key1:TextField:Equal::processVar" \
+  --update-condition "textField_target_key2:目标匹配字段2:textField_trig_key2:TextField:Equal::processVar" \
+  --update-assignment "numberField_target_val:column:#{FORM-TARGET/numberField_target_val}+#{numberField_trig_val}" \
+  --update-assignment "textField_target_key1:processVar:textField_trig_key1" \
+  --update-assignment "textField_target_key2:processVar:textField_trig_key2" \
+  --update-none-operation add \
+  --publish
+
 # 消息通知（最简）
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "新数据通知" \
   --events insert --receivers "user001,user002" --title "有新数据提交" --content "请及时查看"
 
 # 子表更新 + upsert（主条件定位主表、子条件逐行匹配子表、公式累加，未命中则新增）
+# 场景：触发表子表行 → 目标表子表行匹配更新（如：采购入库.入库明细 → 采购订单.采购明细.已入库数量）
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "子表upsert" \
   --events insert \
   --update-form-uuid FORM-ZZZ \
@@ -192,6 +234,20 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
   --update-sub-condition "selectField_col:子表匹配列:textField_trig2" \
   --update-assignment "numberField_qty:column:#{FORM-ZZZ/numberField_qty}+#{numberField_src}" \
   --update-none-operation add
+
+# ⚠️ 循环容器（仅限：触发表子表各行 → 各自对应的目标表主表记录，每行需独立 UPSERT）
+# ❗ 这是唯一需要循环容器的场景！库存同步等常见场景请用上面的 direct_form 方案
+# bundle 验证：GetBatchDataNode originalType=sub_table 从触发子表获取多条数据
+# CycleContainer 遍历每行，循环体内 UpdateDataNode 逐行 UPSERT 目标表单
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "子表逐行入库" \
+  --events processFinish --approval-actions agree \
+  --data-form-uuid FORM-XXX --data-query-type multiple \
+  --data-source-type subform --data-sub-field-id tableField_sub \
+  --cycle \
+  --cycle-update-form-uuid FORM-ZZZ \
+  --cycle-update-condition "textField_target:目标匹配字段:textField_sub_trig" \
+  --cycle-update-assignment "numberField_qty:column:#{FORM-ZZZ/numberField_qty}+#{numberField_sub_src}" \
+  --cycle-update-none-operation add
 
 # 修改已有逻辑流（传入 --process-code）
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "修改流程" \
@@ -260,6 +316,12 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
 | `--branch-condition` | 条件分支的单条条件，可重复以组合多条件：fieldId:fieldName:opCode:value[:componentType[:valueType]] | 否 |
 | `--branch-logic and\|or` | 多条件分支的逻辑关系，默认 `and` | 否 |
 | `--cycle` | 循环容器(CycleContainer)：需 `--data-query-type multiple` + 消息节点（作为循环体）（API 直建已回归） | 否 |
+| `--data-source-type` | 获取数据来源：`form`(默认,表单查询) / `subform`(从触发数据子表获取，bundle 验证 originalType=`sub_table`)。subform 时需 `--data-sub-field-id` | 否 |
+| `--data-sub-field-id` | 子表来源时的触发子表字段ID（tableField_xxx） | 否 |
+| `--cycle-update-form-uuid` | 循环体内更新数据目标表单UUID（逐行 UPSERT，配合 `--cycle` + `--data-source-type subform` 使用） | 否 |
+| `--cycle-update-condition` | 循环体更新主条件（可多次，格式同 `--update-condition`：bFieldId:bFieldName:aFieldId[:componentType[:opCode[:valueType]]]） | 否 |
+| `--cycle-update-assignment` | 循环体更新赋值（可多次，格式同 `--update-assignment`：column:valueType:value） | 否 |
+| `--cycle-update-none-operation` | 循环体未匹配处理：`ignored`(跳过) / `add`(新增=upsert，默认) | 否 |
 | `--publish` | 创建后直接发布 | 否 |
 
 **字段赋值 valueType 说明（⚠️ valueType 是值类型枚举 token，不是数据值，严禁把 token 本身写进值槽位）：**
@@ -295,7 +357,9 @@ node .agents/skills/integration/scripts/integration-validate.js <appType> <proce
 > 占位符字面量、空公式、数据流断链）都能"保存成功"。**保存成功 ≠ 配置正确**。
 
 - **门禁模式（自动）**：`integration-create.js` 保存前自动体检，有 [ERROR] 直接拒绝保存并输出
-  `code: VALIDATION_FAILED` + 逐条问题；仅当用户明确批准时可加 `--force-save` 跳过。
+  `code: VALIDATION_FAILED` + 逐条问题；仅当用户明确批准时可加 `--force-save` 跳过（建议同时用
+  `--force-save-reason "<原因>"` 说明原因；跳过时 processCode/时间/原因会追加写入
+  `logs/gate-bypass-audit.log` 审计留痕）。
 - **审计模式（手动）**：体检任意已有逻辑流（包括其他 AI/人工在设计器创建的）。
 
 **检查项与错误码：**
@@ -390,16 +454,20 @@ node .agents/skills/integration/scripts/integration-validate.js <appType> <proce
 
 ### 交付回报契约（完成标准）
 
-每次创建/修改逻辑流后，最终回复必须向用户回报以下内容，缺一不算交付完成（本契约只约束回复内容，不改变任何脚本行为）：
+每次创建/修改逻辑流后，最终回复必须向用户回报以下内容。其中第 1-4 项为**强制项，缺一不可**，缺任意一项不算交付完成（本契约只约束回复内容，不改变任何脚本行为）：
 
-1. **目标应用**：应用名称 + appType（如 `进销存系统 / APP_XXXXXX`）
-2. **processCode**：本次创建/修改的逻辑流 processCode
-3. **设计器访问入口**：该逻辑流在宜搭设计器中的访问路径（应用 → 集成&自动化 → 对应逻辑流），有可用链接时给出链接
-4. **回读结果摘要**：`integration-get.js` 回读的节点树摘要（节点数、类型、串联是否与预期一致）
+1. **目标应用**【强制】：应用名称 + appType（如 `进销存系统 / APP_XXXXXX`）
+2. **逻辑流标识**【强制】：逻辑流名称 + 本次创建/修改的 processCode（如 `采购入库同步库存 / LPROC-XXXXXX`）
+3. **宜搭后台查看路径**【强制】：该逻辑流在宜搭后台的访问路径（应用 → 集成&自动化 → 对应逻辑流），有可用链接时给出链接
+4. **回读结果摘要**【强制】：`integration-get.js` 回读的节点树摘要（节点数、类型、串联是否与预期一致）
 5. **体检结果摘要**：`integration-validate.js` 的体检结论（通过 / [ERROR]·[WARN] 条数及处理情况）
 
 ---
 
 ## 版本历史
 
-当前版本 **v2.5.0 (2026-07-29)**：保存前体检门禁 + 已有流审计 + 跨 AI 硬规则分发。完整版本历史（v2.5.0 ~ v1.0.0）见 [references/version-history.md](references/version-history.md)。
+- **v2.5.2 (2026-07-31)**：修复公式赋值三字段格式（__source 跨表引用误用 `//` 双斜杠 → 验证器报"类型不合法"；__display 误存为 JSON 对象/字符串 → 设置面板显示 `[object Object]`；value 误做点号转换 → 与 __source 不一致）。根因：bundle `parseListFieldsToVars` 中 `targetForm` 类型 `formSuffix="/"`（单斜杠），而代码误用了 `Object` 类型的 `"//"`。修复后 __source 和 value 直接用原始公式，__display 为纯文本。新增方案选择决策树+direct_form 黄金配方示例+强化硬规则 5.1 方案选择（禁止库存同步用循环容器）。
+- **v2.5.1 (2026-07-31)**：修复 subform 模式下 hasDataNode 判断错误（dataFormUuid 为 null 时未创建 GetBatchDataNode 导致循环节点缺失 sourceId）；修复循环体内 __display 未替换触发表单字段ID（新增 triggerFormSchema 获取+triggerFieldLabelMap 构建）
+- **v2.5.0 (2026-07-29)**：保存前体检门禁 + 已有流审计 + 跨 AI 硬规则分发
+
+完整版本历史见 [references/version-history.md](references/version-history.md)。
