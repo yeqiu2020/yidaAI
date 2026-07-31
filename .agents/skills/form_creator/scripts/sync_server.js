@@ -420,10 +420,10 @@ const server = http.createServer(async (req, res) => {
 
 // ========== 组织门户 API ==========
 
-// POST /refresh-login — 刷新宜搭登录态
-if (parsedUrl.pathname === '/refresh-login' && req.method === 'POST') {
+// GET /refresh-login — 刷新宜搭登录态（SSE 流式，供前端弹窗展示执行过程）
+if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
     try {
-      log('收到刷新登录态请求', 'yellow');
+      log('收到刷新登录态请求（流式）', 'yellow');
       const loginScript = path.join(SKILLS_DIR, 'api-client', 'scripts', 'login_manager.js');
 
       if (!fs.existsSync(loginScript)) {
@@ -432,56 +432,92 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'POST') {
         return;
       }
 
+      const sendSSE = (event, data) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      };
+
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      });
+      // retry:0 表示连接断开后不自动重连，避免重复触发登录流程
+      res.write('retry: 0\n\n');
+      sendSSE('start', { message: '正在启动登录态刷新...' });
+
+      // 心跳：防止代理/浏览器在长时间等待（如扫码）时断开连接
+      const heartbeat = setInterval(() => {
+        try { res.write(': ping\n\n'); } catch (e) { /* ignore */ }
+      }, 15000);
+
       const child = spawn(process.execPath, [loginScript], {
         cwd: process.cwd(),
         windowsHide: true,
-        stdio: ['ignore', 'pipe', 'pipe']
+        stdio: ['ignore', 'pipe', 'pipe'],
       });
 
-      let stdout = '';
-      let stderr = '';
+      let buffer = '';
+      let fullOutput = '';
+      const classify = (line) => {
+        if (line.includes('❌') || line.includes('失败') || line.includes('错误') || line.includes('已失效') || line.includes('超时')) return 'error';
+        if (line.includes('✅') || line.includes('成功') || line.includes('已保存') || line.includes('已验证')) return 'success';
+        if (line.includes('⚠️') || line.includes('请') || line.includes('等待') || line.includes('步骤') || line.includes('尝试')) return 'warn';
+        return 'info';
+      };
+      const flush = (text) => {
+        fullOutput += text;
+        buffer += text;
+        const parts = buffer.split('\n');
+        buffer = parts.pop() || '';
+        for (const raw of parts) {
+          const line = raw.replace(/\r$/, '').trim();
+          if (!line) continue;
+          // 跳过 login_manager 末尾的 JSON 结果转储，保持弹窗整洁
+          if (/^\s*[{"]/.test(line) || /^\s*"[a-zA-Z_]+"\s*:/.test(line)) continue;
+          sendSSE('log', { message: line, type: classify(line) });
+        }
+      };
+
       child.stdout.setEncoding('utf8');
       child.stderr.setEncoding('utf8');
-      child.stdout.on('data', (chunk) => { stdout += chunk; });
-      child.stderr.on('data', (chunk) => { stderr += chunk; });
+      child.stdout.on('data', flush);
+      child.stderr.on('data', flush);
+
+      const cleanup = () => { try { clearInterval(heartbeat); } catch (e) {} };
 
       child.on('error', (error) => {
+        cleanup();
         log(`刷新登录态失败: ${error.message}`, 'red');
-        res.writeHead(500);
-        res.end(JSON.stringify({ success: false, error: error.message }));
+        sendSSE('error', { error: error.message });
+        res.end();
       });
 
       child.on('close', (code) => {
-        if (code !== 0 && !stdout.includes('✅')) {
-          const errorMsg = (stderr || stdout || `退出码: ${code}`).trim();
-          log(`刷新登录态失败: ${errorMsg}`, 'red');
-          res.writeHead(500);
-          res.end(JSON.stringify({ success: false, error: errorMsg }));
-          return;
-        }
-        // 解析输出中的用户信息（login_manager.js 用 console.error 输出）
+        cleanup();
+        if (buffer.trim()) sendSSE('log', { message: buffer.trim(), type: 'info' });
+        const success = code === 0 || fullOutput.includes('✅');
         let userName = '';
-        const allOutput = stdout + stderr;
-        const userMatch = allOutput.match(/loginUser:\s*(.+)/);
-        if (userMatch) userName = userMatch[1].trim();
-        // 备用：从 "用户: xxx" 格式提取
-        if (!userName) {
-          const userMatch2 = allOutput.match(/用户:\s*(.+)/);
-          if (userMatch2) userName = userMatch2[1].trim();
-        }
+        const m = fullOutput.match(/(?:loginUser:|login_user:|用户:|userName:|user_name:)\s*([^\n,]+)/);
+        if (m) userName = m[1].trim();
+        log(`刷新登录态${success ? '成功' : '失败'}${userName ? ': ' + userName : ''}`, success ? 'green' : 'red');
+        sendSSE('done', { success, userName });
+        res.end();
+      });
 
-        log(`刷新登录态成功${userName ? ': ' + userName : ''}`, 'green');
-        res.writeHead(200);
-        res.end(JSON.stringify({
-          success: true,
-          message: '登录态刷新成功',
-          userName: userName
-        }));
+      // 客户端断开（如关闭页面）时终止子进程，避免遗留孤儿登录进程
+      req.on('close', () => {
+        try { child.kill('SIGTERM'); } catch (e) {}
       });
     } catch (error) {
       log(`刷新登录态异常: ${error.message}`, 'red');
-      res.writeHead(500);
-      res.end(JSON.stringify({ success: false, error: error.message }));
+      if (!res.headersSent) {
+        res.writeHead(500);
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      } else {
+        try { res.end(); } catch (e) {}
+      }
     }
     return;
   }
