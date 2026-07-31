@@ -126,6 +126,11 @@ function autoGenerateFilledFields(targetFields, targetFormName, systemKeywords) 
       // 复选类型在关联填充场景下改为单行文本（复选不适合只读填充）
       const mappedType = fieldType === '复选' ? '单行文本' : fieldType;
       const result = { name: f.name, type: mappedType, status: '只读' };
+      // v2.x.x: 关联表单类型的被填充字段需要保留原始 typeHint（如"关联-->供应商信息"），
+      // 否则 generateFieldDescription 会返回"-"，导致字段清单中缺少关联目标表标记
+      if (fieldType === '关联表单' && f.typeHint && f.typeHint.includes('关联-->')) {
+        result.typeHint = f.typeHint;
+      }
 
       // v1.31.0: 从目标表单字段获取选项和说明，确保被填充字段能正确显示选项和小数单位
       // 优先从 AI override 获取（如产品分类的选项是 override 配置的，不在 parseField 解析结果中）
@@ -331,7 +336,7 @@ function applyFieldOverrides(fields, formOverrides, formName, formFieldMap) {
           // 让 generateFieldDescription 根据字段名和类型自然推断说明（下拉选项、数值小数单位等）
           const filledField = {
             name: ff.name,
-            typeHint: ff.type || '单行文本',
+            typeHint: ff.typeHint || ff.type || '单行文本',
             options: ff.options || null,
             isOptions: !!(ff.options && ff.options.length > 0),
             _forceType: ff.type ? validateFieldType(ff.type) : '单行文本',
@@ -476,8 +481,11 @@ function mapFieldType(fieldName, typeHint, isOptions, forceType, formName = '') 
     else if (hint.includes('关联')) result = '关联表单';
     else if (hint.includes('多行') || hint.includes('备注') || hint.includes('说明')) result = '多行文本';
     else if (hint.includes('日期')) result = '日期';
-    else if (hint.includes('金额') || hint.includes('价格') || hint.includes('费用')) result = '数值';
-    else if (hint.includes('数值') || hint.includes('数字') || hint.includes('数量')) result = '数值';
+    else if (hint.includes('金额') || hint.includes('价格') || hint.includes('费用') || hint.includes('价') && !hint.includes('评价')) result = '数值';
+    else if (hint.includes('数值') || hint.includes('数字') || hint.includes('数量') || hint.includes('个数') || hint.includes('人数')) result = '数值';
+    else if (hint.includes('余额') || hint.includes('额度') || hint.includes('上限') || hint.includes('下限')) result = '数值';
+    else if (hint.includes('比例') || hint.includes('比率')) result = '数值';
+    else if (hint.endsWith('值') || hint.endsWith('阈值')) result = '数值';
     else if (hint.includes('成员') || hint.includes('人员') || hint.includes('负责人')) result = '成员';
     else if (hint.includes('部门')) result = '部门';
     else if (hint.includes('附件')) result = '附件';
