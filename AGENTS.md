@@ -38,9 +38,44 @@
    流程事件触发（审批通过）→ 更新数据节点（direct_form 直接更新：主条件=字段引用匹配仓库/商品，
    更新规则=公式累加数量，noneOperation=add 实现 upsert）→ 结束。
    **直接更新模式下不需要"获取单条数据"前置节点**；只有 `--update-type node` 才需要获取节点。
+   **标准 CLI 命令模板（照抄替换真实 ID 即可，不要自由发挥）：**
+   ```
+   node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后同步更新" \
+     --events processFinish --approval-actions agree \
+     --update-form-uuid FORM-TARGET \
+     --update-condition "textField_target_key1:目标匹配字段1:textField_trig_key1:TextField:Equal::processVar" \
+     --update-condition "textField_target_key2:目标匹配字段2:textField_trig_key2:TextField:Equal::processVar" \
+     --update-assignment "numberField_target_val:column:#{FORM-TARGET/numberField_target_val}+#{numberField_trig_val}" \
+     --update-assignment "textField_target_key1:processVar:textField_trig_key1" \
+     --update-assignment "textField_target_key2:processVar:textField_trig_key2" \
+     --update-none-operation add --publish
+   ```
+   ⚠️ 上面就是完整命令，3 节点（触发→更新→结束），不需要 --cycle、不需要 --data-form-uuid、不需要获取节点。
+
+5.1.**【强制】数据同步场景方案选择（选错=白建逻辑流）：**
+   - **触发表主表字段→目标表主表字段**：✅ **首选 direct_form 直接更新**（`--update-form-uuid` + `--update-condition` + `--update-assignment`），3 节点，禁止用循环容器。CLI 模板见上方第 5 条。
+   - **触发表子表行→目标表子表行**：✅ **首选 direct_form 子表更新**（`--update-form-uuid` + `--update-sub-source-id` + `--update-condition` + `--update-sub-condition`），引擎自动逐行迭代匹配，禁止用循环容器。
+   - **触发表子表行→目标表主表记录**：⚠️ **仅此场景才用循环容器**（`--data-source-type subform` + `--cycle` + `--cycle-update-*`），5 节点。
+   - **历史事故**：曾有 AI 把"采购入库同步库存"场景误用循环容器方案（5 节点+获取多条+循环），实际只需 direct_form 直接更新（3 节点）。根因：skill 示例中循环容器的注释写了"采购入库.入库明细→库存信息"业务名称，误导 AI 以为这是标准方案。
 
 6.**【强制】`--force-save`（跳过体检门禁）只能在用户明确批准后使用，AI 不得自行决定绕过门禁。**
 
 7.怀疑某条已有逻辑流有问题（无论谁创建的），先用 `integration-validate.js <appType> <processCode>` 体检出具报告，再决定修复方案；禁止盲改。
 
+8.**【强制】公式赋值（valueType=column）的 viewJson 必须同时写入 `__display`、`__source`、`value` 三个字段，格式如下（bundle 逆向确认，禁止自由发挥）：**
+   - `__display` = **纯文本字符串**（如 `"目标表字段.库存数量+入库明细.入库数量"`），给设置面板输入框显示。❌ 不能是 JSON 对象（显示 `[object Object]`）、❌ 不能是 JSON 字符串（显示 JSON 原文）。
+   - `__source` = **与 CLI 传入公式完全相同**（如 `"#{FORM-xxx/fieldId}+#{fieldId}"`），给公式编辑器弹窗重建状态。❌ 跨表引用用单斜杠 `/` 不是 `//`（direct_form 模式目标表单是 targetForm 类型，formSuffix="/"）；❌ 触发字段不加任何后缀（formSuffix=""）。
+   - `value` = **与 `__source` 完全相同**，不做任何转换。❌ 不需要点号转换。
+   - 历史事故：曾因 `__source` 误用 `//` 导致验证器报"类型不合法"；`__display` 误存为 JSON 对象导致设置面板显示 `[object Object]`；`value` 误做点号转换导致与 `__source` 不一致。
+
 <!-- END yida-integration-hard-rules -->
+
+# 提交规范（主题分批提交）
+
+> 本节位于生成块之外，由人工维护，`node scripts/sync-hard-rules.js` 重跑不会覆盖。
+> 与既有实践"主题分批提交与门禁验证"对齐。
+
+1. **一次提交只覆盖一个技能主题**：单个 skill 目录（`.agents/skills/<skill>/`）或单个 scripts 门禁脚本（`scripts/xxx.js`），不得跨主题混合改动；每次提交涉及的 skill 目录不超过 1 个。
+2. **提交说明写明主题与验证方式**：说明本次提交覆盖的主题（哪个 skill / 哪个脚本），以及验证手段与结果（如受影响的 Jest 测试全绿、门禁脚本运行通过）。
+3. **提交前门禁**：先运行受影响的检查（如 Jest 测试）并确保全绿，经用户确认后方可提交。
+4. **独立可回退**：每批提交内容独立、无交叉，支持通过 `git revert` 单独回退。
