@@ -486,26 +486,85 @@ async function refreshLoginState(btnEl) {
   btnEl.disabled = true;
   btnEl.innerHTML = '&#8987; 刷新中...';
 
-  showToast('正在刷新登录态，请稍候...', 'info');
+  // 打开执行过程观察弹窗（与"同步到本地"一致）
+  showSyncModal('正在刷新登录态');
 
-  try {
-    const res = await fetch(`${SYNC_SERVICE}/refresh-login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const data = await res.json();
+  // 弹窗内元素（自包含，参考 syncAppToLocal 的局部辅助函数）
+  const progressText = document.getElementById('progressText');
+  const progressFill = document.getElementById('progressFill');
+  const syncLog = document.getElementById('syncLog');
+  if (syncLog) syncLog.classList.add('show');
 
-    if (data.success) {
-      showToast(`登录态刷新成功${data.userName ? '（' + data.userName + '）' : ''}`, 'success');
-    } else {
-      showToast(`刷新失败：${data.error || '未知错误'}`, 'error');
+  const addLog = (message, type) => {
+    if (!syncLog) return;
+    const item = document.createElement('div');
+    item.className = 'sync-log-item' + (type ? ' ' + type : '');
+    item.textContent = message;
+    syncLog.appendChild(item);
+    syncLog.scrollTop = syncLog.scrollHeight;
+  };
+
+  const setProgress = (percent, text) => {
+    if (percent !== null && percent !== undefined && progressFill) {
+      progressFill.classList.add('determinate');
+      progressFill.style.width = percent + '%';
     }
-  } catch (error) {
-    showToast(`请求失败：${error.message}`, 'error');
-  } finally {
+    if (progressText && text) progressText.textContent = text;
+  };
+
+  const es = new EventSource(`${SYNC_SERVICE}/refresh-login`);
+  let closed = false;
+
+  const finish = () => {
+    if (closed) return;
+    closed = true;
+    try { es.close(); } catch (e) {}
     btnEl.disabled = false;
     btnEl.innerHTML = originalText;
-  }
+  };
+
+  es.addEventListener('start', (e) => {
+    let d = {};
+    try { d = JSON.parse(e.data || '{}'); } catch (err) {}
+    addLog(d.message || '开始刷新登录态', 'info');
+    setProgress(null, d.message || '开始刷新登录态');
+  });
+
+  es.addEventListener('log', (e) => {
+    let d = {};
+    try { d = JSON.parse(e.data || '{}'); } catch (err) {}
+    addLog(d.message || '', d.type || 'info');
+    setProgress(null, (d.message || '').slice(0, 48));
+  });
+
+  es.addEventListener('done', async (e) => {
+    let d = { success: false };
+    try { d = JSON.parse(e.data || '{}'); } catch (err) {}
+    finish();
+    if (d.success) {
+      const msg = d.userName ? `✅ 刷新完成，当前登录：${d.userName}` : '✅ 刷新完成';
+      setProgress(100, msg);
+      addLog(msg, 'success');
+      showToast(`登录态已刷新${d.userName ? '（' + d.userName + '）' : ''}`, 'success');
+    } else {
+      setProgress(100, '❌ 刷新失败');
+      addLog('❌ 刷新失败', 'error');
+      showToast('刷新失败，请查看弹窗日志', 'error');
+    }
+    try { await loadLoginState(); } catch (err) {}
+    setTimeout(hideSyncModal, 1200);
+  });
+
+  es.addEventListener('error', (e) => {
+    if (closed) return;
+    let msg = '连接中断';
+    try { const d = JSON.parse(e.data || '{}'); if (d.error) msg = d.error; } catch (err) {}
+    finish();
+    setProgress(100, '❌ ' + msg);
+    addLog('❌ ' + msg, 'error');
+    showToast(`刷新失败：${msg}`, 'error');
+    setTimeout(hideSyncModal, 1500);
+  });
 }
 
 // ========== 刷新组织应用信息 ==========
