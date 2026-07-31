@@ -1,8 +1,9 @@
 {
   "_comment": "宜搭AI助手 Skill 配置文件",
   "_description": "本文件用于配置Skill的全局行为和启用/禁用状态",
+  "_dualSource_comment": "双源维护约定：各技能 SKILL.md 的 frontmatter description 是运行时权威面（Agent 实际据此触发），本文件 skills[].description 是索引面（供检索/生成 README 能力表）；修改任一侧描述时必须同步修改另一侧，保持两者一致，禁止只改 config 不改 frontmatter（否则触发词不生效）",
   "version": "2.0.0",
-  "lastUpdated": "2026-07-30",
+  "lastUpdated": "2026-07-31",
   "disabledSkills": [],
   "_exemptedSkills_comment": "豁免登记的目录：不进入 skills 数组，但必须写明豁免理由。校验脚本 scripts/validate-skill-config.js 以此为唯一事实源做反向校验（含 SKILL.md 的目录要么登记、要么在此豁免，否则报错）",
   "exemptedSkills": [
@@ -424,6 +425,14 @@
         { "when": "上传流程图/思维导图截图转字段清单", "use": "flow-to-form", "not": "excel-to-form / architect" },
         { "when": "把 Excel 表格转字段清单 + 规则清单", "use": "excel-to-form", "not": "flow-to-form" },
         { "when": "模糊业务需求要梳理成架构/字段/自动化规则", "use": "architect", "not": "flow-to-form / excel-to-form" }
+      ]
+    },
+    {
+      "topic": "登录 / 认证",
+      "rules": [
+        { "when": "登录宜搭、获取/刷新登录态、Cookie失效重新认证（默认多策略：CDP/环境变量/二维码/Playwright降级）", "use": "auth-plus", "not": "simulated-login / api-client" },
+        { "when": "明确要求可视化浏览器登录流程（看到浏览器操作、点击'立即登录'、手动选择组织）", "use": "simulated-login", "not": "auth-plus / api-client" },
+        { "when": "仅程序化调用宜搭API（静默登录仅作为API调用的前置能力，不以登录为目的）", "use": "api-client", "not": "auth-plus / simulated-login" }
       ]
     }
   ],

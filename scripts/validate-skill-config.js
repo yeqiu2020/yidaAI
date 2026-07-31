@@ -12,6 +12,10 @@
  * 豁免清单的唯一事实源是 skill-config.json 的 exemptedSkills 字段（不再硬编码），
  * scripts/generate-skill-index.js 的 NON_EFFECTIVE_DIRS 须与其保持一致。
  *
+ * 双源维护约定（见 skill-config.json 的 _dualSource_comment）：
+ *   SKILL.md frontmatter description 是运行时权威面，skill-config.json 的
+ *   skills[].description 是索引面；两者描述必须同步修改，只改一侧即为漂移。
+ *
  * 用法:
  *   node scripts/validate-skill-config.js    # 一致则退出码 0；不一致则打印差异并退出码 1
  *
