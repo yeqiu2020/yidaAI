@@ -12,6 +12,7 @@
  *   5. 保存到 .cookies.json
  *
  * 创建日期：2026-07-10 (Phase 2)
+ * 版本：1.1.0 — 修复未登录重定向误判为登录成功；保存前强制校验 Cookie
  */
 
 'use strict';
@@ -232,12 +233,28 @@ async function pollLoginStatus(initialCookies) {
       const location = response.headers.location || '';
       const body = response.body || '';
 
-      // 登录成功的标志：重定向到 xxx.aliwork.com（非 www）
-      if (location.includes('.aliwork.com') && !location.includes('//www.aliwork.com')) {
-        console.log(`\n  ✅ 检测到登录重定向: ${location}`);
+      // 登录成功的标志：重定向到组织域名 xxx.aliwork.com（非 www、非钉钉 SSO）
+      // 【v1.1.0 修复】原 includes('.aliwork.com') 判定会被 query 参数里 URL 编码的域名文本误命中
+      // （https%3A%2F%2Fwww.aliwork.com 中的域名是明文），把"重定向到钉钉 SSO 登录页"（=未登录）
+      // 误判为登录成功，导致 2 个未认证 Cookie 落盘（2026-08-18 假登录事故）
+      let loginRedirect = null;
+      if (location) {
+        try {
+          const u = new URL(location);
+          const h = u.hostname;
+          // 组织域名（如 xxx.aliwork.com）= 已登录；login.dingtalk.com = 未登录，继续轮询
+          if (h.endsWith('.aliwork.com') && h !== 'www.aliwork.com') {
+            loginRedirect = location;
+          }
+        } catch {
+          // 非法 URL 忽略
+        }
+      }
+      if (loginRedirect) {
+        console.log(`\n  ✅ 检测到登录重定向: ${loginRedirect}`);
 
         // 跟随重定向获取完整 Cookie
-        const redirectResponse = await httpRequest(location, {
+        const redirectResponse = await httpRequest(loginRedirect, {
           headers: {
             'Cookie': initialCookies.map(c => `${c.name}=${c.value}`).join('; '),
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
@@ -344,7 +361,17 @@ async function qrLogin(options = {}) {
     login_strategy: 'qr',
   };
 
-  // 6. 保存
+  // 6. 保存前强制校验（【v1.1.0】防止未认证 Cookie 落盘，2026-08-18 假登录事故）
+  const validation = cookieManager.quickValidateCookies(loginState);
+  if (!validation.valid) {
+    throw new CliError(
+      ErrorCode.LOGIN_FAILED,
+      `二维码登录结果校验未通过: ${validation.reason}`,
+      { hint: '终端二维码为实验性策略，未提取到有效登录态。请使用浏览器扫码登录（默认策略）。' }
+    );
+  }
+
+  // 7. 保存
   cookieManager.saveCookieData(loginState);
 
   console.log(`\n  ✅ Cookie 数量: ${cleanCookies.length}`);

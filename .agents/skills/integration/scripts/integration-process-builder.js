@@ -345,13 +345,19 @@ function buildProcessJson(options) {
     connectorMode, connectionId,
     dataQueryType, dataQuantity,
     updateFormUuid, updateConditions, updateAssignments,
-    hasDeleteDataNode, deleteSubSourceId,
+    hasDeleteDataNode, deleteSubSourceId, deleteSubConditions,
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
     // 数据来源类型：form(默认,从表单查询) 或 subform(从触发数据子表获取)
     // bundle 验证：originalType="sub_table" 时 sourceId="#{formUuid}"，subSourceId=子表字段ID
     dataSourceType, dataSubFieldId,
+    // v2.8.5: 链式获取模式——5节点 cascade
+    isChainMode, dataSubSourceId, dataSubConditions, dataNode2Id,
+    // v2.8.7: 目标表单子表直接获取模式（isSubFormTarget=true 时获取节点 originalType=sub_table, sourceId=#{目标表单}, subSourceId=目标子表）
+    isSubFormTarget,
+    // v2.8.8: 目标表单类型（process/receipt）——决定 originalType（process_form/process/form）
+    dataFormType,
     // 循环体内更新数据节点（用于 --cycle + --cycle-update-form-uuid 组合）
     // 场景：遍历触发子表行，逐行 UPSERT 目标表单记录
     cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments,
@@ -394,10 +400,12 @@ function buildProcessJson(options) {
     }))
     : [];
 
-  // 节点顺序：trigger, dataRetrieve, addData, initiateApproval, updateData, deleteData, script, connector, condition, cycle, message, end
+  // 节点顺序：trigger, dataRetrieve, dataRetrieve2(chain), addData, initiateApproval, updateData, deleteData, script, connector, condition, cycle, message, end
   let nodeIdIndex = 0;
   const triggerNodeId = nodeIds[nodeIdIndex++];
   const dataNodeId = hasDataNode ? nodeIds[nodeIdIndex++] : null;
+  // v2.8.5: 链式获取模式第二个获取节点
+  const dataNode2IdResolved = isChainMode ? nodeIds[nodeIdIndex++] : null;
   const addDataNodeId = hasAddDataNode ? nodeIds[nodeIdIndex++] : null;
   const initiateApprovalNodeId = hasInitiateApprovalNode ? nodeIds[nodeIdIndex++] : null;
   const updateDataNodeId = hasUpdateDataNode ? nodeIds[nodeIdIndex++] : null;
@@ -426,6 +434,18 @@ function buildProcessJson(options) {
         : tailNodeId;
     }
     if (current === 'dataRetrieve') {
+      // v2.8.5: 链式模式下 dataRetrieve 的下一个是 dataRetrieve2
+      if (isChainMode) return dataNode2IdResolved;
+      return hasAddDataNode ? addDataNodeId
+        : hasInitiateApprovalNode ? initiateApprovalNodeId
+        : hasUpdateDataNode ? updateDataNodeId
+        : hasDeleteNode ? deleteDataNodeId
+        : hasScript ? scriptNodeId
+        : hasConnectorCallNode ? connectorCallNodeId
+        : hasCondition ? conditionNodeId
+        : tailNodeId;
+    }
+    if (current === 'dataRetrieve2') {
       return hasAddDataNode ? addDataNodeId
         : hasInitiateApprovalNode ? initiateApprovalNodeId
         : hasUpdateDataNode ? updateDataNodeId
@@ -524,9 +544,16 @@ function buildProcessJson(options) {
     const dataRetrieveNextId = nextAfter('dataRetrieve');
 
     const isSubformSource = dataSourceType === 'subform';
-    const dataOriginalType = isSubformSource ? 'sub_table' : 'form';
-    const dataSourceIdValue = isSubformSource ? `#{${formUuid}}` : dataFormUuid;
-    const dataSubSourceIdValue = isSubformSource ? (dataSubFieldId || '') : '';
+    // v2.8.7: 目标表单子表直接获取模式（sourceId=#{目标表单}, subSourceId=目标子表）
+    const isTargetSubTable = Boolean(isSubFormTarget) && dataSubSourceId !== '';
+    // v2.8.8 金标准：目标表单是流程表单时，GetSingleDataNode 用 'process_form'，GetBatchDataNode 用 'process'
+    //   （手工配置 viewJson 验证：单条=process_form，多条=process；普通表单目标=form）
+    const dataOriginalType = (isSubformSource || isTargetSubTable) ? 'sub_table'
+      : (dataFormType === 'process' ? (dataQueryIsMultiple ? 'process' : 'process_form') : 'form');
+    const dataSourceIdValue = isSubformSource ? `#{${formUuid}}`
+      : (isTargetSubTable ? `#{${dataFormUuid}}` : dataFormUuid);
+    const dataSubSourceIdValue = isSubformSource ? (dataSubFieldId || '')
+      : (isTargetSubTable ? dataSubSourceId : '');
 
     nodes.push({
       name: { zh_CN: dataQueryIsMultiple ? '获取多条数据' : '获取单条数据', en_US: '' },
@@ -541,11 +568,58 @@ function buildProcessJson(options) {
         filterType: 'condition',
         sort: { type: 'none', column: '' },
         sourceId: dataSourceIdValue,
-        appType: isSubformSource ? '' : appType,
+        appType: (isSubformSource || isTargetSubTable) ? '' : appType,
         originalType: dataOriginalType,
         subSourceId: dataSubSourceIdValue,
         condition: conditions,
         quantity: dataRetrieveQuantity,
+        dataRules: {
+          rules: [
+            {
+              componentName: '',
+              labe: '',
+              name: '',
+              required: false,
+              ruleId: generateDataRuleId(),
+              value: '',
+              valueType: 'literal',
+            },
+          ],
+        },
+        assignments: [],
+      },
+      childNodes: [],
+    });
+  }
+
+  // v2.8.5: 链式获取第二个节点 - GetBatchDataNode(originalType="node", sourceId=第一个获取节点)
+  // 从前置获取节点的主表记录中获取子表行数据
+  if (isChainMode && dataNode2IdResolved) {
+    const subConditions = dataSubConditions && dataSubConditions.length > 0
+      ? buildDataRetrieveCondition(dataSubConditions)
+      : { condition: 'AND', rules: [], ruleId: generateRuleGroupId(), conditionCode: '&&' };
+    const subFilterType = dataSubConditions && dataSubConditions.length > 0 ? 'condition' : 'all';
+    const dataRetrieve2NextId = nextAfter('dataRetrieve2');
+
+    nodes.push({
+      name: { zh_CN: '获取多条数据', en_US: '' },
+      description: '请设置想要获取的数据',
+      type: 'dataRetrieve',
+      nodeId: dataNode2IdResolved,
+      prevId: '',
+      nextId: [dataRetrieve2NextId],
+      props: {
+        type: 'batch',
+        filterType: subFilterType,
+        sort: { type: 'none', column: '' },
+        sourceId: dataNodeId,
+        appType: '',
+        // v2.8.8: 修正为 sub_table（原值 'node' 是错的，导致 UI 显示"从数据节点中获取"而非"从子表中获取"）
+        // 设计器手工配置金标准：originalType='sub_table' + sourceId=前置节点ID + subSourceId=目标子表字段ID
+        originalType: 'sub_table',
+        subSourceId: dataSubSourceId,
+        condition: subConditions,
+        quantity: String(dataQuantity || 100),
         dataRules: {
           rules: [
             {
@@ -626,7 +700,11 @@ function buildProcessJson(options) {
   if (hasUpdateDataNode && updateDataNodeId) {
     const updateNextId = nextAfter('updateData');
     const updateType = options.updateType || 'direct_form';
-    const targetMainFormUuid = options.updateSourceId || updateFormUuid;
+    // cascade 模式下（--update-type node + 链式获取），sourceId 必须指向 GetBatchDataNode
+    // 才能逐行更新子表数据；否则指向 target form 只更新单条主表
+    const targetMainFormUuid = updateType === 'node' && isChainMode
+      ? (dataNode2IdResolved || updateFormUuid)
+      : (options.updateSourceId || updateFormUuid);
     const targetSubFieldId = options.updateSubSourceId || '';
     const hasSubUpdate = Boolean(targetSubFieldId);
 
@@ -669,13 +747,25 @@ function buildProcessJson(options) {
   // 保存形状源于 bundle Xb：无 subSourceId 时 type="node" 且不带 subSourceId 字段
   if (hasDeleteNode && deleteDataNodeId) {
     const deleteNextId = nextAfter('deleteData');
+    // v2.8.8 金标准（手工配置 viewJson 验证）：
+    //   - 删除【子表行】（有 deleteSubSourceId）：type="sub_table" + 无 appType + targetItem:{} + subSourceId
+    //   - 删除【整条主表记录】（无 deleteSubSourceId）：type="node" + appType + sourceId
+    const deleteIsSubTable = Boolean(deleteSubSourceId);
     const deleteProps = {
-      appType,
-      sourceId: dataNodeId,
-      type: 'node',
+      sourceId: isChainMode ? dataNode2IdResolved : dataNodeId,
+      type: deleteIsSubTable ? 'sub_table' : 'node',
     };
     if (deleteSubSourceId) {
       deleteProps.subSourceId = deleteSubSourceId;
+    }
+    if (deleteIsSubTable) {
+      deleteProps.targetItem = {};
+    } else {
+      deleteProps.appType = appType;
+    }
+    if (deleteSubConditions && deleteSubConditions.length > 0) {
+      deleteProps.subCondition = buildDataRetrieveCondition(deleteSubConditions);
+      deleteProps.tableRulesFilter = deleteProps.subCondition.rules || [];
     }
 
     nodes.push({

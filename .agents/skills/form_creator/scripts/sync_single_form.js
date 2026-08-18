@@ -21,9 +21,6 @@ const coreUtils = require('../../../../lib/core/utils');
 // v2.11.0: 引入 form-scanner（UUID 表单目录匹配引擎，与 sync_server.js / sync_all_configs.js 共享）
 const { findFormDir } = require('../../../../lib/sync-server/form-scanner');
 
-const API_CLIENT_DIR = path.join(__dirname, '..', '..', 'api-client', 'scripts');
-const LOGIN_MANAGER = path.join(API_CLIENT_DIR, 'login_manager.js');
-
 // 颜色输出
 const colors = {
   reset: '\x1b[0m',
@@ -88,7 +85,7 @@ function readSystemConfig(projectDir) {
   let appId = null;
 
   // 1) 优先匹配表格中的应用ID/应用编码行
-  const tableAppIdMatch = content.match(/\|\s*\*\*(应用ID|应用编码)\*\*\s*\|\s*`?(APP_[A-Z0-9]+)`?/i);
+  const tableAppIdMatch = content.match(/\|\s*(?:\*\*)?(应用ID|应用编码)(?:\*\*)?\s*\|\s*`?(APP_[A-Z0-9]+)`?/i);
   if (tableAppIdMatch) {
     appId = tableAppIdMatch[2];
   }
@@ -115,7 +112,7 @@ function readSystemConfig(projectDir) {
 
   // 提取访问域名（用于请求宜搭API，避免写死）
   let baseUrl = null;
-  const accessUrlMatch = content.match(/\|\s*\*\*访问地址\*\*\s*\|\s*(https?:\/\/[^\s|]+)/);
+  const accessUrlMatch = content.match(/\|\s*(?:\*\*)?访问地址(?:\*\*)?\s*\|\s*(https?:\/\/[^\s|]+)/);
   if (accessUrlMatch && accessUrlMatch[1]) {
     try {
       baseUrl = new URL(accessUrlMatch[1]).origin;
@@ -246,22 +243,38 @@ function loadCookies(baseUrl = '') {
 }
 
 /**
- * 确保宜搭登录态有效（必要时自动触发登录）
+ * 加载本地登录态（纯 Cookie 读取，不启动 Playwright）
+ *
+ * 【v2.12.0 改进】原实现调用 login_manager.js 的 ensureLogin()，每次同步都启动
+ * Playwright 浏览器验证登录态；Cookie 失效时还会弹浏览器等扫码（最长10分钟），
+ * 导致同步服务子进程卡死、前端 AbortSignal.timeout(60000) 超时报 "signal timed out"。
+ *
+ * 现改为：直接从 .cookies.json 读取 cookies + csrf_token，不启动浏览器。
+ * Cookie 有效性由后续 getFormSchema API 请求结果判断，失效时返回明确的
+ * LOGIN_REQUIRED 错误，由前端引导用户到本地操作页面点"刷新登录"按钮。
  */
 async function ensureLoginContext() {
   try {
-    if (!fs.existsSync(LOGIN_MANAGER)) {
-      logWarning('未找到 login_manager.js，继续使用本地Cookie尝试同步');
+    const cookieData = coreUtils.loadCookieData();
+    if (!cookieData || !Array.isArray(cookieData.cookies) || cookieData.cookies.length === 0) {
+      logWarning('未找到本地Cookie，请先到「本地操作页面」点击"刷新登录"按钮');
       return null;
     }
-    const { ensureLogin } = require(LOGIN_MANAGER);
-    const loginInfo = await ensureLogin();
-    if (loginInfo && loginInfo.cookies) {
-      logSuccess(`登录态有效 (${loginInfo.base_url || 'unknown'})`);
+    const baseUrl = cookieData.base_url || '';
+    let csrfToken = cookieData.csrf_token || '';
+    if (!csrfToken) {
+      // 兜底：从 cookies 数组中提取 tianshu_csrf_token
+      const info = coreUtils.extractInfoFromCookies(cookieData.cookies) || {};
+      csrfToken = info.csrfToken || '';
     }
-    return loginInfo;
+    logInfo(`已加载本地Cookie (${cookieData.cookies.length} 条，host: ${baseUrl || 'unknown'})`);
+    return {
+      cookies: cookieData.cookies,
+      base_url: baseUrl,
+      csrf_token: csrfToken
+    };
   } catch (error) {
-    logWarning(`自动登录校验失败，改用本地Cookie继续尝试: ${error.message}`);
+    logWarning(`读取Cookie失败: ${error.message}`);
     return null;
   }
 }
@@ -310,7 +323,7 @@ async function fetchFormSchemaFromYida(appId, formUuid, requestContext = {}) {
       res.on('end', () => {
         // 如果响应是重定向（登录页），说明Cookie失效
         if (data.includes('<!DOCTYPE html>') || data.includes('<html')) {
-          reject(new Error('登录态已过期，请重新登录宜搭平台'));
+          reject(new Error('LOGIN_REQUIRED: 登录态已过期，请先到「本地操作页面」点击"刷新登录"按钮'));
           return;
         }
         
@@ -321,7 +334,7 @@ async function fetchFormSchemaFromYida(appId, formUuid, requestContext = {}) {
           } else {
             const errMsg = result.errorMsg || result.error || '获取Schema失败';
             if (String(errMsg).toUpperCase().includes('LOGIN FAILED')) {
-              reject(new Error('LOGIN_REQUIRED: 登录已失效，请重新登录宜搭平台'));
+              reject(new Error('LOGIN_REQUIRED: 登录已失效，请先到「本地操作页面」点击"刷新登录"按钮'));
               return;
             }
             reject(new Error(errMsg));

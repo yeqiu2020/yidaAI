@@ -256,11 +256,13 @@ function validateProjectConfig(projectDir) {
     searchDir = path.dirname(searchDir);
   }
 
-  // 如果向上查找失败，搜索已知的工作区根目录（防止外部旧目录误用）
+  // 如果向上查找失败，搜索已知的工作区根目录
   if (!orgInfoPath) {
+    // 阶段二改造：使用全局数据目录作为回退
+    const os = require('os');
+    const globalDataDir = path.join(os.homedir(), '.yida-ai-helper');
     const knownRoots = [
-      path.join('d:', '宜搭AI编程', '宜搭AI助手V2.0.6', '组织及应用信息.md'),
-      path.join('d:', '宜搭AI编程', '组织及应用信息.md'),
+      path.join(globalDataDir, '组织及应用信息.md'),
     ];
     for (const candidate of knownRoots) {
       if (fs.existsSync(candidate)) {

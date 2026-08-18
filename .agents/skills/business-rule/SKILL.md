@@ -5,7 +5,7 @@ description: 宜搭表单业务关联规则（跨表高级函数）配置技能�
 
 # business-rule — 宜搭业务关联规则（跨表高级函数）
 
-版本：v3.7.2（卡点适用范围修正：UPDATE/DELETE 豁免）— 完整版本历史见 [references/version-history.md](references/version-history.md)
+版本：v3.8.0（来源子表字段自动逐行迭代机制）— 完整版本历史见 [references/version-history.md](references/version-history.md)
 
 ## 参考文件索引（按需加载）
 
@@ -111,6 +111,8 @@ description: 宜搭表单业务关联规则（跨表高级函数）配置技能�
     - ✅ **支持子表字段作为业务键**：如 `AND(EQ(库存信息.仓库名称, 仓库名称), EQ(库存信息.产品名称, 入库明细.产品名称))`——完全合法
     - ✅ **支持子表字段参与运算**：如 `库存信息.库存数量 + 入库明细.入库数量`——完全合法
     - ✅ **支持组合业务键**：用 AND 连接多个 EQ 条件做联合主键——完全合法
+    - 🔴 **来源子表字段自动逐行迭代（v3.8.0，2026-08-01 实战确认）**：当公式中**引用了来源表（当前表）的子表字段**时，宜搭引擎会**自动对子表的每一行逐行迭代执行**整条公式。例如采购入库的入库明细有 3 行，公式 `UPSERT(库存信息, AND(EQ(库存信息.仓库名称, 仓库名称), EQ(库存信息.产品名称, 产品名称)), "", 库存信息.库存数量, 库存信息.库存数量 + 入库数量)` 会自动执行 3 次，每次取其中一行的「产品名称」和「入库数量」，分别更新 3 个产品的库存。**公式只触发一次（提交/流程结束），但引擎内部对子表行自动迭代——不需要循环容器、不需要集成自动化**。严禁以"子表有多行，一条公式只能处理一行"为由拒绝执行或引导用户改用集成自动化
+    - 🔴 **禁止问用户"子表有几行"（v3.8.0 补充）**：子表（TableField）的设计目的就是存储多行数据，**子表必然是多行，一行或零行就没有使用子表的必要**。因此当公式需要引用来源表的子表字段时，**严禁向用户询问"子表有几行""通常有几条""是否可能多条"等任何关于子表行数的问题**。引擎自动逐行迭代，行数多少不影响公式的正确性，不需要用户告知。如果用户主动提及子表行数，只需回答"引擎会自动逐行处理，不需要关心行数"
     - 🔴 **唯一拒绝场景**：目标表单是流程表单（见硬规则17），此时宜搭平台确实不支持
     - 🔴 **禁止误读硬规则4**：硬规则4"普通组件与明细组件不能同改"仅限制"写入目标表"的组件类型，**不限制引用来源表的字段**。严禁以此为由拒绝执行
     - 🔴 **执行原则**：直接生成公式 → 推送到宜搭 → 让宜搭校验。不要在本地做"预判失败"的人工筛选，宜搭的校验器才是唯一裁判
@@ -249,10 +251,10 @@ JSON 文件只包含 `{text, marks, isCmData}` 三个顶级字段，**禁止添�
 运行命令：
 
 ```bash
-node .agents/skills/business-rule/scripts/generate-rule-json.js config.json
+yida-helper run business-rule/scripts/generate-rule-json.js config.json
 ```
 
-**方式二：命令行参数生成**：`node .agents/skills/business-rule/scripts/generate-rule-json.js --template "..." --mapping '{...}' --output "业务规则/xxx.json"`
+**方式二：命令行参数生成**：`yida-helper run business-rule/scripts/generate-rule-json.js --template "..." --mapping '{...}' --output "业务规则/xxx.json"`
 
 ##### 配置格式说明
 
@@ -360,7 +362,7 @@ UPSERT(库存信息, AND(EQ(库存信息.仓库名称, 仓库名称), EQ(库存�
 > ⚠️ **不要使用 `fast-push-rule.js`**：该脚本用 `navigator.clipboard.writeText` + Ctrl+V 直接粘到 textarea，不聚焦公式编辑器 CodeMirror、无令牌校验、无兜底，是历史「粘贴后显示纯文本、令牌未还原、校验失败」的主要来源，**未经端到端验证，已废弃默认地位**。除非明确知道自己在做什么，一律用 `push-rule.js`。
 
 ```bash
-node .agents/skills/business-rule/scripts/push-rule.js \
+yida-helper run business-rule/scripts/push-rule.js \
   --json "<JSON文件路径>" \
   --md "<MD文件路径>"
 ```
@@ -393,7 +395,7 @@ node .agents/skills/business-rule/scripts/push-rule.js \
 2. **确认触发表单类型**（普通表单 or 流程表单），从 `系统配置清单.md` 的类型列读取。
 3. **🔴 检查目标表单类型**（硬规则 20）：从 `系统配置清单.md` 的「表单ID清单」查看类型列，或用 get-schema 获取 formType。**如果目标表单是流程表单**：立即停止，告知用户宜搭平台不支持，引导使用集成自动化（integration）代替。
 4. **定位触发表单实际所在目录**（🔴 必做，不可跳过）：优先用户明确路径；否则 `Glob` 搜索 `**/{表单名}*/{表单名}*.json`；或从 `系统配置清单.md` 「所属分组」列推断。🔴 **严禁**在项目根目录或其他位置新建以表单名命名的文件夹。
-5. 用 `get-schema` 查清目标表与来源表的真实字段显示名与字段ID：`node .agents/skills/get-schema/scripts/get-schema.js <appType> <formUuid>`
+5. 用 `get-schema` 查清目标表与来源表的真实字段显示名与字段ID：`yida-helper run get-schema/scripts/get-schema.js <appType> <formUuid>`
 6. 生成结构化公式数据（JSON + Markdown），保存到**第4步定位到的表单目录**下的 `业务规则/` 子文件夹。
 7. 🔴 **生成 JSON 后立即运行 `push-rule.js` 自动推送到宜搭**（见第九节方式一），不要只生成文件让用户手动粘贴。
 
@@ -412,7 +414,7 @@ node .agents/skills/business-rule/scripts/push-rule.js \
 用 `rule-sync` 同步验证（只读拉取，确认规则已生效）：
 
 ```bash
-node .agents/skills/rule-sync/scripts/sync_rules.js --output <项目目录>
+yida-helper run rule-sync/scripts/sync_rules.js --output <项目目录>
 ```
 
 ## 十一、用量限制
@@ -493,4 +495,7 @@ UPSERT(库存信息,
 
 ## 版本历史
 
-当前版本 **v3.7.2**（2026-07-28，卡点适用范围修正：UPDATE/DELETE 豁免）。完整版本历史（v3.6.0~v3.7.2 根因分析）见 [references/version-history.md](references/version-history.md)。
+- **v3.8.0**（2026-08-01）：硬规则21 新增「来源子表字段自动逐行迭代」+「禁止问用户子表有几行」机制说明，修复 AI 误判"子表多行无法用业务规则处理"的问题
+- **v3.7.2**（2026-07-28）：卡点适用范围修正，UPDATE/DELETE 写目标子表时豁免 companionMainRule
+
+完整版本历史见 [references/version-history.md](references/version-history.md)。

@@ -17,6 +17,11 @@
 
 'use strict';
 
+const path = require('path');
+
+// 【测试隔离】屏蔽本机真实全局 Cookie（~/.yida-ai-helper），让 loadAuth 走项目根查找分支
+process.env.YIDA_HELPER_HOME = path.join(__dirname, '..', '..', 'temp-file', 'test-no-global-cookie');
+
 const {
   httpGet,
   httpPost,

@@ -148,7 +148,7 @@ export function renderJsx() {
 > 发布脚本是本 Skill 的核心能力之一，它会自动完成：页面不存在时自动创建 → Babel 编译 → UglifyJS 压缩 → Schema 构建 → API 保存。
 
 ```bash
-node .agents/skills/custom-page/scripts/publish-page.js <代码文件路径> <appType> [formUuid] [页面名称]
+yida-helper run custom-page/scripts/publish-page.js <代码文件路径> <appType> [formUuid] [页面名称]
 ```
 
 | 参数 | 必填 | 说明 |
@@ -162,7 +162,7 @@ node .agents/skills/custom-page/scripts/publish-page.js <代码文件路径> <ap
 
 **前提条件**：
 - 项目根目录下存在 `.cookies.json`（有效的宜搭登录态）
-- 如果登录态过期（302 错误），需先运行 `node .agents/skills/api-client/scripts/login_manager.js` 重新登录
+- 如果登录态过期（302 错误），需先运行 `yida-helper run api-client/scripts/login_manager.js` 重新登录
 
 **发布成功后**：
 - 脚本会输出设计器 URL 和工作台 URL
@@ -349,7 +349,7 @@ node .agents/skills/custom-page/scripts/publish-page.js <代码文件路径> <ap
 
 单独运行 lint：
 ```bash
-node .agents/skills/custom-page/scripts/lint-page.js <代码文件路径>
+yida-helper run custom-page/scripts/lint-page.js <代码文件路径>
 ```
 
 ## 注意事项

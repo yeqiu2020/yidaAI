@@ -113,10 +113,10 @@ POST /dingtalk/web/{appType}/query/formdesign/updateFormConfig.json
 python3 .agents/skills/api-client/scripts/login_manager.py
 
 # 创建应用
-node .agents/skills/api-client/scripts/app_manager.js create "应用名称" "应用描述"
+yida-helper run api-client/scripts/app_manager.js create "应用名称" "应用描述"
 
 # 创建表单
-node .agents/skills/api-client/scripts/form_manager.js create "APP_XXX" "表单名称" fields.json
+yida-helper run api-client/scripts/form_manager.js create "APP_XXX" "表单名称" fields.json
 ```
 
 ### 编程调用
@@ -207,6 +207,11 @@ const result = await formManager.createForm(appType, formTitle, fields);
 ---
 
 ## 版本信息
+
+**login_manager.js v1.0.1** (2026-08-17)
+- 修复"刷新登录态"卡顿十几~二十秒的问题：网络方式验证 Cookie 的 fetchPageInfo 由 `waitUntil: 'networkidle'`（timeout 60s）改为 `domcontentloaded`（timeout 15s）
+- **根因**：宜搭是 SPA，页面一旦加载便持续有后台请求，`networkidle` 永远等不到"网络空闲"，每次都耗尽超时（实测 60s 超时被疯狂拉长到十几二十秒）才继续
+- **防复发**：凡访问宜搭页面**禁用 `waitUntil: 'networkidle'`**，一律 `domcontentloaded` + 等待目标元素/文本或 `waitForFunction`；csrf_token 是页面早期 DOM 的隐藏 input，`domcontentloaded` 即可拿到
 
 **form_manager.js v1.14.0** (2026-07-06)
 - 加固检测逻辑防失效：getNavList 失败时重试3次后抛错（不返回空数组），createForm 检测失败时抛错（不"继续创建"），彻底杜绝重跑产生重复表单/分组

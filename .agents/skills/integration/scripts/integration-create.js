@@ -212,6 +212,50 @@ async function run(args) {
   // 数据来源类型：form(默认,从指定表单查询) 或 subform(从触发数据子表获取)
   const dataSourceType = parseFlag(subArgs, '--data-source-type') || 'form';
   const dataSubFieldId = parseFlag(subArgs, '--data-sub-field-id') || '';
+  // v2.8.5: 级联子表删除——获取目标表单子表数据
+  const dataSubSourceId = parseFlag(subArgs, '--data-sub-source-id') || '';
+  const dataSubConditions = [];
+  for (let index = 0; index < subArgs.length; index++) {
+    if (subArgs[index] === '--data-sub-condition' && subArgs[index + 1]) {
+      const parts = subArgs[index + 1].split(':');
+      if (parts.length >= 3) {
+        dataSubConditions.push({
+          bFieldId: parts[0],
+          bFieldName: parts[1],
+          aFieldId: parts[2],
+          componentType: parts[3] || 'TextField',
+          opCode: parts[4] || 'Equal',
+          valueType: parts[5] || 'processVar',
+        });
+      }
+      index++;
+    }
+  }
+  // 链式获取模式：有子表来源+子表条件时启用 5 节点 cascade
+  const isChainMode = dataSubSourceId !== '' && dataSubConditions.length > 0;
+  // v2.8.7: 目标表单子表直接获取模式——有 --data-sub-source-id 但无 --data-sub-condition 时，
+  // 获取节点直接从【目标表单】的子表获取（originalType=sub_table, sourceId=#{目标表单}, subSourceId=目标子表）
+  // 区别于 subform（触发数据子表）与 chain（先取主表再取子表）
+  const isSubFormTarget = dataSubSourceId !== '' && dataSubConditions.length === 0;
+
+  // 删除子表条件
+  const deleteSubConditions = [];
+  for (let index = 0; index < subArgs.length; index++) {
+    if (subArgs[index] === '--delete-sub-condition' && subArgs[index + 1]) {
+      const parts = subArgs[index + 1].split(':');
+      if (parts.length >= 3) {
+        deleteSubConditions.push({
+          bFieldId: parts[0],
+          bFieldName: parts[1],
+          aFieldId: parts[2],
+          componentType: parts[3] || 'TextField',
+          opCode: parts[4] || 'Equal',
+          valueType: parts[5] || 'processVar',
+        });
+      }
+      index++;
+    }
+  }
 
   const dataConditions = [];
   if (getSelf) {
@@ -475,6 +519,8 @@ async function run(args) {
   const triggerNodeId = generateNodeId();
   // subform 模式下即使没有 dataFormUuid 也需要创建 GetBatchDataNode 从触发子表获取数据
   const dataNodeId = (dataFormUuid || dataSourceType === 'subform') ? generateNodeId() : null;
+  // v2.8.5: 链式获取模式第二个获取节点
+  const dataNode2Id = isChainMode ? generateNodeId() : null;
   const addDataNodeId = addDataFormUuid ? generateNodeId() : null;
   const initiateApprovalNodeId = initiateApprovalFormUuid ? generateNodeId() : null;
   const updateDataNodeId = updateFormUuid ? generateNodeId() : null;
@@ -612,6 +658,7 @@ async function run(args) {
   // 构建 processJson 节点 ID 列表（顺序：trigger, dataRetrieve, addData, initiateApproval, updateData, deleteData, script, connector, condition, cycle, message, end）
   const processNodeIds = [triggerNodeId];
   if (dataNodeId) { processNodeIds.push(dataNodeId); }
+  if (dataNode2Id) { processNodeIds.push(dataNode2Id); }
   if (addDataNodeId) { processNodeIds.push(addDataNodeId); }
   if (initiateApprovalNodeId) { processNodeIds.push(initiateApprovalNodeId); }
   if (updateDataNodeId) { processNodeIds.push(updateDataNodeId); }
@@ -626,6 +673,7 @@ async function run(args) {
   // viewJson 节点 ID 列表（canvasId 开头）
   const viewNodeIds = [canvasId, triggerNodeId];
   if (dataNodeId) { viewNodeIds.push(dataNodeId); }
+  if (dataNode2Id) { viewNodeIds.push(dataNode2Id); }
   if (addDataNodeId) { viewNodeIds.push(addDataNodeId); }
   if (initiateApprovalNodeId) { viewNodeIds.push(initiateApprovalNodeId); }
   if (updateDataNodeId) { viewNodeIds.push(updateDataNodeId); }
@@ -733,6 +781,22 @@ async function run(args) {
     }
   }
 
+  // v2.8.6: 获取数据节点的目标表单 Schema 和类型（用于 viewJson 的 rulesFilter/outputs/targetItem/originalType）
+  let dataFormSchema = [];
+  let dataFormType = 'receipt';
+  let dataFormName = '';
+  if (dataFormUuid) {
+    try {
+      stepLog('获取数据节点目标表单Schema');
+      dataFormSchema = await getFormSchema(authRef, { appType, formUuid: dataFormUuid.toString() });
+      console.error('获取Schema成功: ' + dataFormSchema.length + ' 个字段');
+      dataFormType = await getFormType(authRef, { appType, formUuid: dataFormUuid.toString() });
+      console.error('表单类型: ' + dataFormType);
+    } catch (error) {
+      console.error('获取Schema失败: ' + error.message + '（继续执行）');
+    }
+  }
+
   // 获取循环体内更新数据的目标表单 Schema
   let cycleUpdateFormSchema = [];
   // 触发表单 Schema（用于 __display 中将触发字段ID替换为字段名称）
@@ -811,12 +875,14 @@ async function run(args) {
     initiateApprovalAssignments,
     dataFormUuid: dataFormUuid || undefined,
     dataConditions, dataQueryType, dataQuantity,
+    dataFormType, dataFormName,
     hasMessageNode, approvalActions, approvalNodeIds,
     triggerRecursively, triggerConditions, triggerLogic,
     updateFormUuid: updateFormUuid || undefined,
     updateConditions, updateAssignments,
     updateType, updateSourceId, updateSubSourceId, updateSubConditions, updateNoneOperation,
-    hasDeleteDataNode, deleteSubSourceId,
+    hasDeleteDataNode, deleteSubSourceId, deleteSubConditions,
+    isChainMode, dataSubSourceId, dataSubConditions, dataNode2Id, isSubFormTarget,
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
@@ -839,12 +905,14 @@ async function run(args) {
     initiateApprovalAssignments,
     dataFormUuid: dataFormUuid || undefined,
     dataConditions, dataQueryType, dataQuantity,
+    dataFormSchema, dataFormType, dataFormName,
     hasMessageNode, approvalActions, approvalNodeIds,
     triggerRecursively, triggerConditions, triggerLogic,
     updateFormUuid: updateFormUuid || undefined,
     updateConditions, updateAssignments, updateFormSchema, updateFormName: '',
     updateType, updateSourceId, updateSubSourceId, updateSubConditions, updateNoneOperation,
-    hasDeleteDataNode, deleteSubSourceId,
+    hasDeleteDataNode, deleteSubSourceId, deleteSubConditions,
+    isChainMode, dataSubSourceId, dataSubConditions, dataNode2Id, isSubFormTarget,
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,

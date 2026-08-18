@@ -86,17 +86,59 @@ async function autoSelectStrategy() {
     console.log(`  ⚠️ CDP 检测失败: ${err.message}`);
   }
 
-  // 3. 终端二维码登录
-  console.log('  📋 使用终端二维码登录策略');
+  // 3. Playwright 浏览器扫码登录（【v1.1.0】起为默认策略，2026-08-18 假登录事故后调整）
+  console.log('  📋 使用浏览器扫码登录策略（默认）');
+  try {
+    return await playwrightFallback();
+  } catch (err) {
+    console.log(`  ⚠️ 浏览器登录失败: ${err.message}`);
+    console.log('  🔄 降级到终端二维码策略（实验性）...');
+  }
+
+  // 4. 终端二维码登录（实验性：未提取真实扫码 token，仅兜底）
+  console.log('  ⚠️ 终端二维码为实验性策略，如无法完成请优先使用浏览器登录');
   try {
     return await qrLogin.qrLogin();
   } catch (err) {
     console.log(`  ⚠️ 二维码登录失败: ${err.message}`);
   }
 
-  // 4. Playwright 降级
-  console.log('  📋 所有轻量策略均失败，降级到 Playwright 登录');
-  return await playwrightFallback();
+  throw new CliError(
+    ErrorCode.UNKNOWN,
+    '所有登录策略均失败',
+    {
+      hint: '请选择以下方式之一：\n' +
+            '  1. 设置 YIDA_COOKIE_B64 环境变量\n' +
+            '  2. 以调试模式启动 Chrome: chrome.exe --remote-debugging-port=9222\n' +
+            '  3. 安装 Playwright: npm install playwright && npx playwright install chromium',
+    }
+  );
+}
+
+/**
+ * 按指定策略执行登录（供 CLI login 命令调用）
+ * @param {string} strategy - auto / env-inject / env / cdp / qr / playwright
+ * @returns {Promise<object>} 登录态
+ */
+async function runLogin(strategy = 'auto') {
+  switch (strategy) {
+    case 'auto':
+      return await autoSelectStrategy();
+    case 'env-inject':
+    case 'env':
+      return await envInject.envInjectLogin();
+    case 'cdp':
+      return await cdpLogin.cdpLogin();
+    case 'qr':
+      return await qrLogin.qrLogin();
+    case 'playwright':
+      return await playwrightFallback();
+    default:
+      throw new CliError(
+        ErrorCode.UNKNOWN,
+        `未知策略: ${strategy}（可用: auto, env-inject, cdp, qr, playwright）`
+      );
+  }
 }
 
 /**
@@ -200,6 +242,7 @@ async function main() {
 
 module.exports = {
   autoSelectStrategy,
+  runLogin,
   checkExistingLogin,
   playwrightFallback,
 };

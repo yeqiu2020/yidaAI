@@ -322,15 +322,17 @@ async function switchLogicflow(authRef, params) {
 }
 
 /**
- * 查询目标表单的类型（receipt=普通表单 / process=流程表单 / virtualView=聚合表 / report=报表）。
- * 用途：创建集成自动化前校验「目标表单类型」是否匹配节点 setter 的 formTypes 白名单。
- *   - 新增数据(AddDataNode) 的表单选择器只查 formTypes=receipt → 目标必须是普通表单；
- *     若把流程表单塞进去，设计器会报“表单不存在/无效表单，请重新配置”。
- *   - 发起审批(InitiateApprovalNode) 只查 formTypes=process → 目标必须是流程表单。
- * 复用设计器同款接口 getFormAndAppInfo.json（用全类型过滤，保证任何表单都能查到其真实 formType）。
- * @returns {Promise<string|null>} formType 字符串；查不到返回 null。
+ * 查询目标表单的信息（类型 + 名称）。
+ * 用途：
+ *   - 类型：创建集成自动化前校验「目标表单类型」是否匹配节点 setter 的 formTypes 白名单。
+ *     - 新增数据(AddDataNode) 的表单选择器只查 formTypes=receipt → 目标必须是普通表单；
+ *     - 发起审批(InitiateApprovalNode) 只查 formTypes=process → 目标必须是流程表单。
+ *   - 名称：回填 viewJson/processJson 中节点卡片的表单名显示字段（formTitle / targetItem.formItem.title），
+ *     否则卡片/下拉框只显示 UUID 或占位符（历史事故见 SKILL.md 避坑清单）。
+ * 复用设计器同款接口 getFormAndAppInfo.json（用全类型过滤，保证任何表单都能查到其真实 formType 与 title）。
+ * @returns {Promise<{formType: string|null, formTitle: string}|null>} 查不到返回 null；formTitle 取 title.zh_CN。
  */
-async function getFormType(authRef, params) {
+async function getFormInfo(authRef, params) {
   const { appType, formUuid } = params;
   const qs =
     `supportSerialNo=y&ccMode=fold&formTypes=${encodeURIComponent('receipt,process,virtualView,report')}` +
@@ -354,7 +356,34 @@ async function getFormType(authRef, params) {
     [];
   if (!values.length) return null;
   const hit = values.find((v) => v && v.formUuid === formUuid) || values[0];
-  return hit && hit.formType ? hit.formType : null;
+  if (!hit) return null;
+  const rawTitle = hit.title;
+  const formTitle = rawTitle && typeof rawTitle === 'object'
+    ? (rawTitle.zh_CN || rawTitle.en_US || rawTitle.pureEn_US || '')
+    : (rawTitle || '');
+  return {
+    formType: hit.formType || null,
+    formTitle,
+  };
+}
+
+/**
+ * 查询目标表单的类型（receipt=普通表单 / process=流程表单 / virtualView=聚合表 / report=报表）。
+ * 复用 getFormInfo；保留字符串返回类型以兼容 assertFormType 的调用方。
+ * @returns {Promise<string|null>} formType 字符串；查不到返回 null。
+ */
+async function getFormType(authRef, params) {
+  const info = await getFormInfo(authRef, params);
+  return info ? info.formType : null;
+}
+
+/**
+ * 查询目标表单的展示名称（用于节点卡片/下拉框回显表单名）。
+ * @returns {Promise<string>} 表单名称（title.zh_CN）；查不到返回空字符串。
+ */
+async function getFormName(authRef, params) {
+  const info = await getFormInfo(authRef, params);
+  return info ? info.formTitle : '';
 }
 
 /**
@@ -410,12 +439,62 @@ async function getProcess(authRef, params) {
   };
 }
 
+/**
+ * 删除逻辑流（集成自动化规则）。
+ * API: POST /query/formLogicflowBinding/deleteflow.json (Connector.deleteFlow)
+ * 注意：已启用（已开启）的流程不允许直接删除，需先关闭（switchLogicflow enable=false）再删除。
+ * @param {object} authRef - 认证引用
+ * @param {object} params - { appType, formUuid, processCode }
+ * @returns {Promise<object>} 删除结果
+ */
+async function deleteLogicflow(authRef, params) {
+  const { appType, formUuid, processCode } = params;
+  if (!appType) {
+    throw new Error('删除逻辑流失败：缺少 appType');
+  }
+  if (!processCode) {
+    throw new Error('删除逻辑流失败：缺少 processCode');
+  }
+  if (!formUuid) {
+    throw new Error('删除逻辑流失败：缺少 formUuid');
+  }
+  const response = await requestWithAutoLogin((auth) => {
+    const stamp = Date.now();
+    const referer = `${auth.baseUrl}/${appType}/admin`;
+    return postRequest(
+      auth.baseUrl,
+      `/alibaba/web/${appType}/query/formLogicflowBinding/deleteflow.json?_api=Connector.deleteFlow&_mock=false&_stamp=${stamp}`,
+      {
+        _csrf_token: auth.csrfToken,
+        _locale_time_zone_offset: '28800000',
+        processCode,
+        formUuid,
+        type: '1',
+      },
+      auth.cookies,
+      referer
+    );
+  }, authRef);
+
+  if (!response || !response.success) {
+    const errorMsg = response ? response.errorMsg || JSON.stringify(response) : '请求失败';
+    const err = new Error(`删除逻辑流失败：${errorMsg}`);
+    err.errorCode = response ? response.errorCode : null;
+    err.needsDisable = errorMsg.includes('已启用') || errorMsg.includes('不允许删除');
+    throw err;
+  }
+  return response.content;
+}
+
 module.exports = {
   getFormSchema,
   getFormType,
+  getFormInfo,
+  getFormName,
   saveProcess,
   getProcess,
   createLogicflow,
+  deleteLogicflow,
   listLogicflows,
   listFormLogicflows,
   listLogicflowLogs,

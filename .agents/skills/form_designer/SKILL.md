@@ -112,14 +112,14 @@ description: 宜搭表单设计器，用于在指定目录下设计新表单或�
 **命令**：
 
 ```powershell
-node .agents/skills/form_planner/scripts/update_field_list.js "<目录路径>" "<表单名称>" "<表单类型>" "<字段描述>"
+yida-helper run form_planner/scripts/update_field_list.js "<目录路径>" "<表单名称>" "<表单类型>" "<字段描述>"
 ```
 
 **示例**：
 
 ```powershell
 # 在指定目录下设计表单
-node .agents/skills/form_planner/scripts/update_field_list.js "./跨表单测试/01需求梳理" "报工登记" "普通表单" "包含提交部门、提交日期、提交人、工序等字段"
+yida-helper run form_planner/scripts/update_field_list.js "./跨表单测试/01需求梳理" "报工登记" "普通表单" "包含提交部门、提交日期、提交人、工序等字段"
 ```
 
 ### 场景2：更新现有表单的字段
@@ -139,7 +139,7 @@ node .agents/skills/form_planner/scripts/update_field_list.js "./跨表单测试
 **命令**：
 
 ```powershell
-node .agents/skills/form_planner/scripts/update_field_list.js "<目录路径>" "<表单名称>" --update "<更新描述>"
+yida-helper run form_planner/scripts/update_field_list.js "<目录路径>" "<表单名称>" --update "<更新描述>"
 ```
 
 ### 场景3：从自然语言描述生成字段

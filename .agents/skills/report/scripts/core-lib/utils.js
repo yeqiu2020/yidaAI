@@ -235,9 +235,10 @@ function getNodeExecutable() {
  * @returns {string} 项目根目录的绝对路径
  */
 function findProjectRoot() {
-  const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
-  if (fs.existsSync(path.join(PROJECT_ROOT, '.cookies.json'))) {
-    return PROJECT_ROOT;
+  // 阶段二改造：优先 process.cwd()（CLI 模式下即用户工作目录）
+  if (fs.existsSync(path.join(process.cwd(), '.cookies.json')) ||
+      fs.existsSync(path.join(process.cwd(), '组织及应用信息.md'))) {
+    return process.cwd();
   }
 
   const activeTool = detectActiveTool();
@@ -248,6 +249,8 @@ function findProjectRoot() {
     }
   }
 
+  // 兼容回退
+  const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
   return PROJECT_ROOT;
 }
 
@@ -306,14 +309,17 @@ function loadCookieData(projectRoot, defaultBaseUrl) {
   const root = projectRoot || findProjectRoot();
   const fallbackBaseUrl = defaultBaseUrl || 'https://www.aliwork.com';
 
+  // 阶段二改造：优先全局 Cookie
+  const os = require('os');
+  const globalCookieFile = path.join(os.homedir(), '.yida-ai-helper', '.cookies.json');
   const rootCookieFile = path.join(root, '.cookies.json');
-  const { getCookieFilePath } = require('./env-manager');
-  const envCookieFile = getCookieFilePath(root);
   const legacyCookieFile = path.join(root, '.cache', 'cookies.json');
 
-  const cookieFile = fs.existsSync(rootCookieFile)
-    ? rootCookieFile
-    : (fs.existsSync(envCookieFile) ? envCookieFile : legacyCookieFile);
+  const cookieFile = fs.existsSync(globalCookieFile)
+    ? globalCookieFile
+    : (fs.existsSync(rootCookieFile)
+      ? rootCookieFile
+      : legacyCookieFile);
 
   if (!fs.existsSync(cookieFile)) {return null;}
 

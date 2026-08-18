@@ -205,9 +205,10 @@ async function syncSchema(appId, outputDir, forms) {
 
     // v1.1.0: 如果有分组信息，在分组子目录下创建表单目录
     // v1.2.0: 分组目录加「分组」后缀，与 create_from_markdown.js / sync_config.js 保持一致
+    // v1.3.0: 支持多层次分组（form.module 为全路径如"业务规则/1.主表操作主表"）
     const formTypeStr = form.type === '流程' ? '流程表单' : '普通表单';
     const formDirName = `${form.name}「${formTypeStr}」`;
-    const groupDirName = form.module ? `${form.module}「分组」` : '';
+    const groupDirName = form.module ? form.module.split('/').map(p => `${p}「分组」`).join('/') : '';
     const formDir = groupDirName
       ? path.join(outputDir, groupDirName, formDirName)
       : path.join(outputDir, formDirName);
@@ -308,7 +309,7 @@ function generateFieldListFromSync(outputDir, forms) {
   let appName = '未知应用';
   if (fs.existsSync(configPath)) {
     const configContent = fs.readFileSync(configPath, 'utf-8');
-    const appNameMatch = configContent.match(/\*\*应用名称\*\*\s*\|\s*([^|]+)\s*\|/);
+    const appNameMatch = configContent.match(/(?:\*\*)?应用名称(?:\*\*)?\s*\|\s*([^|]+)\s*\|/);
     if (appNameMatch) {
       appName = appNameMatch[1].trim();
     }
@@ -592,9 +593,9 @@ function parseAppInfoFromConfig(configPath) {
 
   const content = fs.readFileSync(configPath, 'utf-8');
   
-  const appNameMatch = content.match(/\*\*应用名称\*\*\s*\|\s*([^|]+)\s*\|/);
-  const appIdMatch = content.match(/\*\*应用ID\*\*\s*\|\s*(APP[_-][A-Z0-9]+)\s*\|/);
-  const baseUrlMatch = content.match(/\*\*访问地址\*\*\s*\|\s*([^|]+)\s*\|/);
+  const appNameMatch = content.match(/(?:\*\*)?应用名称(?:\*\*)?\s*\|\s*([^|]+)\s*\|/);
+  const appIdMatch = content.match(/(?:\*\*)?应用ID(?:\*\*)?\s*\|\s*(APP[_-][A-Z0-9]+)\s*\|/);
+  const baseUrlMatch = content.match(/(?:\*\*)?访问地址(?:\*\*)?\s*\|\s*([^|]+)\s*\|/);
 
   return {
     appName: appNameMatch ? appNameMatch[1].trim() : null,
@@ -725,7 +726,7 @@ function parseAppIdFromConfig(configPath) {
   }
 
   const content = fs.readFileSync(configPath, 'utf-8');
-  const appIdMatch = content.match(/\*\*应用ID\*\*\s*\|\s*(APP[_-][A-Z0-9]+)\s*\|/);
+  const appIdMatch = content.match(/(?:\*\*)?应用ID(?:\*\*)?\s*\|\s*(APP[_-][A-Z0-9]+)\s*\|/);
   return appIdMatch ? appIdMatch[1] : null;
 }
 

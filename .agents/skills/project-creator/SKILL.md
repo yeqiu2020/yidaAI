@@ -126,14 +126,14 @@ description: 宜搭项目创建工具，用于初始化标准化的宜搭应用�
 
 ```bash
 # 统一同步（推荐）- 同步应用ID、表单UUID、组件ID、表结构
-node .agents/skills/config-sync/scripts/sync_all_configs.js "项目名称/01需求梳理/字段清单.md" "APP_XXX"
+yida-helper run config-sync/scripts/sync_all_configs.js "项目名称/01需求梳理/字段清单.md" "APP_XXX"
 
 # 或分步同步
 # 步骤1：同步系统配置清单
-node .agents/skills/config-sync/scripts/sync_config.js --appId "APP_XXX" --output "项目名称"
+yida-helper run config-sync/scripts/sync_config.js --appId "APP_XXX" --output "项目名称"
 
 # 步骤2：同步表单结构及组件ID
-node .agents/skills/config-sync/scripts/sync_form_schemas.js "项目名称/01需求梳理/字段清单.md" "APP_XXX"
+yida-helper run config-sync/scripts/sync_form_schemas.js "项目名称/01需求梳理/字段清单.md" "APP_XXX"
 ```
 
 同步内容：
@@ -181,6 +181,13 @@ node create-project.js "项目名称" [选项]
 ***
 
 ## 版本更新
+
+### v2.7.0 (2026-08-02)
+
+- **【增强】创建应用时生成基础开发引导页**：在 `01需求梳理/index.html` 生成自包含的开发引导页（含应用名、开发步骤进度、下一步指引、"已创建内容"、后续开发流程），解决"应用创建后尚未生成字段清单/原型页面时，点击进入应用访问 `原型页面/index.html` 返回 404"的问题
+- **【术语修正】引导页"下一步：需求梳理"措辞**：明确用户准备的是「**应用开发框架 Excel 模板**」（填写业务表单/字段/选项的 Excel 源文件），字段清单.md 是 excel-to-form 转换**生成的结果**而非用户手动准备的内容
+- **联动**：本地操作页面 `dashboard.js` 的"进入应用"链接，在应用尚未生成原型页面时改为指向 `01需求梳理/index.html`（开发引导页）；转换完成生成原型页面后自动指向完整原型页面
+- 对应 `create-project.js` 文件头版本 2.6.0（含 v2.5.0 模板加粗统一等）
 
 ### v2.2.0 (2026-03-26)
 

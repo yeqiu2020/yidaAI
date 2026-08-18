@@ -65,6 +65,31 @@
 {"componentName":"GetSingleDataNode","id":"node_x","props":{"nodeName":"GetSingleDataNode","name":"获取单条数据","description":"请设置想要获取的数据","type":"single","getData":{"type":"single","originalType":"form","appType":"APP_R206CVSVPXZC6IU3E53Y","sourceId":"FORM-6FCCE628B69D489BB8678AB7D41ACE62J34X","targetItem":{"appType":"APP_R206CVSVPXZC6IU3E53Y","appName":"","formItem":{"formType":"receipt","advanceProc":"n","formUuid":"FORM-6FCCE628B69D489BB8678AB7D41ACE62J34X","title":"","fields":null,"hasTableField":null}},"subSourceId":"","relativeItem":{},"filterType":"condition","condition":{"condition":"AND","rules":[],"ruleId":"group-xxx","conditionCode":"&&"},"sort":{"type":"none","column":""},"rulesFilter":[],"outputs":[],"quantity":1,"dataRules":{"rules":[{"componentName":"","labe":"","name":"","required":false,"ruleId":"rule-xxx","value":"","valueType":"literal"}]},"assignments":[]},"title":"获取单条数据"}}
 ```
 
+> **v2.7.0 filterType 变更**：获取单条/多条数据节点的 `filterType` 不再硬编码为 `"condition"`。无过滤条件时为 `"all"`（设计器显示"全部数据"），有条件时为 `"condition"`。上方金标准为有条件时的格式。
+
+> **v2.8.8 originalType 精确化**：目标表单是流程表单时，GetSingleDataNode（单条）`originalType="process_form"`（非 "process"），targetItem 为完整 `{appType, appName, formItem:{formType:"process", ...}}`。GetBatchDataNode（多条）流程表单仍用 `"process"`。见 `golden-standard-cascade-delete-subtable.md`。
+
+## GetBatchDataNode sub_table 直接获取（v2.8.8 修正：cascade chain 模式也用 sub_table，不是 node）
+
+两种 sub_table 取子表场景的节点形状（设计器均显示"从子表中获取"）：
+
+### 模式 A：sub_table 直接获取（4 节点，无前置获取单条）
+删除目标表单子表行、且子表条件字段全局唯一时：
+```json
+{"componentName":"GetBatchDataNode","id":"node_x","props":{"nodeName":"GetBatchDataNode","name":"获取多条数据","description":"请设置想要获取的数据","type":"batch","getData":{"type":"batch","originalType":"sub_table","appType":"","sourceId":"#{FORM-TARGET}","targetItem":{},"subSourceId":"tableField_target_sub","relativeItem":{"deep":0,"value":"tableField_target_sub","label":"产品规格"},"filterType":"condition","condition":{...子表字段条件...},"sort":{"type":"none","column":""},"rulesFilter":[...子表内字段...],"outputs":[],"quantity":100,"dataRules":{...},"assignments":[]},"title":"获取多条数据"}}
+```
+- 由 CLI `--data-sub-source-id <目标子表>` 单独使用（无 `--data-sub-condition`）触发（v2.8.7 `isSubFormTarget`）
+- ⚠️ 与 `--data-source-type subform`（`sourceId=#{触发表单}`）不同：本模式 `sourceId=#{目标表单}`
+
+### 模式 B：cascade chain mode（5 节点，**v2.8.8 修正为 sub_table 而非 node**）
+按主表字段定位 + 从其子表取行（删除子表行的标准 cascade 模式）：
+```json
+{"componentName":"GetBatchDataNode","id":"node_y","props":{"nodeName":"GetBatchDataNode","name":"获取多条数据","description":"请设置想要获取的数据","type":"batch","getData":{"type":"batch","originalType":"sub_table","appType":"","sourceId":"node_xxx","targetItem":{"deep":0,"value":"node_xxx","label":"获取单条数据"},"subSourceId":"tableField_target_sub","relativeItem":{"deep":0,"value":"tableField_target_sub","label":"产品规格"},"filterType":"condition","condition":{...仅子表字段条件...},"sort":{"type":"none","column":""},"rulesFilter":[...子表内字段...],"outputs":[],"quantity":100,"dataRules":{...},"assignments":[]},"title":"获取多条数据"}}
+```
+- 由 CLI 同时指定 `--data-sub-source-id` + `--data-sub-condition` 触发（v2.8.5 chain mode + v2.8.8 originalType 修正）
+- **关键修正**：节点3 的 `originalType` 必须是 `"sub_table"`（设计器显示"从子表中获取 + 数据节点=获取单条数据 + 子表=产品规格"），**不是 `"node"`**（旧错版导致 UI 显示"从数据节点中获取"）
+- 设计器手工配置金标准已对照：右侧面板"从子表中获取"radio + "数据节点"=获取单条数据 + "子表"=产品规格 + condition 仅含子表条件
+
 ## JavaScriptNode（脚本）★ 已抓取真实结构 ★
 props 外层包一个 `JavaScript` 对象：
 ```json
@@ -91,6 +116,87 @@ props 外层包一个 `JavaScript` 对象：
 ```json
 {"componentName":"EndNode","id":"node_x","props":{"name":{"en_US":"end","zh_CN":"结束","type":"i18n"}}}
 ```
+
+## InitiateApprovalNode（发起审批）★ v2.6.0 setter 实测确认 ★
+
+### 关键发现：主链/循环内两套 setter 期望格式
+v2.6.0 通过 Playwright 实测 setter 自动保存的金标准 viewJson，发现发起审批节点**分两套 setter 期望格式**——v2.5.6 错把循环内格式套到所有节点，导致主链反而被破坏。
+
+### 主链发起审批 setter 期望格式（实测金标准：手动配置的兄弟流 LPROC-KX966O71UT383IQEK2A0QA0GA40335AB56HSM01）
+```json
+{"componentName":"InitiateApprovalNode","id":"node_xxx","props":{
+  "nodeName":"InitiateApprovalNode",
+  "name":"发起审批",
+  "description":"在 [目标表单名] 中发起一条审批",
+  "initiateApprovalRules":{
+    "type":"single",
+    "initiator":{"type":"form_field_list","value":"[\"form_inst_creator\"]"},
+    "assignments":[
+      {"column":"textField_ltdu4ayu","valueType":"processVar","value":"textField_ltdu4ayu","required":false}
+    ],
+    "formUuid":"FORM-TARGET-XXX",
+    "processCode":"LPROC-XXX",
+    "formTitle":"目标表单名",
+    "appType":"APP_XXX"
+  }
+},"title":"发起审批"}
+```
+**setter UI 表现**："目标字段"名显示 + 值下拉显示"字段"占位符 + "表单成员字段"radio 未选中（**宜搭正常 UI 行为**，form_inst_creator 是系统虚拟字段 setter 不识别但功能正常）
+
+### 循环内发起审批 setter 期望格式（v2.8.0 设计器 setter tree 选择器逆向确认金标准）
+```json
+{"componentName":"InitiateApprovalNode","id":"node_xxx","props":{
+"nodeName":"InitiateApprovalNode",
+"name":"发起审批",
+"description":"在 [目标表单名] 中发起一条审批",
+"signAction":"one_by_one",
+"initiateApprovalRules":{
+"type":"single",
+    "initiator":{"type":"form_field","value":"employeeField_570rkgpn"},
+    "assignments":[
+      {"column":"textField_5haf2uz6","valueType":"processVar","value":"node_bd984b2569e","required":false},
+      {"column":"employeeField_5haf3ipm","valueType":"processVar","value":"node_bd984b2569e","required":false},
+      {"column":"numberField_5haf1qy6","valueType":"processVar","value":"node_bd984b2569e","required":false}
+    ],
+    "formUuid":"FORM-TARGET-XXX",
+    "processCode":"LPROC-XXX",
+    "formTitle":"目标表单名",
+    "appType":"APP_XXX",
+    "description":"在 [目标表单2] 中发起一条审批"
+  }
+},"title":"发起审批"}
+```
+**setter UI 表现**：完整显示字段名（值=当前循环执行的数据）+ 发起人选中（表单成员字段=提交成员）
+
+### 关键要点（v2.6.0 实测纠正 v2.5.6/v2.5.7/v2.5.8/v2.5.9 错误归因）
+- **`assignments[].value` 格式分场景**：
+  - **主链**：裸字段 componentId（如 `textField_ltdu4ayu`）
+  - **循环内**：循环容器节点 ID（如 `node_bd984b2569e`）—— setter 把"循环节点 ID"作为"循环当前行"引用源，按"目标字段名（assignments[].column）"自动匹配循环当前行的对应子字段
+- **`initiator` 格式分场景**：
+  - **主链**：`{type:"form_field_list", value:"[\"form_inst_creator\"]"}`（setter UI 显示"未选中"是宜搭正常行为）
+  - **循环内**：`{type:"form_field", value:"<提交成员字段 componentId>"}`（如 `employeeField_570rkgpn`）
+  - 指定用户（主链/循环内通用）：`{type:"select_user", value:"<userId>"}`
+- **`signAction` 顶层字段**：
+  - **主链**：无此字段（金标准流 LPROC-KX966O71UT383IQEK2A0QA0GA40335AB56HSM01 不含）
+  - **循环内**：必须有 `signAction='one_by_one'`（setter 自动写入）
+
+### v2.8.0 关键修正：`assignments[].value` 格式 + `__display` 字段
+
+v2.8.0 通过 Playwright 逆向设计器 setter tree 选择器行为，确认循环内发起审批节点的 `assignments[].value` 正确格式为 **`${cycleNodeId}.fieldId`**（如 `${node_xxx}.textField_570rac0i`），这是 setter tree 选择器中"当前循环执行的数据"展开后子选项的 value 格式。
+
+- ❌ v2.6.0 用裸 `cycleNodeId`（如 `node_bd984b2569e`）→ setter 全部显示"当前循环执行的数据"整体，不显示具体字段名
+- ❌ v2.7.0 用 `cycleNodeId//fieldId`（如 `node_xxx//textField_570rac0i`）→ setter 不识别此格式，保存后回退为空
+- ✅ v2.8.0 用 `${cycleNodeId}.fieldId`（如 `${node_xxx}.textField_570rac0i`）→ setter 正确显示各字段名
+
+同时确认必须写入 `__display` 字段（源字段中文名），否则 setter 在未加载 `getFormVariables.json` API 时显示"请配置字段/变量"（空白）。view-builder 通过 `lookupFieldLabel(triggerFormSchema, fieldId)` 自动查找。
+
+**⚠️ 面板保存 ≠ 服务器保存**：设计器面板内的"保存"按钮只应用到本地画布，必须点击页面顶部工具栏的 `simple-flow-canvas-save` 按钮才触发 `saveProcess` API 持久化。`integration-designer-fix.js --save` 会自动点击工具栏保存按钮。
+
+### v2.8.0 view-builder 输出规范
+- **主链发起审批节点**：保留 v2.5.6 原始格式（form_field_list+form_inst_creator，裸字段 ID，无 signAction）—— 与金标准流完全一致
+- **循环内发起审批节点**：用 v2.8.0 金标准格式（assignments[].value=`${cycleNodeId}.fieldId` + `__display`=源字段中文名, initiator=form_field+提交成员字段, signAction=one_by_one）
+- create.js `findSubmitterFieldId(triggerFormSchema)` 自动从触发表单 schema 中找"提交成员"字段（EmployeeField 含"提交"），仅对循环内发起人占位升级
+- view-builder `lookupFieldLabel(triggerFormSchema, fieldId)` 自动从触发表单 Schema 中查找源字段中文名作为 `__display`
 
 ## UpdateDataNode（更新数据）★ 决定性突破 ★
 
@@ -120,13 +226,41 @@ doc.rootNode.children.insert(nn, getSingleIndex+1);
 - 第2步 匹配规则：主条件（定位主表记录）+ 子条件（定位子表行，引擎对触发子表数组逐行匹配）
 - 第3步 更新规则：目标字段 的值设为「公式」→ fx 公式编辑器；可「添加字段」
 - 第4步 更多配置：未获取到数据时 ○跳过当前节点 / ○新增一条数据
-- `updateDataRules` 仅在面板点“保存”时才写入 node props（UI 中选择未 commit 前仍为 {}）
+- `updateDataRules` 仅在面板点"保存"时才写入 node props（UI 中选择未 commit 前仍为 {}）
 
 ### CycleContainer（循环容器）关键结论
 - componentName='CycleContainer'，prop key='cycleContainerRules'
-- 其 setter 明确提示：“在当前节点之前添加『获取多条数据』节点，获取用于循环处理的数据”
+- 其 setter 明确提示："在当前节点之前添加『获取多条数据』节点，获取用于循环处理的数据"
 - → **只能遍历 GetBatchDataNode 的输出，不能遍历触发数据的子表行**
-- → 子表累加【不用】循环容器；单个「直接更新表单数据·子表」节点即可，引擎对触发子表数组逐行迭代匹配累加（这就是“词表更新”）
+- → 子表累加【不用】循环容器；单个「直接更新表单数据·子表」节点即可，引擎对触发子表数组逐行迭代匹配累加（这就是"词表更新"）
+- → ⚠️ **CycleContainer 内 InitiateApprovalNode 设计器面板首次点击需 Playwright 修复**（v2.7.0 新增 `integration-designer-fix.js` 可自动化解决；v2.7.1 起为标准支持功能）
+
+### CycleContainer 内 InitiateApprovalNode（v2.8.0 起标准支持，格式已最终确认）
+
+**用途**：遍历子表行逐行在目标流程表单发起审批（如：提交一条带多条明细的单据，对每条明细各发起一条审批流程）。
+
+**viewJson 格式**（v2.8.0 设计器 setter tree 选择器逆向确认金标准）：
+- `signAction='one_by_one'` 顶层字段（必须）
+- `assignments[].value` = **`${cycleNodeId}.fieldId`** 格式（如 `${node_xxx}.textField_570rac0i`）—— setter tree 选择器子选项 value 格式
+  - ❌ v2.6.0 用裸 cycleNodeId → setter 全部显示"当前循环执行的数据"整体
+  - ❌ v2.7.0 用 cycleNodeId//fieldId → setter 不识别，保存后回退为空
+  - ✅ v2.8.0 用 ${cycleNodeId}.fieldId → setter 正确显示各字段名
+- `assignments[].__display` = **源字段中文名**（如 `"任务名称"`）——缺少则首次加载显示空白
+- `initiator.type='form_field'` + `initiator.value=<真实 EmployeeField 字段ID>`（如 `employeeField_lus0jwc4`）—— ❌ 空值导致设计器保存弹窗拦截；❌ `form_inst_creator` 显示原始文本；✅ 真实 EmployeeField 显示字段中文名
+
+**设计器面板修复 + 工具栏保存**：
+循环内发起审批节点首次点击时设计器不调用 `getFormVariables.json` API 导致面板空白，但点击前置 GetBatchDataNode 再点回即可触发重渲染。**关键**：面板内"保存"只应用到本地画布，必须点击页面顶部工具栏的 `simple-flow-canvas-save` 按钮才触发 `saveProcess` API 持久化。创建后执行：
+```bash
+node .agents/skills/integration/scripts/integration-designer-fix.js <appType> <processCode> --save
+```
+
+**CLI 参数**：
+- `--cycle` + `--cycle-initiate-approval-form-uuid <目标流程表单UUID>`
+- `--cycle-initiate-approval-assignment <targetFieldId:processVar:sourceFieldId>`（可多次，两个冒号，一个冒号会静默丢失）
+- `--cycle-initiate-approval-initiator <employeeFieldId>`（可选，不传则自动查找主表 EmployeeField）
+- 也可用 `--data-source-type subform --data-sub-field-id <子表字段ID>` 从触发数据子表获取（自动设为 multiple）
+
+**历史**：v2.5.8~v2.5.9 曾误判为"宜搭前端框架限制"并加 CLI 硬拦截（`--cycle-initiate-approval-*` 参数被废弃）；v2.6.0 实测确认 viewJson 格式正确后面板可正常显示；v2.7.1 正式移除硬拦截恢复为标准功能；v2.8.0 最终确认 `assignments[].value` 正确格式为 `${cycleNodeId}.fieldId`（经历三轮试错），并发现缺少 `__display` 导致首次加载空白、面板保存不等于服务器保存三个问题叠加；v2.8.2 修复 initiator 为空导致"假保存"+ `form_inst_creator` 显示不友好（改为自动查找主表 EmployeeField）。
 
 ### 最终 3 节点架构（已保存+发布+启用 status='y'）
 1. StartNode：采购入库 FORM-B123AFB3751A4001B0C7FA5D8A252261IW6H · processFinish（提交完成）

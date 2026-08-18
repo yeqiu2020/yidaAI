@@ -99,13 +99,13 @@ rule-sync/
 
 ```bash
 # 同步规则（从系统配置清单读取应用ID）
-node .agents/skills/rule-sync/scripts/sync_rules.js
+yida-helper run rule-sync/scripts/sync_rules.js
 
 # 指定输出目录
-node .agents/skills/rule-sync/scripts/sync_rules.js --output ./进销存管理
+yida-helper run rule-sync/scripts/sync_rules.js --output ./进销存管理
 
 # 指定应用ID
-node .agents/skills/rule-sync/scripts/sync_rules.js --appId APP_XXX --output ./进销存管理
+yida-helper run rule-sync/scripts/sync_rules.js --appId APP_XXX --output ./进销存管理
 ```
 
 ### 输出文件
@@ -202,10 +202,10 @@ function onChange({ value, field }) {
 
 ```bash
 # 第一步：同步配置（获取应用ID、表单UUID、组件ID）
-node .agents/skills/config-sync/scripts/sync_config.js --output ./进销存管理
+yida-helper run config-sync/scripts/sync_config.js --output ./进销存管理
 
 # 第二步：同步规则（获取公式、联动、校验、代码）
-node .agents/skills/rule-sync/scripts/sync_rules.js --output ./进销存管理
+yida-helper run rule-sync/scripts/sync_rules.js --output ./进销存管理
 ```
 
 执行完成后，项目目录下会有：

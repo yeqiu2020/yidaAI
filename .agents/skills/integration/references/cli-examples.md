@@ -2,27 +2,30 @@
 
 > 本文件从 SKILL.md 拆分而来（渐进式披露）。按需加载：组装 `integration-create.js` 复杂参数、或使用 list/check/get/validate 的进阶选项时查阅。参数逐项说明见 SKILL.md「六、使用方式」参数表。
 
-## 0. ★ 方案选择决策树（选错方案=白建逻辑流，务必先看）
+## 0. ★ 方案选择决策树（判别标准=动作类型，不是数据拓扑；选错方案=白建逻辑流，务必先看）
 
 ```
-触发单据审批通过后，需要同步更新另一张表的数据？
-├─ 触发表单【主表字段】→ 目标表单【主表字段】（如：采购入库主表→库存信息主表）
-│  ✅ 首选方案：direct_form 直接更新（3 节点：触发→更新→结束）
-│     --update-form-uuid + --update-condition + --update-assignment + --update-none-operation add
-│     ⚠️ 禁止用循环容器！直接更新引擎自动处理，无需获取节点、无需循环
+触发后需要对另一张表做什么？
+├─ 数据同步/累加/upsert（更新或新增目标表数据）
+│  ✅ 一律 direct_form 更新数据节点（3 节点：触发→更新→结束），
+│     无论触发数据来自主表字段还是子表明细行！
+│  ├─ 目标是主表字段（如：采购入库.入库明细/主表→库存信息主表，已实际验证）
+│  │  --update-form-uuid + --update-condition + --update-assignment + --update-none-operation add
+│  │  引擎自动对触发子表明细逐行迭代匹配，无需获取节点、无需循环
+│  └─ 目标是子表行（如：采购入库.入库明细→采购订单.采购明细.已入库数量）
+│     追加 --update-sub-source-id + --update-sub-condition
+│  ⚠️ 任何数据同步场景禁止用循环容器！（同一根因已两次把"采购入库同步库存"误建成5节点循环流）
 │
-├─ 触发表单【子表行】→ 目标表单【子表行】（如：采购入库.入库明细→采购订单.采购明细.已入库数量）
-│  ✅ 首选方案：direct_form 子表更新（3 节点：触发→更新→结束）
-│     --update-sub-source-id + --update-condition + --update-sub-condition + --update-assignment
-│     ⚠️ 禁止用循环容器！引擎对子表数组逐行迭代匹配，无需手动循环
-│
-├─ 触发表单【子表行】→ 目标表单【主表记录】（如：采购入库.入库明细各行→各自对应的库存信息主表记录）
-│  ⚠️ 仅此场景才用循环容器（5 节点：触发→获取多条→循环→循环体内更新→结束）
-│     --data-source-type subform + --cycle + --cycle-update-*
-│     ❗ 这是唯一需要循环容器的场景，其他场景一律用 direct_form
-│
-└─ 不确定？默认用 direct_form（直接更新），能覆盖 90% 的同步场景
+└─ 逐条执行非更新类动作（对获取多条的每条结果分别执行以下动作）
+   ⚠️ 仅此类场景才用循环容器（--cycle，需前置获取多条节点）；它不是数据同步的备选方案。
+   ├─ 发起审批（如：任务分派子表逐行→任务执行发起审批，必须用循环+InitiateApprovalNode）
+   │  ⚠️ "发起审批" ≠ "新增数据"！发起审批是创建流程实例，不是更新/新增数据记录。
+   │  assignment 格式：目标字段ID:processVar:源字段ID（两个冒号，一个冒号会静默丢失）
+   ├─ 消息通知（对每条结果发消息）
+   └─ 连接器调用（对每条结果调API）
 ```
+
+> 已验证成功的库存同步完整配置见 `docs/采购入库同步库存-集成自动化配置指南.md`。
 
 ## 1. integration-create.js 创建示例
 
@@ -83,6 +86,22 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
   --data-condition "textField_bbb:客户名称:textField_aaa" \
   --delete-data
 
+# 【删除子表行·模式A】目标表单子表直接获取（4节点，设计器显示"从子表中获取"）
+# 场景：子表条件字段值在目标表单中全局唯一（如"名称"主表记录唯一），直接按子表字段匹配删除子表行
+# 架构：触发 → 获取多条(从子表中获取, originalType=sub_table, sourceId=#{目标表单}) → 删除子表行 → 结束
+# ⚠️ --data-sub-source-id 单独使用（无 --data-sub-condition）即触发 sub_table 直接获取；
+#    若误加 --data-sub-condition 会变成 5 节点 cascade（显示"从数据节点中获取"）
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后删除关联子表行" \
+  --events processFinish --approval-actions agree \
+  --data-form-uuid FORM-TARGET \
+  --data-query-type multiple \
+  --data-condition "numberField_target_sub_val:规格:numberField_trigger_sub_val:NumberField:Equal::processVar" \
+  --data-sub-source-id tableField_target_sub \
+  --delete-data \
+  --delete-sub-source-id tableField_target_sub \
+  --delete-sub-condition "numberField_target_sub_val:规格:numberField_trigger_sub_val:NumberField:Equal::processVar" \
+  --publish
+
 # 【子表批量新增】把触发表子表行/获取多条结果 批量写入目标表的子表
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "子表批量新增" \
   --events insert \
@@ -108,9 +127,32 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-A-XXX
   --approval-actions agree \
   --get-self \
   --initiate-approval-form-uuid FORM-PROCESS-B-XXX \
-  --initiate-approval-initiator-user "01376266634908:张三" \
+  --initiate-approval-initiator-user "00000000000008:张三" \
   --initiate-approval-assignment "textField_b1:processVar:textField_a1" \
   --publish
+
+# ★ 循环内发起审批（子表逐行→目标流程表单发起审批，如：任务分派→任务执行）
+# 场景：A表(流程表单)审批通过后，遍历A表子表行，逐行在B表(流程表单)发起审批
+# 架构：4 节点（触发→获取多条数据→循环[含发起审批]→结束）
+# ⚠️ 关键1：assignment格式必须用两个冒号 targetFieldId:processVar:sourceFieldId
+#    只用一个冒号会导致 parseAssignments 解析失败，赋值静默丢失！
+# ⚠️ 关键2：发起人默认自动查找主表 EmployeeField（设计器显示字段中文名如"项目经理"）
+#    也可通过 --cycle-initiate-approval-initiator 手动指定 EmployeeField 字段ID
+# ⚠️ 关键3：创建后必须执行 integration-designer-fix.js --save 修复设计器面板并持久化
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后循环发起审批" \
+  --events processFinish --approval-actions agree \
+  --data-source-type subform --data-sub-field-id tableField_xxx \
+  --cycle \
+  --cycle-initiate-approval-form-uuid FORM-TARGET \
+  --cycle-initiate-approval-assignment "textField_target1:processVar:textField_source1" \
+  --cycle-initiate-approval-assignment "employeeField_target2:processVar:employeeField_source2" \
+  --cycle-initiate-approval-assignment "dateField_target3:processVar:dateField_source3" \
+  --publish
+# 创建后修复设计器面板：
+# node .agents/skills/integration/scripts/integration-designer-fix.js APP_XXX <processCode> --save
+#
+# 手动指定发起人（可选，不传则自动查找主表 EmployeeField）：
+# --cycle-initiate-approval-initiator employeeField_xxx
 
 # 创建带连接器调用节点的自动化（钉钉待办）
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "创建待办" \
@@ -167,19 +209,40 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
   --branch-field textField_xxx --branch-operator Equal --branch-value "张三" --branch-field-name "姓名" \
   --receivers "user001"
 
-# ⚠️ 循环容器（仅限：触发表子表各行 → 各自对应的目标表主表记录，每行需独立 UPSERT）
-# ❗ 这是唯一需要循环容器的场景！库存同步等常见场景请用上面的 direct_form 黄金配方
-# bundle 验证：GetBatchDataNode originalType=sub_table 从触发子表获取多条数据
-# CycleContainer 遍历每行，循环体内 UpdateDataNode 逐行 UPSERT 目标表单
-node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "子表逐行入库" \
+# ⚠️ 循环容器（仅限：对「获取多条数据」的每条结果逐条执行非更新类动作，如逐条发消息通知）
+# ❗ 数据同步/累加/upsert（含子表明细→目标主表，如库存同步）一律用上面的 direct_form 黄金配方，禁止用循环容器！
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "逐条通知" \
   --events processFinish --approval-actions agree \
-  --data-form-uuid FORM-XXX --data-query-type multiple \
-  --data-source-type subform --data-sub-field-id tableField_sub \
+  --data-form-uuid FORM-YYY --data-query-type multiple \
   --cycle \
-  --cycle-update-form-uuid FORM-ZZZ \
-  --cycle-update-condition "textField_target:目标匹配字段:textField_sub_trig" \
-  --cycle-update-assignment "numberField_qty:column:#{FORM-ZZZ/numberField_qty}+#{numberField_sub_src}" \
-  --cycle-update-none-operation add
+  --receivers "user001" --title "逐条提醒" --content "请处理"
+
+# 循环容器内发起审批（遍历子表行逐行发起审批流程）
+# 场景：提交一条带多条明细的单据，对每条明细各发起一条审批流程
+# v2.8.0 金标准：assignments[].value 自动生成为 ${cycleNodeId}.fieldId 格式 + __display=源字段中文名
+# v2.8.2 修复：发起人(initiator)使用真实 EmployeeField（自动查找主表第一个），设计器显示字段中文名
+# ⚠️ 创建后必须执行设计器面板修复（触发 getFormVariables 加载 + 工具栏保存持久化）：
+# node .agents/skills/integration/scripts/integration-designer-fix.js APP_XXX <生成的processCode> --save
+#
+# 也可以用 --data-source-type subform 从触发数据子表获取（自动设为 multiple）：
+# node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "循环发起审批" \
+#   --events processFinish --approval-actions agree \
+#   --data-source-type subform --data-sub-field-id tableField_xxx \
+#   --cycle \
+#   --cycle-initiate-approval-form-uuid FORM-APPROVAL \
+#   --cycle-initiate-approval-assignment "textField_target1:textField_source1" \
+#   --cycle-initiate-approval-assignment "textField_target2:textField_source2" \
+#   --publish
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "循环发起审批" \
+  --events processFinish --approval-actions agree \
+  --data-form-uuid FORM-YYY --data-query-type multiple \
+  --cycle \
+  --cycle-initiate-approval-form-uuid FORM-APPROVAL \
+  --cycle-initiate-approval-assignment "textField_target1:textField_source1" \
+  --cycle-initiate-approval-assignment "textField_target2:textField_source2" \
+  --publish
+# ⚠️ 创建后执行设计器面板修复（必须加 --save 触发工具栏保存）：
+# node .agents/skills/integration/scripts/integration-designer-fix.js APP_XXX <生成的processCode> --save
 
 # 创建并直接发布
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "发布流程" \

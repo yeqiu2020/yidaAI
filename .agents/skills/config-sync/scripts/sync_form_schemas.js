@@ -82,7 +82,7 @@ function parseAppIdFromConfig(configPath) {
   
   const content = fs.readFileSync(configPath, 'utf-8');
   // 兼容多种格式：应用编码、应用ID，以及带转义符的格式
-  const appIdMatch = content.match(/\|\s*\*\*(?:应用编码|应用ID)\*\*\s*\|\s*`?(APP[_\\]*[A-Z0-9]+)`?\s*\|/);
+  const appIdMatch = content.match(/\|\s*(?:\*\*)?(?:应用编码|应用ID)(?:\*\*)?\s*\|\s*`?(APP[_\\]*[A-Z0-9]+)`?\s*\|/);
   if (appIdMatch) {
     // 清理转义符，返回标准格式
     return appIdMatch[1].replace(/\\/g, '');

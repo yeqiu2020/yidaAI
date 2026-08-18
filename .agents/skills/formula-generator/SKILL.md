@@ -198,7 +198,7 @@ description: "宜搭公式生成专家。当用户说'写公式'、'写宜搭公
 3. **执行CLI命令**：
 
 ```bash
-node .agents/skills/formula-generator/scripts/formula_generator_wrapper.js \
+yida-helper run formula-generator/scripts/formula_generator_wrapper.js \
   --formulaName "公式名称" \
   --category "分类目录" \
   --fields "字段显示名:字段ID" \
@@ -223,7 +223,7 @@ node .agents/skills/formula-generator/scripts/formula_generator_wrapper.js \
 
 **示例**：
 ```bash
-node .agents/skills/formula-generator/scripts/formula_generator_wrapper.js \
+yida-helper run formula-generator/scripts/formula_generator_wrapper.js \
   --formulaName "根据身份证号计算星座" \
   --category "身份证处理" \
   --fields "身份证号码:textField_mme5l0vy" \
@@ -244,7 +244,7 @@ node .agents/skills/formula-generator/scripts/formula_generator_wrapper.js \
 生成公式后，使用 `formula_evaluator.js` 进行本地验证：
 
 ```bash
-node .agents/skills/formula-generator/scripts/formula_evaluator.js \
+yida-helper run formula-generator/scripts/formula_evaluator.js \
   --formulaFile "公式文件路径" \
   --fields "字段名:字段ID,字段名:字段ID" \
   --testValues "字段名=测试值,字段名=测试值"

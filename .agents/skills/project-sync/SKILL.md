@@ -108,7 +108,7 @@ AI：读取 叶秋功能测试/系统配置清单.md → 获取应用ID → 执�
 
 ```bash
 # 首次同步，指定应用ID
-node .agents/skills/project-sync/scripts/sync_project.js \
+yida-helper run project-sync/scripts/sync_project.js \
   --appId APP_YA1204PFH4K3MRARR1E3 \
   --output ./叶秋功能测试
 ```
@@ -117,7 +117,7 @@ node .agents/skills/project-sync/scripts/sync_project.js \
 
 ```bash
 # 更新同步，自动从配置清单读取应用ID
-node .agents/skills/project-sync/scripts/sync_project.js \
+yida-helper run project-sync/scripts/sync_project.js \
   --output ./叶秋功能测试
 ```
 

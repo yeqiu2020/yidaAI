@@ -186,7 +186,7 @@ PREP_XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 
 ```bash
 # 创建数据准备
-node .agents/skills/data-prep/scripts/create-data-prep.js \
+yida-helper run data-prep/scripts/create-data-prep.js \
   --appType APP_FDK8IG9UIDEFV2PTPDYL \
   --name "财务收支ETL" \
   --inputs "收款登记,费用报销,退款登记" \
@@ -199,7 +199,7 @@ node .agents/skills/data-prep/scripts/create-data-prep.js \
 数据准备创建成功后，使用 dataset Skill 的验证脚本验证：
 
 ```bash
-node .agents/skills/dataset/scripts/verify-dataset.js APP_FDK8IG9UIDEFV2PTPDYL PREP_XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+yida-helper run dataset/scripts/verify-dataset.js APP_FDK8IG9UIDEFV2PTPDYL PREP_XXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 ```
 
 ### 5.4 手动操作指南

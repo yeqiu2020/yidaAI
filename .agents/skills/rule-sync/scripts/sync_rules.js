@@ -47,7 +47,7 @@ function parseAppIdFromConfig(configPath) {
   }
   
   const content = fs.readFileSync(configPath, 'utf-8');
-  const appIdMatch = content.match(/\|\s*\*\*应用ID\*\*\s*\|\s*(APP[_-][A-Z0-9]+)\s*\|/);
+  const appIdMatch = content.match(/\|\s*(?:\*\*)?应用ID(?:\*\*)?\s*\|\s*(APP[_-][A-Z0-9]+)\s*\|/);
   return appIdMatch ? appIdMatch[1] : null;
 }
 

@@ -21,10 +21,13 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const querystring = require('querystring');
 
 var PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
-var COOKIES_PATH = path.join(PROJECT_ROOT, '.cookies.json');
+// 阶段二改造：Cookie 优先全局，兼容项目根
+var GLOBAL_COOKIES_PATH = path.join(os.homedir(), '.yida-ai-helper', '.cookies.json');
+var COOKIES_PATH = fs.existsSync(GLOBAL_COOKIES_PATH) ? GLOBAL_COOKIES_PATH : path.join(PROJECT_ROOT, '.cookies.json');
 var PREFIX = '_view';
 var DOMAIN_CODE = 'tEXDRG';
 

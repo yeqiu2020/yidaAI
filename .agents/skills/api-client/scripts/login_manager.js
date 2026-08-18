@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 /**
  * login_manager.js - 宜搭平台登录态管理模块 (Node.js版本)
- * 版本: 1.0.0
+ * 版本: 1.0.1
  * 创建日期: 2026-03-25
  * 
  * 功能: 管理宜搭平台的登录态，支持Cookie持久化和自动验证
  * 替代原 Python 版本的 login_manager.py
+ * 更新(1.0.1): 验证 Cookie 由 networkidle 改为 domcontentloaded，解决宜搭 SPA 持续后台请求导致刷新登录态卡 60s 超时的问题
  */
 
 const { chromium } = require('playwright');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { URL } = require('url');
 
 // Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
@@ -21,7 +23,9 @@ const coreUtils = require('../../../../lib/core/utils');
 const SCRIPT_DIR = __dirname;
 const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..', '..');
 const CONFIG_FILE = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'config', 'default.json');
-const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
+// 阶段二改造：Cookie 优先全局，兼容项目根
+const GLOBAL_COOKIE_FILE = path.join(os.homedir(), '.yida-ai-helper', '.cookies.json');
+const COOKIE_FILE = fs.existsSync(GLOBAL_COOKIE_FILE) ? GLOBAL_COOKIE_FILE : path.join(PROJECT_ROOT, '.cookies.json');
 
 // 默认配置
 const DEFAULT_CONFIG = {
@@ -94,7 +98,8 @@ async function fetchPageInfo(page, targetUrl) {
   console.error(`  📄 正在获取页面信息: ${targetUrl}`);
   
   try {
-    await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 60000 });
+    // 【加速】宜搭 SPA 有持续后台请求，networkidle 会等到 60s 超时导致刷新变慢，改用 domcontentloaded
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
   } catch (e) {
     console.error(`  ⚠️  页面加载超时: ${e.message}`);
   }

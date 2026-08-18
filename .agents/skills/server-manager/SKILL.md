@@ -12,6 +12,7 @@ description: 宜搭服务管理器，一键启动和管理宜搭开发所需的�
 ### 专属硬规则
 1. **禁止手动npx http-server启动** — 必须通过本Skill的管理脚本启动
 2. **管理HTTP静态服务8080和同步配置服务3457** — 两个端口固定，不可更改
+3. **【v3.0.0 多组织并存】所有 URL 中的项目目录段必须自动提取当前项目根目录名（即当前工作目录路径的最后一段），直接填入 URL，严禁输出 `{项目目录名}` 占位符让用户手动替换**
 
 ---
 
@@ -37,16 +38,16 @@ description: 宜搭服务管理器，一键启动和管理宜搭开发所需的�
 
 ```bash
 # 启动所有服务（默认）
-node .agents/skills/server-manager/scripts/server_manager.js start
+yida-helper run server-manager/scripts/server_manager.js start
 
 # 检查服务状态
-node .agents/skills/server-manager/scripts/server_manager.js status
+yida-helper run server-manager/scripts/server_manager.js status
 
 # 停止所有服务
-node .agents/skills/server-manager/scripts/server_manager.js stop
+yida-helper run server-manager/scripts/server_manager.js stop
 
 # 重启服务
-node .agents/skills/server-manager/scripts/server_manager.js restart
+yida-helper run server-manager/scripts/server_manager.js restart
 ```
 
 ### 第3步：解析脚本输出
@@ -60,15 +61,16 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 
 服务启动成功后，**必须执行以下操作**：
 
-1. **调用 OpenPreview 工具打开首页**：
-   - 使用 OpenPreview 工具，preview_url 设为 `http://127.0.0.1:8080/本地操作页面/index.html`
+1. **调用 OpenPreview 工具打开本地操作页面**：
+   - 使用 OpenPreview 工具，preview_url **只能设为** `http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html`
+   - ⚠️ **严禁打开 `http://127.0.0.1:8080/`（组织门户首页）**，该页面无实际意义
    - command_id 设为启动服务命令的 ID
 2. **处理 OpenPreview 可能的报错**：
    - OpenPreview 可能返回 `net::ERR_ABORTED` 错误——这是 Trae IDE 内置浏览器预览机制的限制，不代表服务未启动
    - 如果遇到此错误，**忽略错误**，直接告知用户访问地址即可
 3. **告知用户访问地址**：
    - 如果 OpenPreview 成功 → 告知用户页面已打开
-   - 如果 OpenPreview 报错 → 告知用户直接在浏览器中访问 `http://127.0.0.1:8080/本地操作页面/index.html`
+   - 如果 OpenPreview 报错 → 告知用户直接在浏览器中访问 `http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html`
 
 ### 第5步：向用户报告结果
 
@@ -86,7 +88,7 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 
 ## 访问地址
 
-- **本地操作页面**: http://127.0.0.1:8080/本地操作页面/index.html
+- **本地操作页面**: http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html
 
 ## 使用说明
 
@@ -98,7 +100,7 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 ## 三、输出规范
 
 1. **必须展示服务状态表格**：包含服务名称、端口、运行状态
-2. **必须提供访问地址**：给出可点击的 `http://127.0.0.1:8080/本地操作页面/index.html` 链接
+2. **必须提供访问地址**：给出可点击的 `http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html` 链接
 3. **必须说明使用方式**：提醒用户不要使用 file:// 打开页面
 4. **错误时必须说明原因**：如果启动失败，说明具体原因和解决方法
 
@@ -109,6 +111,7 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 - ❌ 禁止为每个应用单独启动 HTTP 服务（所有应用共享同一个 8080 端口服务）
 - ❌ 禁止修改同步服务的端口（原型页面中的 `SYNC_SERVICE_URL` 固定为 3457）
 - ❌ **禁止手动使用 `npx http-server` 启动服务**（必须使用 `server_manager.js` 统一管理）
+- ❌ **禁止打开 `http://127.0.0.1:8080/` 组织门户首页**（无实际意义，必须打开 `/{项目目录名}/本地操作页面/index.html`）
 
 ## 五、常见问题与解决方案
 
@@ -151,7 +154,7 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 2. 如服务未运行，启动服务：`node server_manager.js start`
 3. **统一使用 8080 端口**，不要尝试其他端口
 4. 清除浏览器缓存后刷新页面：`Ctrl+F5`
-5. 确保访问地址正确：`http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/index.html`
+5. 确保访问地址正确：`http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/index.html`
 
 ### 问题3：同步服务端口被占用
 
@@ -164,11 +167,36 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 2. 如服务已在运行，无需重复启动
 3. 如需重启，先停止再启动：`node server_manager.js restart`
 
+### 问题5：切换项目后服务残留，同步/页面指向旧项目目录
+
+> **v3.0.0 多组织并存模式已彻底解决此问题**：全局服务以 `staticRoot`（公共父目录）为根启动，URL 首段即项目目录名，各项目互不干扰，切换项目无需重启服务。
+
+**现象（仅旧版 v2.x 单项目模式适用）**：用户在 A 项目（如 V2.0.22）启动过服务，之后切到 B 项目（如 V2.0.23）开发，忘记重启服务。浏览器打开门户页面时，页面内容和"同步到本地"都指向 **旧项目 A 的目录**，新项目 B 下找不到同步出来的文件夹。
+
+**根因（旧版）**：HTTP(8080) 与同步服务(3457) 是全局端口，由**第一次启动它们的项目目录**持有。页面/同步接口通过 `process.cwd()` 定位项目目录，进程 cwd = 旧项目 A，所以数据全部写入 A。
+
+**识别方法**：
+1. 检查端口归属：`Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 8080, 3457 }`
+2. 查看占用进程的工作目录（`sync_server.js` / `http-server` 的启动路径）
+3. 打开门户页面后看企业名称后是否显示**当前服务目录徽标**（v1.7.0 起）——若徽标目录 ≠ 当前项目目录，说明服务残留
+
+**解决方案**：
+1. **（v3.0.0 推荐）门户页面一键重启**：打开 `http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html`，点击组织头部的「🔄 重启服务」按钮，服务将自动重启全局服务（通过 `/restart-service` 接口触发 `server_manager.js restart`，重启后页面自动刷新）。**前提**：当前 8080/3457 由最新版 sync_server（v2.9.0+）提供；若是旧版本服务，需先用方案 2 重启一次。
+2. 停止旧项目服务：`node server_manager.js stop`（在旧项目目录执行）或清理占用端口进程
+3. 在**当前项目目录**重新启动：`node server_manager.js start`
+4. 重新打开门户页面确认目录徽标正确
+5. 已同步到错误目录的数据，将文件夹移动到当前项目根目录即可
+
+**注意**：
+- 门户页面「重启服务」按钮 = `POST /restart-service`，sync_server 收到后 spawn 独立 `server_manager.js restart` 进程并自动退出，由新进程接管端口
+- 重启后前端逻辑：轮询 `/health` 恢复 → 延迟 3 秒 → 刷新页面；`loadOrgInfo` 失败自动重试 3 次（v1.7.1）
+- Trae 终端环境下子进程会被终端 Job Object 清理，`server_manager.js start` 启动的服务可能在终端关闭后消失。若服务频繁消失，可通过 Windows 计划任务方式启动服务（脱离终端生命周期）
+
 ## 六、检查清单
 
 执行前确认：
 - [ ] 已确定用户需要的操作（启动/停止/重启/检查）
-- [ ] 项目根目录路径正确（`d:\宜搭AI编程\宜搭AI助手V1.6.1`）
+- [ ] 项目根目录路径正确（`d:\宜搭AI助手直播\宜搭AI助手V2.0.22`）
 
 执行后确认：
 - [ ] 脚本执行完成并返回结果
@@ -178,14 +206,23 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 
 ## 七、版本更新记录
 
-### v2.3.0 (2026-06-11)
-- **新增第4步**：服务启动后必须调用OpenPreview打开首页
-- **处理OpenPreview报错**：明确`net::ERR_ABORTED`的处理方式，忽略错误
-- **修复**：避免启动后忘记打开首页的问题
+### v3.0.0 (2026-08-17)
+- **多组织并存**：全局服务以 staticRoot（公共父目录）为根启动，URL 首段即项目目录名
+- **端口复用**：8080/3457 单实例服务所有项目，切换项目无需重启
+- **URL 格式**：所有访问地址增加项目目录段 `/{项目目录名}/...`
+- **问题5 已解决**：多组织并存模式下切换项目不再需要重启服务
 
-### v2.2.0 (2026-05-09)
-- HTTP服务器添加缓存禁用：http-server启动命令添加`-c-1`标志
-- 内置备用服务器添加`Cache-Control: no-cache, no-store, must-revalidate`响应头
+### v2.7.0 (2026-08-17)
+- **新增**：门户页面「重启服务」按钮（`POST /restart-service`），一键重启服务
+- **更新**：问题5解决方案增加一键重启方案，补充重启后前端自动恢复机制说明
+- **新增**：记录"切换项目后服务残留"问题（问题5），识别方法包含门户页面企业名称后的服务目录徽标
+- **注意**：Trae 终端会清理子进程，服务消失时可用 Windows 计划任务方式启动
+
+### v2.5.0 (2026-08-15)
+- **修复**：移除 `keepAlive()` 守护进程机制，脚本启动完服务后自动退出，不再阻塞终端。子进程通过 `detached:true` + `unref()` 在后台独立运行。
+
+### v2.4.1 (2026-08-04)
+- **修正**：OpenPreview 只能打开本地操作页面，严禁打开组织门户首页 `http://127.0.0.1:8080/`
 
 ## 八、快速参考
 
@@ -193,10 +230,10 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 
 | 操作 | 命令 |
 |------|------|
-| 启动服务 | `node .agents/skills/server-manager/scripts/server_manager.js start` |
-| 停止服务 | `node .agents/skills/server-manager/scripts/server_manager.js stop` |
-| 检查状态 | `node .agents/skills/server-manager/scripts/server_manager.js status` |
-| 重启服务 | `node .agents/skills/server-manager/scripts/server_manager.js restart` |
+| 启动服务 | `yida-helper run server-manager/scripts/server_manager.js start` |
+| 停止服务 | `yida-helper run server-manager/scripts/server_manager.js stop` |
+| 检查状态 | `yida-helper run server-manager/scripts/server_manager.js status` |
+| 重启服务 | `yida-helper run server-manager/scripts/server_manager.js restart` |
 
 ### 服务配置
 
@@ -208,9 +245,9 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 ### 访问路径示例
 
 ```
-http://127.0.0.1:8080/本地操作页面/index.html
-http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/index.html
-http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/templates/list.html?form={表单名}
+http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html
+http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/index.html
+http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/templates/list.html?form={表单名}
 ```
 
 详细文档请参考【Skill定义与内容规范.md】

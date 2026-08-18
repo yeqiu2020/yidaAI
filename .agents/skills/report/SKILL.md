@@ -142,12 +142,12 @@ description: "宜搭报表制作技能。通过自包含的报表引擎直接调
 
 2. **使用 config-sync 同步**：
    ```bash
-   node .agents/skills/config-sync/scripts/sync_config.js <appType>
+   yida-helper run config-sync/scripts/sync_config.js <appType>
    ```
 
 3. **使用 get-schema skill**：
    ```bash
-   node .agents/skills/get-schema/scripts/get-schema.js <appType> <formUuid>
+   yida-helper run get-schema/scripts/get-schema.js <appType> <formUuid>
    ```
 
 ⚠️ **绝对禁止**：从组件ID（如 `serialNumberField_4c11ypdu`）编造 cubeCode！
@@ -165,7 +165,7 @@ description: "宜搭报表制作技能。通过自包含的报表引擎直接调
 #### 2.4 提取字段信息
 
 ```bash
-node .agents/skills/get-schema/scripts/get-schema.js <appType> <formUuid>
+yida-helper run get-schema/scripts/get-schema.js <appType> <formUuid>
 ```
 
 从返回的Schema中提取：
@@ -248,7 +248,7 @@ node .agents/skills/get-schema/scripts/get-schema.js <appType> <formUuid>
 使用自包含的报表引擎创建报表：
 
 ```bash
-node .agents/skills/report/scripts/create-report.js <appType> "<报表名称>" <配置JSON文件路径>
+yida-helper run report/scripts/create-report.js <appType> "<报表名称>" <配置JSON文件路径>
 ```
 
 配置JSON文件路径指向 `{应用名}/06数据报表/{报表名称}.json`（第3步已保存），直接引用该文件创建报表。

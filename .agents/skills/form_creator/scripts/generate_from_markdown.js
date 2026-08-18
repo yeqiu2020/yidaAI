@@ -580,7 +580,7 @@ async function generateProject(markdownPath, outputPath) {
     if (useFlatStructure) {
       console.log(`  ✓ ${form.formName}「${form.formType}」/${form.formName}「${form.formType}」.json`);
     } else {
-      console.log(`  ✓ ${form.module}「分组」/${form.formName}「${form.formType}」/${form.formName}「${form.formType}」.json`);
+      console.log(`  ✓ ${form.module ? form.module.split('/').map(p => p + '「分组」').join('/') : ''}/${form.formName}「${form.formType}」/${form.formName}「${form.formType}」.json`);
     }
   });
   console.log('\n============================================================\n');

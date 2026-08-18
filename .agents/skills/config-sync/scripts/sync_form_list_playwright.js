@@ -508,7 +508,9 @@ async function runPlaywrightScript(projectDir, appId, appName, visualMode) {
   
   // 构建命令行参数
   const outputFile = path.join(projectDir, 'forms_deploy_list.json');
-  const cookieFile = path.join(PROJECT_ROOT, '.cookies.json');
+  // 阶段二改造：Cookie 优先全局，兼容项目根
+const globalCookieFile = path.join(require('os').homedir(), '.yida-ai-helper', '.cookies.json');
+const cookieFile = fs.existsSync(globalCookieFile) ? globalCookieFile : path.join(PROJECT_ROOT, '.cookies.json');
   const visualModeStr = visualMode ? 'true' : 'false';
   
   try {
@@ -540,7 +542,8 @@ async function runPlaywrightScript(projectDir, appId, appName, visualMode) {
  */
 function loadCookieString(baseUrl = '') {
   try {
-    const cookiePath = path.join(PROJECT_ROOT, '.cookies.json');
+    // 阶段二改造：Cookie 优先全局
+const cookiePath = cookieFile;
     if (!fs.existsSync(cookiePath)) {
       return { cookieStr: '', csrfToken: '' };
     }

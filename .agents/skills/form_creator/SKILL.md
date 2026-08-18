@@ -7,10 +7,10 @@ description: 根据用户自然语言描述或Markdown字段表生成宜搭表�
 
 你是宜搭表单创建专家，根据字段清单生成宜搭表单JSON配置并创建到宜搭平台，熟悉宜搭表单的JSON Schema规范和API接口。
 
-**当前版本：v6.61.0** (2026-07-28) — 完整版本历史与各版本修复详情见 [references/version-history.md](references/version-history.md)
+**当前版本：v6.63.0** (2026-08-17) — 完整版本历史与各版本修复详情见 [references/version-history.md](references/version-history.md)
 
 > **【v6.61.0 强制回归】** 修改关联字段解析或校验逻辑（validateAssociationTargets / parseFillingFromAssocDesc / buildDataFillingRules / scanAndFixPlaceholders）后必须重跑：
-> `node .agents/skills/form_creator/tests/test_validate_assoc.js`（3场景：事故复刻推断补全/无法推断中止/标记完整直通）
+> `yida-helper run form_creator/tests/test_validate_assoc.js`（3场景：事故复刻推断补全/无法推断中止/标记完整直通）
 
 ## 📁 渐进式披露：参考文件索引（按需加载）
 
@@ -153,7 +153,7 @@ description: 根据用户自然语言描述或Markdown字段表生成宜搭表�
 **唯一步骤：执行 `create_from_markdown.js`。禁止AI直接手动编写JSON文件，禁止用 Write 工具写JSON表单配置。**
 
 ```powershell
-node .agents/skills/form_creator/scripts/create_from_markdown.js "<字段清单.md绝对路径>"
+yida-helper run form_creator/scripts/create_from_markdown.js "<字段清单.md绝对路径>"
 ```
 
 > ⚠️ **严禁传入应用名称参数**（第二个参数）！脚本自动用项目目录名作为应用名称（专属硬规则4）。
@@ -180,7 +180,7 @@ node .agents/skills/form_creator/scripts/create_from_markdown.js "<字段清单.
 ### 场景2：向已有应用添加单个表单
 
 ```powershell
-node .agents/skills/form_creator/scripts/add_form_to_app.js --appId <应用ID> --form "<字段清单.md路径>" [--appName "<应用显示名称>"]
+yida-helper run form_creator/scripts/add_form_to_app.js --appId <应用ID> --form "<字段清单.md路径>" [--appName "<应用显示名称>"]
 ```
 
 | 参数 | 必填 | 说明 |

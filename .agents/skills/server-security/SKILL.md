@@ -28,10 +28,10 @@ created: 2026-07-10
 
 ```bash
 # 启动加固服务
-node .agents/skills/server-security/scripts/server-security-patch.js
+yida-helper run server-security/scripts/server-security-patch.js
 
 # 关闭加固（直接运行原始服务）
-SECURITY_PATCH_ENABLED=false node .agents/skills/form_creator/scripts/sync_server.js
+SECURITY_PATCH_ENABLED=false yida-helper run form_creator/scripts/sync_server.js
 ```
 
 ## API 端点

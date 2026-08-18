@@ -1,9 +1,12 @@
 ﻿/**
  * 宜搭项目创建工具
- * 版本: 2.5.0
- * 更新日期: 2026-05-17
+ * 版本: 2.6.0
+ * 更新日期: 2026-08-02
  *
  * 更新内容:
+ * - v2.6.0: 系统配置清单模板"应用名称/应用ID/访问地址/创建时间/最后更新"统一改为加粗格式，
+ *          与 config-sync 的 sync_config.js 模板一致，从源头消除两套表头格式差异
+ *           （避免未加粗表头导致解析应用信息失败显示"未知应用"）
  * - v2.5.0: 系统配置清单模板添加流程Code列
  *          - 表单UUID清单表格从3列改为4列
  *          - 新增"流程Code"列，与sync_config.js保持一致
@@ -167,11 +170,24 @@ function createProject(projectName) {
     console.log(`✅ 创建项目说明文档`);
   }
 
+  // 5. 创建基础开发引导页 01需求梳理/index.html
+  // 作用：字段清单/原型页面未生成时，"进入应用"指向此页，避免访问原型页面 index.html 返回 404
+  // 字段清单转换完成后，form-to-prototype 会生成完整原型页面（01需求梳理/原型页面/index.html），此引导页仍保留在 01需求梳理/ 下作参考
+  const guidePath = path.join(requirementDir, 'index.html');
+  if (!fs.existsSync(guidePath)) {
+    const guideContent = generateGuidePage(projectName);
+    fs.writeFileSync(guidePath, guideContent, 'utf-8');
+    console.log(`✅ 创建基础开发引导页 (01需求梳理/index.html)`);
+  } else {
+    console.log(`⚠️  开发引导页已存在，跳过`);
+  }
+
   console.log('=' .repeat(50));
   console.log('✅ 项目创建完成！\n');
   console.log('📋 项目结构:');
   console.log(`   ${projectName}/`);
   console.log(`   ├── 01需求梳理/`);
+  console.log(`   │   └── index.html (开发引导页)`);
   console.log(`   ├── 系统配置清单.md`);
   console.log(`   └── README.md`);
   console.log('');
@@ -185,7 +201,8 @@ function createProject(projectName) {
     projectName,
     projectPath,
     requirementDir: path.join(projectName, '01需求梳理'),
-    configFile: path.join(projectName, '系统配置清单.md')
+    configFile: path.join(projectName, '系统配置清单.md'),
+    guidePage: path.join(projectName, '01需求梳理', 'index.html')
   };
 }
 
@@ -216,11 +233,11 @@ function generateConfigTemplate(projectName, appId = null, corpId = '', domain =
 
 | 属性 | 值 | 说明 |
 |------|-----|------|
-| 应用名称 | ${projectName} | 宜搭应用显示名称 |
-| 应用ID | ${appIdValue} | 应用唯一标识（APP_XXX） |
-| 访问地址 | ${appId ? `${domain}/app/${appId}/` : '待同步'} | 宜搭应用访问URL |
-| 创建时间 | 待同步 | 应用创建时间 |
-| 最后更新 | 待同步 | 最后更新时间 |
+| **应用名称** | ${projectName} | 宜搭应用显示名称 |
+| **应用ID** | ${appIdValue} | 应用唯一标识（APP_XXX） |
+| **访问地址** | ${appId ? `${domain}/app/${appId}/` : '待同步'} | 宜搭应用访问URL |
+| **创建时间** | 待同步 | 应用创建时间 |
+| **最后更新** | 待同步 | 最后更新时间 |
 
 ### 部署运维信息
 
@@ -426,6 +443,106 @@ node .agents/skills/config-sync/scripts/sync_form_schemas.js "${projectName}/01�
 
 *文档版本：v1.0.0*  
 *最后更新：${today}*
+`;
+}
+
+/**
+ * 生成应用的基础开发引导页（自包含 HTML，不依赖原型页面的样式/资源）
+ * 用途：应用创建后、字段清单/原型页面尚未生成时，"进入应用"指向此页，
+ * 避免访问不存在的原型页面 index.html 返回 404。
+ * 当 form-to-prototype 生成完整原型页面后，"进入应用"改指向完整原型页面。
+ * 【v2.7.0】新增：满足"创建应用后即可看到开发指引"的需求
+ */
+function generateGuidePage(projectName) {
+  const today = new Date().toISOString().split('T')[0];
+  return `<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>${projectName} - 开发引导</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif; background: #f5f7fa; color: #1f2d3d; line-height: 1.6; }
+  .container { max-width: 820px; margin: 0 auto; padding: 40px 24px; }
+  .welcome { background: linear-gradient(135deg, #1565c0 0%, #42a5f5 100%); color: #fff; padding: 40px; border-radius: 12px; margin-bottom: 32px; text-align: center; box-shadow: 0 6px 20px rgba(21,101,192,0.25); }
+  .welcome h1 { font-size: 26px; margin-bottom: 10px; }
+  .welcome p { font-size: 14px; opacity: 0.9; }
+  .welcome .status { display: inline-block; margin-top: 14px; padding: 5px 16px; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.4); border-radius: 20px; font-size: 12px; }
+  .step-row { display: flex; justify-content: space-between; margin-bottom: 32px; position: relative; padding: 0 20px; }
+  .step-row::before { content: ''; position: absolute; top: 20px; left: 70px; right: 70px; height: 2px; background: #e3e8ef; z-index: 0; }
+  .step { display: flex; flex-direction: column; align-items: center; gap: 8px; position: relative; z-index: 1; }
+  .step-num { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; font-size: 15px; background: #e3e8ef; color: #8c94a1; }
+  .step.done .step-num { background: #52c41a; color: #fff; box-shadow: 0 2px 8px rgba(82,196,26,0.3); }
+  .step.active .step-num { background: #1677ff; color: #fff; box-shadow: 0 2px 8px rgba(22,119,255,0.4); }
+  .step-label { font-size: 12px; color: #8c94a1; }
+  .step.active .step-label { color: #1677ff; font-weight: 500; }
+  .card { background: #fff; border-radius: 10px; border: 1px solid #ecf0f5; padding: 24px 28px; margin-bottom: 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.04); }
+  .card h3 { font-size: 16px; color: #1f2d3d; margin-bottom: 12px; }
+  .card p { font-size: 14px; color: #5a6472; margin-bottom: 12px; }
+  .card ol, .card ul { margin: 0 0 12px 20px; }
+  .card li { font-size: 14px; color: #5a6472; margin-bottom: 6px; }
+  .prompt { background: #f8fafc; border: 1px solid #e3e8ef; border-radius: 8px; padding: 14px 16px; font-family: 'SFMono-Regular', Consolas, Menlo, monospace; font-size: 13px; color: #1f2d3d; margin-bottom: 12px; word-break: break-all; }
+  .notice { background: #fffbe6; border: 1px solid #ffe58f; border-radius: 8px; padding: 12px 16px; font-size: 13px; color: #ad6800; margin-bottom: 12px; }
+  .footer { text-align: center; font-size: 12px; color: #9aa4b1; margin-top: 24px; }
+  .btn { display: inline-block; padding: 8px 20px; background: #1677ff; color: #fff; border-radius: 6px; font-size: 14px; text-decoration: none; }
+  @media (max-width: 640px) { .container { padding: 20px 14px; } .welcome { padding: 24px 18px; } .step-row { padding: 0 6px; } }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="welcome">
+    <h1>${projectName}</h1>
+    <p>宜搭低代码应用 · 开发引导页</p>
+    <div class="status">应用已创建 · 等待需求梳理与字段清单转换</div>
+  </div>
+
+  <div class="step-row">
+    <div class="step done"><div class="step-num">✓</div><div class="step-label">创建应用</div></div>
+    <div class="step active"><div class="step-num">2</div><div class="step-label">需求梳理</div></div>
+    <div class="step"><div class="step-num">3</div><div class="step-label">字段清单</div></div>
+    <div class="step"><div class="step-num">4</div><div class="step-label">规则清单</div></div>
+    <div class="step"><div class="step-num">5</div><div class="step-label">原型页面</div></div>
+  </div>
+
+  <div class="notice">
+    ⚠️ 当前应用刚创建，尚未进行需求梳理与字段清单转换。转换完成后，本页将替换为完整的原型页面（表单列表/表单详情/数据清单）。
+  </div>
+
+  <div class="card">
+    <h3>📌 下一步：需求梳理</h3>
+    <p>请先准备应用的 <strong>开发框架 Excel 模板</strong>（在其中填写表单的类型、名称及字段等信息），然后使用 <strong>excel-to-form</strong> 技能将其转换为本地字段清单：</p>
+    <div class="prompt">「调用技能 excel-to-form」将 Excel 模板转换成本地字段清单和规则清单，生成到 01需求梳理 目录下</div>
+    <p>转换完成后，自动生成：字段清单.md、规则清单.md、应用分组.md 及原型页面。</p>
+  </div>
+
+  <div class="card">
+    <h3>📋 已自动创建的内容</h3>
+    <ul>
+      <li><strong>01需求梳理/</strong> - 需求文档与字段清单目录</li>
+      <li><strong>系统配置清单.md</strong> - 宜搭应用配置信息</li>
+      <li><strong>README.md</strong> - 项目说明文档</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h3>🛠 后续开发流程</h3>
+    <ol>
+      <li><strong>需求梳理</strong> - 用 excel-to-form 生成字段清单/规则清单/应用分组</li>
+      <li><strong>原型预览</strong> - 用 form-to-prototype 生成 HTML 原型页面</li>
+      <li><strong>生成配置</strong> - 用 form_creator 生成宜搭表单 JSON 配置</li>
+      <li><strong>创建应用</strong> - 在宜搭平台创建应用和表单</li>
+      <li><strong>同步配置</strong> - 用 config-sync 同步应用ID、表单UUID、组件ID</li>
+      <li><strong>配置规则</strong> - 设置公式、校验、流程等业务规则</li>
+      <li><strong>测试验证</strong> - 完成功能测试和数据验证</li>
+      <li><strong>上线部署</strong> - 正式发布使用</li>
+    </ol>
+  </div>
+
+  <div class="footer">${projectName} · 创建于 ${today} · 宜搭AI助手</div>
+</div>
+</body>
+</html>
 `;
 }
 

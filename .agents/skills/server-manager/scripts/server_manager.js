@@ -1,6 +1,13 @@
 /**
- * 宜搭服务管理器 v2.1.0
+ * 宜搭服务管理器 v3.0.0
  * 一键启动/停止/检查宜搭开发所需的本地服务
+ *
+ * v3.0.0 多组织并存：
+ * - CONFIG 新增 staticRoot（静态服务根 = 各项目共用的公共父目录）
+ * - HTTP 静态服务 8080 以 staticRoot 为根启动，通过 URL 首段区分项目（组织）
+ * - 同步服务 3457 cwd 上移到 staticRoot，单实例服务所有项目
+ * - forceStopPorts 改为「识别后决定复用/升级」，不再无条件杀端口
+ * - updateOrgInfo 生成的「原型页面访问地址」URL 增加项目目录段
  *
  * 用法:
  *   node server_manager.js [start|stop|status|restart|autostart-on|autostart-off]
@@ -16,22 +23,56 @@ const fs = require('fs');
 const net = require('net');
 const http = require('http');
 
+// 阶段四修复 Bug 2：引入 paths 模块以获取包内 skills 路径
+let paths;
+try {
+  paths = require('../../../../lib/core/paths');
+} catch (e) {
+  // 回退：__dirname 上溯找 packageRoot
+  paths = null;
+}
+
 const CONFIG = {
   httpPort: 8080,
   syncPort: 3457,
   get projectRoot() {
-    let currentDir = process.cwd();
-    const root = path.parse(currentDir).root;
-    while (currentDir !== root) {
-      if (fs.existsSync(path.join(currentDir, '.agents'))) {
-        return currentDir;
-      }
-      currentDir = path.dirname(currentDir);
+    // 阶段二改造（规格6.8）：优先 cwd，支持 --project-dir
+    // 支持显式传入项目目录（argv[3]，sync_server /restart-service 使用）
+    const overrideRoot = process.argv[3];
+    if (overrideRoot && fs.existsSync(overrideRoot)) {
+      return overrideRoot;
     }
-    return path.resolve(__dirname, '..', '..', '..', '..');
+    // 优先 process.cwd()
+    return process.cwd();
   },
-  syncServerScript: '.agents/skills/form_creator/scripts/sync_server.js',
-  builtInServerScript: path.join(__dirname, '_builtin_server.js')
+  /**
+   * 静态服务根（阶段二改造：默认=cwd，即 projectRoot 本身）。
+   * 规格 6.8：静态根 = cwd（--project-dir 可指定）。
+   * 多项目工作区时 --project-dir <子目录> 使静态根切到该子目录。
+   */
+  get staticRoot() {
+    return this.projectRoot;
+  },
+  syncServerScript: 'form_creator/scripts/sync_server.js',
+  builtInServerScript: path.join(__dirname, '_builtin_server.js'),
+  /**
+   * 同步服务脚本定位（阶段四修复 Bug 2）：
+   * 优先从包内 skillsSource() 查找（透传模式天然成立），
+   * 回退到项目级 .agents/skills/ 目录。
+   */
+  get syncServerScriptPath() {
+    // 优先：包内路径（paths.skillsSource()）
+    if (paths) {
+      const pkgPath = path.join(paths.skillsSource(), this.syncServerScript);
+      if (fs.existsSync(pkgPath)) return pkgPath;
+    }
+    // 回退：项目级
+    const projPath = path.join(this.projectRoot, '.agents', 'skills', this.syncServerScript);
+    if (fs.existsSync(projPath)) return projPath;
+    // 最终回退：__dirname 同级（server-manager 本身就在 skills 目录下）
+    const localPath = path.join(__dirname, '..', 'form_creator', 'scripts', 'sync_server.js');
+    return localPath;
+  },
 };
 
 const colors = {
@@ -126,6 +167,30 @@ function httpHealthCheck(port, maxRetries = 5, interval = 1000) {
   });
 }
 
+/**
+ * 判断指定端口上是否运行着"全局多项目服务"（/__yida_health 返回的 cwd 等于 staticRoot）。
+ * v3.0.0 端口复用判定的核心依据。
+ * @param {number} port
+ * @returns {Promise<boolean>}
+ */
+function isGlobalServiceRunning(port) {
+  return new Promise((resolve) => {
+    const req = http.get(`http://127.0.0.1:${port}/__yida_health`, { timeout: 2000 }, (res) => {
+      let data = '';
+      res.on('data', (c) => { data += c; });
+      res.on('end', () => {
+        try {
+          const info = JSON.parse(data);
+          resolve(info.cwd === CONFIG.staticRoot);
+        } catch (_) { resolve(false); }
+        req.destroy();
+      });
+    });
+    req.on('error', () => resolve(false));
+    req.on('timeout', () => { req.destroy(); resolve(false); });
+  });
+}
+
 function ensureBuiltinServerScript() {
   const scriptContent = `const http = require('http');
 const fs = require('fs');
@@ -138,12 +203,32 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
   const decodedUrl = decodeURIComponent(req.url);
+  if (decodedUrl.split('?')[0] === '/__yida_health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok', cwd: process.cwd(), projectRoot }));
+    return;
+  }
   const urlPath = decodedUrl.split('?')[0];
   const pathParts = urlPath.split('/').filter(p => p);
   let filePath = path.join(projectRoot, ...pathParts);
   const resolvedPath = path.resolve(filePath);
   const resolvedRoot = path.resolve(projectRoot);
   if (!resolvedPath.startsWith(resolvedRoot)) { res.writeHead(403); res.end('Forbidden'); return; }
+  // 老 URL 回退：URL 首段不是合法项目目录且文件不存在时，回退到 staticRoot 下唯一项目
+  if (!fs.existsSync(filePath)) {
+    let uniqueProject = null;
+    try {
+      const projectDirs = fs.readdirSync(projectRoot, { withFileTypes: true })
+        .filter(e => e.isDirectory())
+        .map(e => path.join(projectRoot, e.name))
+        .filter(d => fs.existsSync(path.join(d, '组织及应用信息.md')));
+      if (projectDirs.length === 1) uniqueProject = projectDirs[0];
+    } catch (_) {}
+    if (uniqueProject) {
+      const fb = path.join(uniqueProject, ...pathParts);
+      if (fs.existsSync(fb)) filePath = fb;
+    }
+  }
   if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) { filePath = path.join(filePath, 'index.html'); }
   if (!fs.existsSync(filePath)) { res.writeHead(404); res.end('Not Found'); return; }
   const ext = path.extname(filePath).toLowerCase();
@@ -163,23 +248,30 @@ server.on('error', (err) => { console.error('BUILTIN_SERVER_ERROR:', err.message
 }
 
 async function startHttpService() {
-  const projectRoot = CONFIG.projectRoot;
+  // v3.0.0: 静态服务根 = staticRoot（多项目=公共父目录；单项目=项目根）
+  const staticRoot = CONFIG.staticRoot;
 
   logStep('1/4', `准备启动 HTTP 服务 (端口 ${CONFIG.httpPort})...`, 'blue');
-  logStep('1/4', `项目根目录: ${projectRoot}`, 'cyan');
+  logStep('1/4', `静态服务根: ${staticRoot}`, 'cyan');
 
   let httpServerProcess = null;
   let startMethod = '';
 
-  const localHttpServerDirect = path.join(projectRoot, 'node_modules', 'http-server', 'bin', 'http-server');
-  const localHttpServerCmd = path.join(projectRoot, 'node_modules', '.bin', 'http-server.cmd');
+  // v3.0.0: 若 8080 已被"全局多项目静态服务"占用，直接复用，不再重复启动
+  if (await isGlobalServiceRunning(CONFIG.httpPort)) {
+    logStep('2/4', `端口 ${CONFIG.httpPort} 已是全局多项目静态服务，直接复用`, 'green');
+    return { success: true, alreadyRunning: true, reuse: true };
+  }
+
+  const localHttpServerDirect = path.join(staticRoot, 'node_modules', 'http-server', 'bin', 'http-server');
+  const localHttpServerCmd = path.join(staticRoot, 'node_modules', '.bin', 'http-server.cmd');
 
   if (fs.existsSync(localHttpServerDirect)) {
     startMethod = '本地http-server (node直接调用)';
     logStep('2/4', `找到http-server脚本: ${localHttpServerDirect}`, 'green');
     logStep('2/4', `使用 ${startMethod} 启动...`, 'blue');
     httpServerProcess = spawn(process.execPath, [localHttpServerDirect, '.', '-p', String(CONFIG.httpPort), '--cors', '-c-1'], {
-      cwd: projectRoot,
+      cwd: staticRoot,
       detached: true,
       stdio: ['ignore', 'ignore', 'ignore'],
       windowsHide: true
@@ -189,7 +281,7 @@ async function startHttpService() {
     logStep('2/4', `找到http-server.cmd: ${localHttpServerCmd}`, 'green');
     logStep('2/4', `使用 ${startMethod} 启动...`, 'blue');
     httpServerProcess = spawn('cmd', ['/c', localHttpServerCmd, '.', '-p', String(CONFIG.httpPort), '--cors', '-c-1'], {
-      cwd: projectRoot,
+      cwd: staticRoot,
       detached: true,
       stdio: ['ignore', 'ignore', 'ignore'],
       windowsHide: true
@@ -200,8 +292,8 @@ async function startHttpService() {
     const builtinScript = ensureBuiltinServerScript();
     logStep('2/4', `内置服务器脚本: ${builtinScript}`, 'cyan');
     logStep('2/4', `使用 ${startMethod} 启动...`, 'blue');
-    httpServerProcess = spawn(process.execPath, [builtinScript, projectRoot, String(CONFIG.httpPort)], {
-      cwd: projectRoot,
+    httpServerProcess = spawn(process.execPath, [builtinScript, staticRoot, String(CONFIG.httpPort)], {
+      cwd: staticRoot,
       detached: true,
       stdio: ['ignore', 'ignore', 'ignore'],
       windowsHide: true
@@ -246,7 +338,16 @@ async function startHttpService() {
 async function startSyncService() {
   logStep('同步', `准备启动同步配置服务 (端口 ${CONFIG.syncPort})...`, 'blue');
 
-  const syncScriptPath = path.join(CONFIG.projectRoot, CONFIG.syncServerScript);
+  // v3.0.0: 若 3457 已被"全局多项目服务"（cwd=staticRoot）占用，直接复用，不再重复启动
+  const existingGlobal = await isGlobalServiceRunning(CONFIG.syncPort);
+  if (existingGlobal) {
+    logStep('同步', `端口 ${CONFIG.syncPort} 已是全局多项目同步服务，直接复用`, 'green');
+    return { success: true, alreadyRunning: true, reuse: true };
+  }
+
+  const staticRoot = CONFIG.staticRoot;
+  // 阶段四修复 Bug 2：使用 syncServerScriptPath getter 优先定位包内脚本
+  const syncScriptPath = CONFIG.syncServerScriptPath;
 
   if (!fs.existsSync(syncScriptPath)) {
     logStep('同步', `同步服务脚本不存在: ${syncScriptPath}`, 'red');
@@ -255,8 +356,8 @@ async function startSyncService() {
 
   logStep('同步', `脚本路径: ${syncScriptPath}`, 'cyan');
 
-  const syncServer = spawn('node', [syncScriptPath], {
-    cwd: CONFIG.projectRoot,
+  const syncServer = spawn(process.execPath, [syncScriptPath], {
+    cwd: staticRoot,
     detached: true,
     stdio: ['ignore', 'ignore', 'ignore'],
     windowsHide: true
@@ -338,8 +439,9 @@ async function checkStatus() {
   console.log('└─────────────────────┴────────┴──────────────────────────┘');
 
   if (httpHealthy) {
-    console.log(`\n📁 HTTP 服务根目录: ${CONFIG.projectRoot}`);
-    console.log(`🌐 访问地址: http://127.0.0.1:${CONFIG.httpPort}`);
+    console.log(`\n📁 HTTP 静态服务根: ${CONFIG.staticRoot}`);
+    console.log(`🌐 当前项目: ${CONFIG.projectRoot}`);
+    console.log(`🌐 访问地址: http://127.0.0.1:${CONFIG.httpPort}/${encodeURIComponent(path.basename(CONFIG.projectRoot))}/`);
   }
 
   return {
@@ -349,23 +451,31 @@ async function checkStatus() {
 }
 
 async function forceStopPorts() {
-  log('─── 步骤0: 清理端口占用 ───', 'blue');
+  log('─── 步骤0: 清理端口占用（多项目模式识别后复用） ───', 'blue');
 
-  const httpPid = await getProcessOnPort(CONFIG.httpPort);
-  const syncPid = await getProcessOnPort(CONFIG.syncPort);
+  // v3.0.0: 多项目模式下，若端口被"全局多项目服务"占用则直接复用（不再杀死，避免中断其他项目）；
+  // 仅当占用的是旧版"单项目服务"时才终止（升级重启）。
+  const httpGlobal = await isGlobalServiceRunning(CONFIG.httpPort);
+  const syncGlobal = await isGlobalServiceRunning(CONFIG.syncPort);
+
+  if (httpGlobal) logStep('0', `端口 ${CONFIG.httpPort} 已是全局多项目服务，复用`, 'green');
+  if (syncGlobal) logStep('0', `端口 ${CONFIG.syncPort} 已是全局多项目服务，复用`, 'green');
+
+  const httpPid = httpGlobal ? null : await getProcessOnPort(CONFIG.httpPort);
+  const syncPid = syncGlobal ? null : await getProcessOnPort(CONFIG.syncPort);
 
   if (!httpPid && !syncPid) {
-    logStep('0', `端口 ${CONFIG.httpPort} 和 ${CONFIG.syncPort} 均空闲，无需清理`, 'green');
+    logStep('0', `端口 ${CONFIG.httpPort} 和 ${CONFIG.syncPort} 均空闲（或为全局多项目服务），无需清理`, 'green');
     return;
   }
 
   if (httpPid) {
-    logStep('0', `发现端口 ${CONFIG.httpPort} 被占用 (PID: ${httpPid})，正在终止...`, 'yellow');
+    logStep('0', `发现端口 ${CONFIG.httpPort} 被旧版服务占用 (PID: ${httpPid})，正在终止升级...`, 'yellow');
     await stopService(CONFIG.httpPort, 'HTTP 静态服务');
   }
 
   if (syncPid) {
-    logStep('0', `发现端口 ${CONFIG.syncPort} 被占用 (PID: ${syncPid})，正在终止...`, 'yellow');
+    logStep('0', `发现端口 ${CONFIG.syncPort} 被旧版服务占用 (PID: ${syncPid})，正在终止升级...`, 'yellow');
     await stopService(CONFIG.syncPort, '同步配置服务');
   }
 
@@ -394,6 +504,7 @@ async function startAll() {
   logHeader('🚀 启动宜搭服务');
 
   console.log(`📁 项目根目录: ${CONFIG.projectRoot}`);
+  console.log(`📁 静态服务根(公共父目录): ${CONFIG.staticRoot}`);
   console.log(`📅 启动时间: ${new Date().toLocaleString()}\n`);
 
   await forceStopPorts();
@@ -426,18 +537,40 @@ async function startAll() {
     log('🎉 所有服务已就绪！', 'green');
     console.log('─'.repeat(60));
     console.log('\n📖 使用说明:');
-    console.log('   1. 通过 http://127.0.0.1:8080 访问原型页面');
+    console.log('   1. 访问路径携带项目目录段，例如:');
+    console.log(`      http://127.0.0.1:8080/${encodeURIComponent(path.basename(CONFIG.projectRoot))}/本地操作页面/index.html`);
     console.log('   2. 不要使用 file:// 打开本地文件');
     console.log('   3. 点击"同步配置"按钮即可同步表单配置');
     console.log('\n📁 示例访问路径:');
-    console.log('   http://127.0.0.1:8080/项目管理/01需求梳理/原型页面/index.html');
+    console.log(`   http://127.0.0.1:8080/${encodeURIComponent(path.basename(CONFIG.projectRoot))}/项目管理/01需求梳理/原型页面/index.html`);
     console.log('\n🏠 组织门户:');
-    console.log('   http://127.0.0.1:8080/  (组织管理门户)');
+    console.log(`   http://127.0.0.1:8080/${encodeURIComponent(path.basename(CONFIG.projectRoot))}/本地操作页面/index.html`);
 
     await updateOrgInfo();
+    updateInitDoc();
   }
 
   return { http: httpResult, sync: syncResult };
+}
+
+/**
+ * v3.0.0: 启动服务后自动把 02应用初始化.md 中的占位符替换为当前项目目录名
+ */
+function updateInitDoc() {
+  const docPath = path.join(CONFIG.projectRoot, '02应用初始化.md');
+  if (!fs.existsSync(docPath)) return;
+
+  try {
+    let content = fs.readFileSync(docPath, 'utf-8');
+    const projectName = path.basename(CONFIG.projectRoot);
+    const oldPattern = /http:\/\/127\.0\.0\.1:8080\/\{项目目录名\}\//g;
+    if (!oldPattern.test(content)) return; // 无占位符则跳过
+    content = content.replace(oldPattern, `http://127.0.0.1:8080/${encodeURIComponent(projectName)}/`);
+    fs.writeFileSync(docPath, content, 'utf-8');
+    console.log(`\n✅ 已将 02应用初始化.md 中的占位符替换为项目名: ${projectName}`);
+  } catch (error) {
+    console.log('\n⚠️  更新 02应用初始化.md 失败:', error.message);
+  }
 }
 
 async function stopAll() {
@@ -482,6 +615,8 @@ async function updateOrgInfo() {
 
     const apps = [];
     const items = fs.readdirSync(CONFIG.projectRoot);
+    // v3.0.0: URL 增加项目目录段，如 http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/index.html
+    const projectSegment = encodeURIComponent(path.basename(CONFIG.projectRoot));
 
     for (const item of items) {
       const appPath = path.join(CONFIG.projectRoot, item);
@@ -490,7 +625,7 @@ async function updateOrgInfo() {
       if (fs.existsSync(prototypePath)) {
         apps.push({
           name: item,
-          url: `http://127.0.0.1:${CONFIG.httpPort}/${item}/01需求梳理/原型页面/index.html`,
+          url: `http://127.0.0.1:${CONFIG.httpPort}/${projectSegment}/${encodeURIComponent(item)}/01需求梳理/原型页面/index.html`,
           synced: true
         });
       }
@@ -521,6 +656,10 @@ async function main() {
   switch (command.toLowerCase()) {
     case 'start':
       await startAll();
+      // 子进程已用 detached:true + unref() 独立运行，脚本可直接退出
+      console.log('\n✅ 启动脚本已退出，服务在后台持续运行');
+      console.log('   停止服务请运行: node .agents/skills/server-manager/scripts/server_manager.js stop\n');
+      process.exit(0);
       break;
     case 'stop':
       await stopAll();

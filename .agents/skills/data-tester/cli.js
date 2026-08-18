@@ -7,8 +7,8 @@
  *   node cli.js <项目路径> [选项]
  *
  * 示例:
- *   node cli.js d:/宜搭AI编程/我的项目 --city 武汉 --count 5
- *   node cli.js d:/宜搭AI编程/我的项目 --forms "表单1,表单2" --city 北京 --count 3
+ *   node cli.js d:/我的宜搭项目 --city 武汉 --count 5
+ *   node cli.js d:/我的宜搭项目 --forms "表单1,表单2" --city 北京 --count 3
  */
 
 const { addTestDataToAllForms, addTestDataToForms } = require('./scripts/batch-submitter');
@@ -34,13 +34,13 @@ function showHelp() {
 
 示例:
   # 为所有表单添加5条武汉地区的测试数据
-  node cli.js d:/宜搭AI编程/我的项目 --city 武汉 --count 5
+  node cli.js d:/我的宜搭项目 --city 武汉 --count 5
 
   # 为指定表单添加测试数据
-  node cli.js d:/宜搭AI编程/我的项目 --forms "费用报销,采购申请" --city 上海 --count 10
+  node cli.js d:/我的宜搭项目 --forms "费用报销,采购申请" --city 上海 --count 10
 
   # 排除特定表单
-  node cli.js d:/宜搭AI编程/我的项目 --exclude "系统配置,日志记录" --count 5
+  node cli.js d:/我的宜搭项目 --exclude "系统配置,日志记录" --count 5
 `);
 }
 

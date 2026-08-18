@@ -9,8 +9,19 @@
 
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 function findProjectRoot() {
+  // 阶段二改造：优先 cwd（CLI 模式下即用户工作目录）
+  if (fs.existsSync(path.join(process.cwd(), '组织及应用信息.md'))) {
+    return process.cwd();
+  }
+  // 全局 Cookie 存在时也优先 cwd
+  const globalCookieFile = path.join(os.homedir(), '.yida-ai-helper', '.cookies.json');
+  if (fs.existsSync(globalCookieFile) && fs.existsSync(path.join(process.cwd(), '.cookies.json'))) {
+    return process.cwd();
+  }
+  // 目录回溯兼容
   let currentDir = __dirname;
   while (currentDir !== path.parse(currentDir).root) {
     if (fs.existsSync(path.join(currentDir, '.cookies.json'))) {

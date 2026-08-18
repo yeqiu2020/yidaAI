@@ -62,7 +62,7 @@
  *   15) 步骤N4 删除「展开表单事件折叠面板」操作——「表单事件」是 .lc-field-head 内的 span.lc-title-txt
  *       （block-field 的标题），不是 .lc-accordion-field 折叠面板。下面的「添加业务关联规则」按钮直接可见。
  *   16) 步骤N6 增加 scrollIntoView 后再点击按钮（按钮位置 y=668，可能位于视口外）。
- *   17) findBrowserPath 兜底添加 D:\宜搭AI编程\软件及skills\chrome-win64\chrome-win64\chrome.exe
+ *   17) findBrowserPath 兜底添加自定义 chrome 路径
  *
  * 🔴 关键修正（v2.1.2）：v2.1.1 中 N3 只校验 trigger 存在但未点击 trigger，导致「表单事件」面板内容不渲染。
  *   18) 实测发现：点击「表单设计」菜单后右侧默认显示"页面属性"标签，必须显式点击 .setting-container-content-trigger
@@ -1896,15 +1896,23 @@ async function main() {
       console.log(`   ${nodeTypeResult.alreadySelected ? '已默认选中结束 ✅' : '✅ 已切换到结束'}`);
       await page.waitForTimeout(500);
 
+      // 从 MD 文件中提取节点动作，允许命令行 --node-action 覆盖
+      let nodeAction = opts.nodeAction || '同意';
+      if (!opts.nodeAction) {
+        try {
+          const mdFileContent = fs.readFileSync(mdPath, 'utf-8');
+          const mdNodeActionMatch = mdFileContent.match(/节点动作[：:]\s*(\S+)/);
+          if (mdNodeActionMatch) nodeAction = mdNodeActionMatch[1].trim();
+        } catch (_) { /* MD 文件不可读时保持默认 */ }
+      }
+
       // 步骤5.6: 🔴 选择节点动作（结束节点也必填）
-      // 实际验证（2026-07-17）：结束节点同样要求选择"节点动作"，默认三个选项（同意/拒绝/撤销/终止）全未勾选
-      // 业务含义：流程正常结束（审批通过）对应"同意"动作，规则在流程通过后触发
-      console.log(`\n📍 步骤5.6: 选择节点动作为"同意"...`);
-      const nodeActionResult = await page.evaluate(() => {
+      console.log(`\n📍 步骤5.6: 选择节点动作为"${nodeAction}"...`);
+      const nodeActionResult = await page.evaluate((action) => {
         const wrappers = document.querySelectorAll('#activityAction .next-checkbox-wrapper');
         for (const wrapper of wrappers) {
           const labelText = wrapper.querySelector('.next-checkbox-label')?.textContent?.trim();
-          if (labelText === '同意') {
+          if (labelText === action) {
             const isChecked = wrapper.classList.contains('checked') ||
                               !!wrapper.querySelector('.next-checkbox.checked');
             if (isChecked) return { ok: true, alreadySelected: true };
@@ -1913,14 +1921,14 @@ async function main() {
           }
         }
         return { ok: false };
-      });
+      }, nodeAction);
       if (!nodeActionResult.ok) {
-        console.error('   ❌ 未找到"同意"节点动作，停止推送');
+        console.error(`   ❌ 未找到"${nodeAction}"节点动作，停止推送`);
         await page.screenshot({ path: path.join(screenshotDir, 'push-node-action-missing.png') });
         await browser.close();
         process.exit(5);
       }
-      console.log(`   ${nodeActionResult.alreadySelected ? '已默认选中同意 ✅' : '✅ 已选中同意'}`);
+      console.log(`   ${nodeActionResult.alreadySelected ? '已默认选中'+nodeAction+' ✅' : '✅ 已选中'+nodeAction}`);
       await page.waitForTimeout(500);
     }
 

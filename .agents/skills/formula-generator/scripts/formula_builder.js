@@ -1,6 +1,6 @@
 /**
  * 作者：叶秋
- * 联系方式：15270209736
+ * 联系方式：
  * 来源：www.yidatrain.com
  * 宜搭公式生成器 - 固定配置文件
  * 使用方法：修改下方 CONFIG 对象，然后运行 node formula_builder.js

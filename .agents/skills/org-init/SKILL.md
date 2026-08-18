@@ -42,7 +42,7 @@ description: 宜搭组织初始化工具 - 自动获取宜搭平台上的组织�
   - **应用 ID** - 从链接的 `href` 属性中提取 `APP_[A-Z0-9]+` 模式
 
 ### 4. 更新配置文件
-- 读取项目根目录的「组织及应用信息.md」
+- 读取当前工作目录的「组织及应用信息.md」
 - 如果不存在，使用登录态信息创建默认配置文件
 - 匹配应用名称，更新对应的 appId 列
 - 如果找不到应用 ID，写入「请手动补充」
@@ -119,13 +119,13 @@ description: 宜搭组织初始化工具 - 自动获取宜搭平台上的组织�
 **推荐方式（自动处理环境变量）：**
 ```bash
 # 使用启动器，自动检测 Node.js 路径
-node .agents/skills/org-init/scripts/run-init.js
+yida-helper run org-init/scripts/run-init.js
 ```
 
 **传统方式（需要环境变量已生效）：**
 ```bash
 # 在项目根目录执行
-node .agents/skills/org-init/scripts/init-org.js
+yida-helper run org-init/scripts/init-org.js
 ```
 
 **⚠️ 环境变量问题自动处理：**
@@ -289,48 +289,15 @@ node .agents/skills/org-init/scripts/init-org.js
 
 ## 版本历史
 
+- v1.5.6 (2026-08-17) - **修复**：本地页面"刷新应用信息/刷新登录态"从两三秒变成十几二十秒，且刷新弹窗无日志输出
+  - login-manager.js v1.0.16：Cookie 验证的 `waitUntil` 由 `networkidle` 改为 `domcontentloaded`（timeout 30s→15s）。**根因**：宜搭 SPA 持续后台请求，`networkidle` 永远等不到空闲，每次卡满超时才继续
+  - init-org.js V1.5.1：(1) 由 sync_server 触发时（`YIDA_NO_OPEN_PORTAL=1`）跳过 `startServicesAndOpenPortal()`/`registerAutoStart()`，避免每次"刷新应用信息"额外弹出浏览器新窗口；(2) 配合 sync_server `/refresh-org-apps` 改为 SSE 流式，把同步过程日志逐条推给前端弹窗，让用户看到实时运行状态
+  - **防复发**：宜搭页面禁用 `networkidle`；批量长任务（刷新应用信息等）用 SSE（EventSource）流式推送日志缓存，避免无反馈"假死"感
+- v1.5.5 (2026-08-11) - **修复**：Cookie 验证误判失效导致每次刷新应用信息都弹出登录页面
+  - login-manager.js：ensureLogin 验证方式改为与 api-client/login_manager.js 的 fetchPageInfo 一致（networkidle 超时不报错 → 检查重定向 → 循环提取 csrf_token），不再依赖 SPA 渲染完成后的页面文本
+- v1.5.4 (2026-08-05) - **修复**：浏览器被关闭后脚本空转等待的问题
+  - login-manager.js：新增 isBrowserClosedError() 检测浏览器关闭错误，handleLoginFlow 返回 browserClosed 标志
+  - ensureLogin：检测到浏览器关闭后自动重新打开浏览器并重试登录，避免脚本空转10分钟后才退出
 - v1.5.3 (2026-07-28) - **根因修复**：组织名称抓取长期失败
   - login-manager.js：新增 fetchOrgInfoFromSettings，弃用 networkidle（宜搭页面后台请求不断必超时），改用 domcontentloaded + 等待文本渲染，按"标签行下一行"提取组织名称/Corp ID
   - login-manager.js：Cookie 有效时若登录态组织名称无效，自动补抓并回写，无需重新登录
-- v1.5.2 (2026-07-28) - **重要修复**：配置文件字段替换静默失败
-  - init-org.js：表格字段替换改用通用函数 replaceTableField，容忍 Markdown 对齐填充的任意空格，匹配失败时输出警告
-- v1.5.1 (2026-07-28) - **重要修复**：组织名称被域名前缀覆盖的问题
-  - login-manager.js：组织名称抓取失败时不再用域名前缀兜底，改为记录"未知"
-  - init-org.js：updateOrgInfo / createDefaultOrgConfigFile 将"corpName 等于域名前缀"视为无效值，保留原文件中的组织名称
-- v1.5.0 (2026-06-11) - **重要变更**：不再生成门户页面目录，默认使用固定的本地操作页面作为组织主页
-  - 废弃 `门户页面` 目录的自动生成逻辑
-  - 根目录 `index.html` 改为自动跳转到 `本地操作页面/index.html`
-  - 移除 ensurePortalResources 和 copyDirRecursive 的完整实现
-  - 简化初始化流程，不再需要额外创建门户资源文件
-- v1.4.0 (2026-06-04) - **重大更新**：组织初始化后自动生成门户页面并启动HTTP服务
-  - 新增门户页面（`门户页面/index.html`），以网页形式展示组织信息和应用列表
-  - 初始化完成后自动启动HTTP服务和同步服务
-  - 自动在浏览器中打开门户页面
-  - 门户页面支持：查看应用同步状态、点击同步到本地、进入应用原型页面
-  - 门户页面集成AI助手操作提示词复制功能
-- v1.3.2 (2026-04-19) - **修复**：解决 Windows 终端中文乱码问题
-  - 在 run-init.js 启动器中添加 UTF-8 编码设置
-  - 自动执行 `chcp 65001` 设置 UTF-8 代码页
-  - 确保中文输出正常显示
-- v1.3.1 (2026-04-03) - **重要改进**：新增环境变量辅助工具 env-helper.js
-  - 自动检测 Node.js 安装路径，解决环境变量未生效问题
-  - 无需用户手动干预，脚本自动使用完整路径执行
-  - 添加环境变量问题诊断和自动处理机制
-- v1.3.0 (2026-04-02) - **重大改进**：API 调用成功，无需浏览器逐个打开应用
-  - 修复 API 调用失败问题，添加必要的请求头（Referer、User-Agent 等）
-  - 从 Cookie 中正确获取 `tianshu_csrf_token` 作为 CSRF token
-  - 使用正确的 API 参数格式（`_api=App.getList` 等）
-  - 现在直接使用 API 获取应用列表，无需再打开浏览器逐个点击应用
-- v1.2.0 (2026-04-02) - 修复：尝试多个 API 端点获取应用列表，提高成功率
-- v1.1.0 (2026-03-25) - **重大更新**：使用 API 接口直接获取应用列表，无需逐个打开浏览器页面
-- v1.0.11 (2026-03-25) - **重大改进**：新增双重保险策略获取组织信息
-  - 第1重：访问组织设置页面 `/platformManage/basicInfo` 获取准确信息
-  - 第2重：从工作台页面获取组织名称
-  - 第3重：从当前页面提取信息作为备用
-  - 优化 Corp ID 获取逻辑，支持从 Cookie 获取作为备用
-- v1.0.10 (2026-03-25) - **重要修复**：修复组织信息错误问题（组织名称显示"首页"、域名显示"www.aliwork.com"），新增 base_url 有效性验证机制
-- v1.0.9 (2026-03-24) - 改进：SKILL.md 文档中新增「脚本位置」和「执行命令」章节，明确标注脚本路径
-- v1.0.8 (2026-03-24) - 修复：SKILL.md 文档中删除对 simulated-login 的错误依赖描述
-- v1.0.7 (2026-03-24) - 新增：使用独立的登录管理器进行登录和组织选择，用户可自主选择要初始化的组织
-- v1.0.6 (2026-03-24) - 修复：文件不存在时自动创建默认配置文件「组织及应用信息.md」
-- v1.0.0 (2026-03-23) - 初始版本，支持自动获取应用 ID 并更新配置

@@ -1,6 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 const xlsx = require('xlsx');
+const childProcess = require('child_process');
 let iconv = null;
 try {
   iconv = require('iconv-lite');
@@ -20,6 +21,12 @@ function loadFieldTypeOverrides(overridePath, outputDir) {
     }
   }
   if (!overridePath || !fs.existsSync(overridePath)) {
+    // v3.1.4: 静默返回改为醒目警告——override 未加载时关联表单/自定义选项全部不生效，
+    // 生成的字段清单会退化为单行文本且无任何报错，曾导致关联配置静默丢失。
+    console.warn('\n⚠️  [重要] 未加载字段类型覆盖配置（field-types-override.json）！');
+    console.warn('   - 若已用 --draft 生成草稿并经 AI 审核，请显式传入第5个位置参数指定 override 文件路径');
+    console.warn('   - 未加载 override 时：关联表单、下拉选项、数据标题等配置全部不生效，字段类型使用脚本兜底推断');
+    console.warn('   - 判断 override 是否生效：命令行应出现 "📋 已加载字段类型覆盖配置" 日志\n');
     return;
   }
   try {
@@ -99,27 +106,68 @@ function applyOverrides(forms) {
     }
   });
 
+  // v3.1.4 生成后自检：Excel 中仍有关联候选字段未在 override 中配置为关联表单时给出警告。
+  // 常见根因：子表字段（如"关联产品"）的 override 被错误嵌套在子表名（如"采购明细"）键下，
+  // 而脚本要求子表字段 override 与主表字段平级（formOverrides["关联产品"]）。
+  const allFormNames = forms.map(f => f.name);
+  const unhandled = [];
+  forms.forEach(form => {
+    const formOverrides = fieldTypeOverrides[form.name];
+    if (!formOverrides || typeof formOverrides !== 'object') return;
+    const checkFields = (fields, scope) => {
+      fields.forEach(f => {
+        // 用户已在 Excel 显式标注类型（typeHint 非空）的字段尊重原意，跳过
+        if (f.typeHint) return;
+        // AI 已在 override 显式配置为非关联表单类型的字段，尊重 AI 判断，跳过
+        const explicitOverride = getFieldTypeOverride(form.name, f.name);
+        if (explicitOverride && explicitOverride.type && explicitOverride.type !== '关联表单') return;
+        const finalType = mapFieldType(f.name, f.typeHint, f.isOptions, f._forceType, form.name);
+        if (finalType !== '关联表单') {
+          const candidates = findAssociationCandidates(f.name, allFormNames, form.name);
+          if (candidates.length > 0) {
+            unhandled.push(`${form.name}.${scope}${f.name} → 疑似关联 ${candidates.map(c => c.formName).join('/')}（当前类型: ${finalType}）`);
+          }
+        }
+      });
+    };
+    checkFields(form.mainFields, '');
+    if (form.subTables) {
+      form.subTables.forEach(st => checkFields(st.fields, `[子表:${st.name}].`));
+    }
+  });
+  if (unhandled.length > 0) {
+    console.warn('\n⚠️  [自检] 检测到以下字段疑似应为"关联表单"但当前不是（override 可能未配置或格式错误）：');
+    unhandled.slice(0, 10).forEach(msg => console.warn(`   - ${msg}`));
+    if (unhandled.length > 10) console.warn(`   ... 共 ${unhandled.length} 处`);
+    console.warn('   - 子表字段 override 必须与主表字段平级写在表单一级（如 formOverrides["关联产品"]），严禁嵌套在子表名键下\n');
+  }
+
   return forms;
 }
 
 // v1.28.0 新增：自动生成填充规则（同名字段匹配，排除系统字段和流水号）
+// v3.1.4 修复：排除"关联表单"类型字段——嵌套关联时（A关联B，B又关联C），
+// 若把 B 的关联字段 C 也带入 A 的填充规则，C 的填充目标字段不会递归插入到 A，
+// 导致"填充目标字段缺失"校验失败（如 采购入库.关联采购订单 → 带入"关联供应商" → 联系人缺失）。
 function autoGenerateFillRules(targetFields, targetFormName, systemKeywords) {
   return targetFields
     .filter(f => !systemKeywords.some(kw => f.name.includes(kw)))
     .filter(f => {
       const fieldType = mapFieldType(f.name, f.typeHint, f.isOptions, f._forceType, targetFormName);
-      return fieldType !== '流水号';
+      return fieldType !== '流水号' && fieldType !== '关联表单';
     })
     .map(f => `${f.name}=${f.name}`);
 }
 
 // v1.28.0 新增：自动生成被填充字段（全部设为只读，类型与目标表单一致）
+// v3.1.4 修复：同上排除"关联表单"类型字段，避免嵌套关联被填充字段携带
+// 无法落地的填充规则（目标字段不在当前表单中）
 function autoGenerateFilledFields(targetFields, targetFormName, systemKeywords) {
   return targetFields
     .filter(f => !systemKeywords.some(kw => f.name.includes(kw)))
     .filter(f => {
       const fieldType = mapFieldType(f.name, f.typeHint, f.isOptions, f._forceType, targetFormName);
-      return fieldType !== '流水号';
+      return fieldType !== '流水号' && fieldType !== '关联表单';
     })
     .map(f => {
       const fieldType = mapFieldType(f.name, f.typeHint, f.isOptions, f._forceType, targetFormName);
@@ -252,6 +300,21 @@ function applyFieldOverrides(fields, formOverrides, formName, formFieldMap) {
           if (autoFilledFields.length > 0) {
             console.log(`  [自动推导被填充字段] ${formName}.${field.name} → ${override.target}: ${autoFilledFields.length} 个字段`);
           }
+        }
+
+        // v2.20.0: 当显式提供了 fillRules 但未提供 filledFields 时，
+        // 自动推导的 filledFields 必须与 fillRules 保持同步。
+        // 只保留 fillRules 中源字段名（=号右侧）对应的字段，避免数组长度不一致导致多余字段被插入。
+        if (override.fillRules && !override.filledFields && autoFilledFields && autoFilledFields.length > 0) {
+          const fillRuleSourceNames = override.fillRules.map(rule => {
+            const parts = rule.split('=');
+            return parts.length > 1 ? parts[1].trim() : parts[0].trim();
+          });
+          const filtered = autoFilledFields.filter(ff => fillRuleSourceNames.includes(ff.name));
+          if (filtered.length < autoFilledFields.length) {
+            console.log(`  [同步填充字段] ${formName}.${field.name} → 显式fillRules与自动推导filledFields不同步，已过滤 ${autoFilledFields.length - filtered.length} 个字段`);
+          }
+          autoFilledFields = filtered;
         }
 
         // v1.29.2: 智能去重，区分两种重名情况，避免降低质量
@@ -924,10 +987,11 @@ function numberToChinese(num) {
 
 /**
  * 去除模块名称中已有的中文序号前缀（如"一、基础信息" → "基础信息"）
- * 避免脚本自动添加序号时出现"一、一、基础信息"的重复
+ * 避免脚本自动添加序号时出现"一、一、基础信息"的重复。
+ * 【v1.22.0 修复】用全局匹配剥离所有重复前缀，防止多重前缀（"一、一、基础信息"）残留
  */
 function stripModuleNumberPrefix(moduleName) {
-  return moduleName.replace(/^[一二三四五六七八九十]+[、.．]\s*/, '');
+  return String(moduleName || '').replace(/^(?:[一二三四五六七八九十]+[、.．]\s*)+/, '');
 }
 
 // ==================== 生成字段清单 Markdown ====================
@@ -1046,35 +1110,63 @@ function generateFieldListMarkdown(forms, systemName, version) {
 }
 
 // ==================== 生成规则清单 Markdown ====================
+// v3.0.0 重构：规则清单统一为五类结构，供用户参考评审，不在宜搭平台直接生成。
+//   五类：① 表单内公式 ② 表单校验规则 ③ 表单动作代码 ④ 业务规则 ⑤ 自动化规则
+//   组织方式：按分组 → 表单 → 五类规则 逐层展开，便于用户在「生成清单」页面查看与编辑。
+//   原则：规则清单是「建议参考」，AI 依据字段清单中的字段特性与关联关系自动推断，
+//         具体实现（公式表达式、校验代码、动作代码）留待用户确认后由 AI 生成。
+
+// 规则清单的五类名称（保持与「生成清单」页面 Tab/分区一致）
+const RULE_CATEGORIES = ['表单内公式', '表单校验规则', '表单动作代码', '业务规则', '自动化规则'];
+
+// 推断字段是否为数值计算候选（用于「表单内公式」推断）
+function isCalcCandidate(fieldName) {
+  return /金额|总额|小计|合计|总价|差价|差异|库存|数量|价格|成本|利润|折扣|税额|净值|余额|净额|结存|应收|应付/.test(fieldName);
+}
+
+// 推断字段是否需要校验（用于「表单校验规则」推断）
+// 排除系统自动字段（创建人/创建时间/修改人/修改时间等），避免污染业务校验规则
+const SYSTEM_FIELD_NAMES = ['创建人', '创建时间', '修改人', '修改时间', '数据标题'];
+function isSystemField(name) {
+  return SYSTEM_FIELD_NAMES.some(kw => name.includes(kw));
+}
+function inferValidationRules(field, fieldType, formType) {
+  const rules = [];
+  if (isSystemField(field.name)) return rules; // 系统字段不生成业务校验
+  if (field.required) {
+    rules.push({ field: field.name, type: '必填校验', rule: '该字段为必填项' });
+  }
+  if (fieldType === '数值') {
+    // 从字段说明中提取小数位/单位（说明格式形如 "2位小数，单位：元"）
+    const desc = field.description || '';
+    const decimal = (desc.match(/(\d+)位小数/) || [])[1];
+    rules.push({ field: field.name, type: '数值范围', rule: `仅允许数字${decimal ? `，保留 ${decimal} 位小数` : ''}` });
+  }
+  if (fieldType === '流水号') {
+    rules.push({ field: field.name, type: '唯一性', rule: '系统自动生成，唯一不可重复' });
+  }
+  if (fieldType === '日期') {
+    rules.push({ field: field.name, type: '日期格式', rule: '必须为合法日期' });
+  }
+  return rules;
+}
 
 function generateRuleListMarkdown(forms, systemName, version) {
-  let md = `# ${systemName} - 业务规则清单\n\n`;
+  let md = `# ${systemName} - 规则清单\n\n`;
   md += `> 版本: ${version}\n`;
   md += `> 生成日期: ${new Date().toISOString().split('T')[0]}\n`;
-  md += `> 更新说明: 从Excel导入并智能推导\n\n`;
+  md += `> 更新说明: 依据字段清单智能推断，供评审参考\n\n`;
   md += `---\n\n`;
   md += `## 📋 规则清单使用说明\n\n`;
-  md += `### 组织方式\n`;
-  md += `本规则清单采用**以表单为主体**的组织方式，每个表单的所有规则集中在一起，方便查找和维护。\n\n`;
-  md += `### 规则类型标识\n`;
-  md += `| 规则类型 | 标识符号 | 说明 | 记录内容 |\n`;
-  md += `|---------|---------|------|---------|\n`;
-  md += `| 关键字段更新 | 🔄 | 关键字段值更新规则 | 记录关键字段（如状态字段）的更新逻辑，以及该更新对其他表单的影响 |\n`;
-  md += `| 公式规则 | 🔢 | 表单内字段计算公式 | 只记录字段之间的计算公式，不记录自动生成、选项值等非计算类内容 |\n`;
-  md += `| 业务规则 | 📋 | 跨表单数据更新规则 | 当前表单操作完成后，对目标表单的数据进行增、删、改操作 |\n`;
-  md += `| 自动化规则 | 🤖 | 定时/条件触发的自动化任务 | 包括：①目标表单为流程表单时的数据更新；②定时触发的任务；③条件触发的自动化操作 |\n`;
-  md += `| 消息提醒规则 | 📢 | 消息通知规则 | 消息通知规则 |\n`;
-  md += `| 聚合表规则 | 📊 | 数据聚合统计规则 | 数据聚合统计规则 |\n`;
-  md += `| 报表规则 | 📈 | 报表展示规则 | 报表展示规则 |\n`;
-  md += `| 数据联动规则 | 🔄 | 表单间数据联动规则 | 表单间数据联动规则 |\n`;
-  md += `| 审批流程规则 | ✅ | 审批流程配置规则 | 审批流程配置规则 |\n\n`;
-  md += `### ⚠️ 不记录的内容\n`;
-  md += `以下规则**不需要**在规则清单中记录：\n`;
-  md += `1. ❌ 流水号自动生成规则\n`;
-  md += `2. ❌ 下拉选项的定义\n`;
-  md += `3. ❌ 关联表单的基础配置\n`;
-  md += `4. ❌ 审批流程配置\n`;
-  md += `5. ❌ 简单的填充字段\n\n`;
+  md += `本规则清单以**表单为主体**组织，每个表单的五类规则集中展示，方便查找与评审：\n\n`;
+  md += `| 序号 | 规则类型 | 说明 |\n`;
+  md += `|:---:|---------|------|\n`;
+  md += `| ① | **表单内公式** | 字段间的计算公式，如金额=单价×数量 |\n`;
+  md += `| ② | **表单校验规则** | 字段的必填、唯一、数值范围、格式校验 |\n`;
+  md += `| ③ | **表单动作代码** | 字段联动、赋值、数据加载等动作逻辑 |\n`;
+  md += `| ④ | **业务规则** | 跨表单关联、状态联动、子表汇总等业务逻辑 |\n`;
+  md += `| ⑤ | **自动化规则** | 定时/条件触发的自动化任务 |\n\n`;
+  md += `> ⚠️ 本清单为**建议参考**，不会直接在宜搭中生成。具体表达式/代码/流程由用户确认后另行生成。\n\n`;
   md += `---\n\n`;
 
   const modules = {};
@@ -1086,79 +1178,100 @@ function generateRuleListMarkdown(forms, systemName, version) {
   let moduleIndex = 1;
   for (const [moduleName, moduleForms] of Object.entries(modules)) {
     md += `## ${numberToChinese(moduleIndex)}、${stripModuleNumberPrefix(moduleName)}\n\n`;
-    
+
     moduleForms.forEach((form, formIndex) => {
       md += `### ${formIndex + 1}. ${form.name}\n\n`;
-      
-      // 🔄 关键字段更新规则
-      const statusFields = form.mainFields.filter(f => f.name.includes('状态'));
-      if (statusFields.length > 0) {
-        md += `#### 🔄 关键字段更新规则\n\n`;
-        statusFields.forEach(field => {
-          md += `**字段: ${field.name}**\n\n`;
-          md += `| 更新场景 | 更新逻辑 | 影响范围 |\n`;
-          md += `|---------|---------|---------|\n`;
-          md += `| 表单提交 | 根据业务逻辑更新状态 | 相关表单状态联动 |\n\n`;
-        });
-      }
-      
-      // 🔢 公式规则
-      const formulaFields = form.mainFields.filter(f => f.typeHint && f.typeHint.includes('公式'));
+
+      // ① 表单内公式
+      md += `#### ① 表单内公式\n\n`;
+      const formulaFields = form.mainFields.filter(f => {
+        const ft = mapFieldType(f.name, f.typeHint, f.isOptions, f._forceType, form.name);
+        return (f.typeHint && f.typeHint.includes('公式')) || ft === '数值' && isCalcCandidate(f.name);
+      });
       if (formulaFields.length > 0) {
-        md += `#### 🔢 公式规则\n\n`;
-        md += `| 字段名称 | 公式说明 | 触发时机 |\n`;
-        md += `|---------|---------|---------|\n`;
+        md += `| 字段名称 | 类型 | 公式建议 | 触发时机 |\n`;
+        md += `|---------|------|---------|---------|\n`;
         formulaFields.forEach(field => {
-          const formula = field.typeHint.replace('公式：', '').replace('公式', '');
-          md += `| ${field.name} | ${formula} | 字段变更时 |\n`;
+          const ft = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType, form.name);
+          const formula = field.typeHint ? field.typeHint.replace('公式：', '').replace('公式', '') : `待定（${field.name} 相关计算）`;
+          md += `| ${field.name} | ${ft} | ${formula} | 字段变更时 |\n`;
         });
         md += `\n`;
       } else {
-        md += `#### 🔢 公式规则\n\n`;
         md += `无\n\n`;
       }
-      
-      // 📋 业务规则
-      md += `#### 📋 业务规则\n\n`;
-      const relationFields = form.mainFields.filter(f => f.typeHint && f.typeHint.includes('关联-->'));
-      if (relationFields.length > 0 || (form.subTables && form.subTables.length > 0)) {
-        md += `**规则1: ${form.name}数据关联**\n\n`;
-        md += `- **触发条件**: ${form.name}提交或更新\n`;
-        md += `- **执行动作**: \n`;
-        if (relationFields.length > 0) {
-          md += `  - 关联表单数据联动\n`;
-        }
-        if (form.subTables && form.subTables.length > 0) {
-          md += `  - 子表数据汇总计算\n`;
-        }
-        md += `- **影响范围**: 关联表单、子表数据\n\n`;
+
+      // ② 表单校验规则
+      md += `#### ② 表单校验规则\n\n`;
+      const validations = [];
+      form.mainFields.forEach(field => {
+        const ft = mapFieldType(field.name, field.typeHint, field.isOptions, field._forceType, form.name);
+        inferValidationRules(field, ft, form.type).forEach(r => validations.push(r));
+      });
+      if (validations.length > 0) {
+        md += `| 字段名称 | 校验类型 | 校验规则 |\n`;
+        md += `|---------|---------|---------|\n`;
+        validations.forEach(r => {
+          md += `| ${r.field} | ${r.type} | ${r.rule} |\n`;
+        });
+        md += `\n`;
       } else {
         md += `无\n\n`;
       }
-      
-      // 🤖 自动化规则
-      md += `#### 🤖 自动化规则\n\n`;
-      md += `无\n\n`;
-      
+
+      // ③ 表单动作代码
+      md += `#### ③ 表单动作代码\n\n`;
+      const actionFields = form.mainFields.filter(f => f.typeHint && f.typeHint.includes('关联-->'));
+      if (actionFields.length > 0) {
+        md += `| 触发场景 | 动作描述 |\n`;
+        md += `|---------|---------|\n`;
+        actionFields.forEach(field => {
+          md += `| 选择 ${field.name} | 联动带出关联表单字段并回填 |\n`;
+        });
+        md += `\n`;
+      } else {
+        md += `无\n\n`;
+      }
+
+      // ④ 业务规则
+      md += `#### ④ 业务规则\n\n`;
+      const relationFields = form.mainFields.filter(f => f.typeHint && f.typeHint.includes('关联-->'));
+      const statusFields = form.mainFields.filter(f => f.name.includes('状态'));
+      const hasBizRule = relationFields.length > 0 || (form.subTables && form.subTables.length > 0) || statusFields.length > 0;
+      if (hasBizRule) {
+        let ruleIdx = 1;
+        if (relationFields.length > 0) {
+          md += `**规则${ruleIdx}: ${form.name}数据关联**\n\n`;
+          md += `- **触发条件**: ${form.name}提交或更新\n`;
+          md += `- **执行动作**: 关联表单数据联动\n`;
+          md += `- **影响范围**: ${relationFields.map(f => f.name.replace(/.*关联-->/, '')).join('、')}\n\n`;
+          ruleIdx++;
+        }
+        if (statusFields.length > 0) {
+          md += `**规则${ruleIdx}: ${form.name}状态流转**\n\n`;
+          md += `- **触发条件**: ${statusFields.map(f => f.name).join('、')}字段变更\n`;
+          md += `- **执行动作**: 按业务状态流转逻辑更新状态及相关表单\n`;
+          md += `- **影响范围**: ${form.name}及相关表单\n\n`;
+          ruleIdx++;
+        }
+        if (form.subTables && form.subTables.length > 0) {
+          md += `**规则${ruleIdx}: ${form.name}子表汇总**\n\n`;
+          md += `- **触发条件**: 子表${form.subTables.map(st => st.name).join('、')}明细增删改\n`;
+          md += `- **执行动作**: 汇总子表数据到主表\n`;
+          md += `- **影响范围**: 主表汇总字段\n\n`;
+        }
+      } else {
+        md += `无\n\n`;
+      }
+
+      // ⑤ 自动化规则
+      md += `#### ⑤ 自动化规则\n\n`;
+      md += `无（由用户结合业务按需补充定时/条件触发的自动化任务）\n\n`;
+
       md += `---\n\n`;
     });
-    
-    moduleIndex++;
-  }
 
-  // 附录：全局规则（v1.24.0: 仅保留审批流程规则，聚合表/报表规则留给AI根据行业动态推导）
-  md += `## 附录：全局规则\n\n`;
-  
-  const flowForms = forms.filter(f => f.type === '流程表单');
-  if (flowForms.length > 0) {
-    md += `### 审批流程规则\n\n`;
-    flowForms.forEach((form, idx) => {
-      md += `#### ${idx + 1}. ${form.name}审批流程\n\n`;
-      md += `- **发起条件**: 提交${form.name}申请\n`;
-      md += `- **审批节点**: 待配置\n`;
-      md += `- **流转条件**: 待配置\n`;
-      md += `- **抄送规则**: 待配置\n\n`;
-    });
+    moduleIndex++;
   }
 
   md += `---\n\n`;
@@ -1417,6 +1530,64 @@ function inferModuleGroup(formName) {
   return '未分组';
 }
 
+// ==================== 原型页面完成度检查 ====================
+
+// v3.1.5 新增：流程完成度检查。
+// 背景事故：AI 生成完字段清单.md 后只交付 .md 就提前结束，跳过第8步 prototype_generator.js，
+// 导致用户进应用后原型页面为空白。此前该步骤仅靠 SKILL.md 硬规则约束，无机制保障。
+// 本函数在脚本生成完 .md 后强制检查 <输出目录>/原型页面/templates/manifest.html 是否存在，
+// 缺失则输出醒目警告，让 AI 无法"无感知"遗漏第8步。
+function checkPrototypePageCompleted(outputDir) {
+  if (!outputDir) return false;
+  const manifestPath = path.join(outputDir, '原型页面', 'templates', 'manifest.html');
+  const generatorVersionPath = path.join(outputDir, '原型页面', '.generator-version');
+  return fs.existsSync(manifestPath) && fs.existsSync(generatorVersionPath);
+}
+
+// v3.1.6 升级：机制性防线从"只警告"提升为"自动补齐"。
+// 背景：v3.1.5 的 checkPrototypePageCompleted 只输出警告，依赖 AI 看到警告后手动执行第8步，
+// 若 AI 遗漏仍会缺原型页面（如进销存3/4）。本函数在检测到原型页面缺失时，
+// 自动调用 prototype_generator.js 生成，不再依赖 AI 自觉，彻底杜绝"只交付 .md"遗漏。
+function ensurePrototypePage(outputDir) {
+  if (!outputDir) return;
+  if (checkPrototypePageCompleted(outputDir)) {
+    console.log('✅ 原型页面完整性检查通过: 已存在', path.join(outputDir, '原型页面', 'templates', 'manifest.html'));
+    return;
+  }
+  // 缺失 → 自动补齐
+  const fieldListPath = path.join(outputDir, '字段清单.md');
+  const prototypeOutput = path.join(outputDir, '原型页面');
+  const generatorScript = path.join(__dirname, '..', '..', 'form-to-prototype', 'scripts', 'prototype_generator.js');
+  console.warn('\n⚠️  检测到原型页面缺失，自动调用 form-to-prototype 生成器补齐（无需手动执行第8步）...');
+  console.warn('   - 字段清单: ' + fieldListPath);
+  console.warn('   - 生成器: ' + generatorScript);
+  if (!fs.existsSync(fieldListPath)) {
+    console.warn('   ❌ 字段清单不存在，无法自动生成原型页面：' + fieldListPath);
+    console.warn('   - 请先确认字段清单.md 已生成，再执行：node ' + generatorScript + ' <字段清单.md路径> ' + prototypeOutput);
+    return;
+  }
+  if (!fs.existsSync(generatorScript)) {
+    console.warn('   ❌ 生成器脚本不存在：' + generatorScript);
+    return;
+  }
+  try {
+    const res = childProcess.spawnSync(process.execPath, [generatorScript, fieldListPath, prototypeOutput], {
+      stdio: 'inherit',
+      windowsHide: true
+    });
+    if (res.status === 0 && checkPrototypePageCompleted(outputDir)) {
+      console.log('\n✅ 原型页面已自动生成完成: ' + prototypeOutput);
+    } else {
+      console.warn('\n⚠️  [强制·流程未完成] 原型页面自动生成失败！');
+      console.warn('   - 请手动执行第8步（见 SKILL.md 硬规则8/11）：');
+      console.warn('     node ' + generatorScript + ' ' + fieldListPath + ' ' + prototypeOutput);
+    }
+  } catch (e) {
+    console.warn('\n⚠️  [强制·流程未完成] 自动生成原型页面出错: ' + (e.message || e));
+    console.warn('   - 请手动执行第8步：node ' + generatorScript + ' ' + fieldListPath + ' ' + prototypeOutput);
+  }
+}
+
 // ==================== 主函数 ====================
 
 function main() {
@@ -1611,12 +1782,56 @@ function main() {
     return;
   }
 
+  // --rules 模式：依据字段清单（Excel + override）生成五类完整规则清单，覆盖占位文件
+  // 时序：正式生成字段清单后，用户确认字段清单内容，再运行此模式生成完整规则清单。
+  // 五类：① 表单内公式 ② 表单校验规则 ③ 表单动作代码 ④ 业务规则 ⑤ 自动化规则
+  if (args[0] === '--rules') {
+    const excelPath = args[1];
+    const outputDir = args[2] || '.';
+    const systemName = args[3] || '项目管理系统';
+    const version = args[4] || '1.0.0';
+    const overridePath = args[5] || null;
+    if (!excelPath) {
+      console.error('用法: node excel_to_form.js --rules <Excel文件路径> [输出目录] [系统名称] [版本号] [字段类型覆盖JSON路径]');
+      process.exit(1);
+    }
+    if (!fs.existsSync(excelPath)) {
+      console.error('错误: Excel 文件不存在:', excelPath);
+      process.exit(1);
+    }
+    if (outputDir && !fs.existsSync(outputDir)) {
+      fs.mkdirSync(outputDir, { recursive: true });
+    }
+    console.log('正在读取 Excel 文件:', excelPath);
+    try {
+      const forms = parseExcelForms(excelPath);
+      // 复用正式生成前的 override 应用逻辑，确保规则清单与字段清单的关联/选项等配置一致
+      loadFieldTypeOverrides(overridePath, outputDir);
+      applyOverrides(forms);
+
+      const ruleListMd = generateRuleListMarkdown(forms, systemName, version);
+      const ruleListPath = path.join(outputDir, '规则清单.md');
+      fs.writeFileSync(ruleListPath, ruleListMd, 'utf8');
+      console.log('✅ 五类完整规则清单已生成:', ruleListPath);
+      console.log('   ① 表单内公式 ② 表单校验规则 ③ 表单动作代码 ④ 业务规则 ⑤ 自动化规则');
+
+      // v3.1.6 流程完成度检查：原型页面缺失时自动补齐（同正式生成模式）
+      ensurePrototypePage(outputDir);
+    } catch (error) {
+      console.error('生成失败:', error.message);
+      console.error(error.stack);
+      process.exit(1);
+    }
+    return;
+  }
+
   if (args.length < 1) {
     console.log('用法: node excel_to_form.js <Excel文件路径> [输出目录] [系统名称] [版本号] [字段类型覆盖JSON路径]');
     console.log('示例: node excel_to_form.js "项目管理.xlsx" "01需求梳理" "项目管理系统" "1.0.0"');
     console.log('        或传入覆盖文件: node excel_to_form.js "项目管理.xlsx" "01需求梳理" "项目管理系统" "1.0.0" "field-types-override.json"');
     console.log('预览模式: node excel_to_form.js --preview <Excel文件路径>');
     console.log('草稿模式: node excel_to_form.js --draft <Excel文件路径> [草稿输出路径]');
+    console.log('规则模式: node excel_to_form.js --rules <Excel文件路径> [输出目录] [系统名称] [版本号] [字段类型覆盖JSON路径]');
     process.exit(1);
   }
 
@@ -1674,6 +1889,12 @@ function main() {
     console.log('\n🎉 转换完成！');
     console.log(`📁 输出目录: ${path.resolve(outputDir)}`);
 
+    // v3.1.6 强制流程完成度保障：原型页面是流程完成的必要条件（硬规则8/11）。
+    // 脚本生成完 .md 后检查 <输出目录>/原型页面/templates/manifest.html 是否存在，
+    // 缺失则自动调用 prototype_generator.js 生成（机制性防线，不依赖 AI 自觉），
+    // 杜绝"只交付 .md 就提前结束"导致原型页面永久缺失（进销存3/4 事故根因）。
+    ensurePrototypePage(outputDir);
+
   } catch (error) {
     console.error('转换失败:', error.message);
     console.error(error.stack);
@@ -1709,5 +1930,7 @@ module.exports = {
   applyOverrides,
   applyFieldOverrides,
   VALID_DATA_TITLE_TYPES,
-  validateDataTitleType
+  validateDataTitleType,
+  checkPrototypePageCompleted,
+  ensurePrototypePage
 };

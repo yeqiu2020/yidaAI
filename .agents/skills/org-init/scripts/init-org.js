@@ -1,5 +1,6 @@
-﻿/**
- * 组织初始化脚本 - V1.5.0
+/**
+ * 组织初始化脚本 - V1.5.1
+ * 新增: 支持 YIDA_NO_OPEN_PORTAL 环境变量，由同步服务触发时跳过打开浏览器/注册自启（避免刷新应用信息时弹新窗口）
  * 自动从宜搭平台获取应用列表并更新到配置文件
  * 修复：配合 login-manager v1.0.11，修复页面跳转后登录流程提前退出的问题
  * 修复：文件不存在时自动创建默认配置文件
@@ -49,7 +50,11 @@ const { ensureLogin } = require('./login-manager.js');
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
 
 const CONFIG = {
-  cookiesFile: path.join(PROJECT_ROOT, '.cookies.json'),
+  // 阶段二改造：Cookie 优先全局，兼容项目根
+  cookiesFile: (function() {
+    const globalCF = path.join(require('os').homedir(), '.yida-ai-helper', '.cookies.json');
+    return fs.existsSync(globalCF) ? globalCF : path.join(PROJECT_ROOT, '.cookies.json');
+  })(),
   orgConfigFile: path.join(PROJECT_ROOT, '组织及应用信息.md'),
   baseUrl: null  // 将在登录后动态获取
 };
@@ -104,7 +109,7 @@ function createDefaultOrgConfigFile(loginState) {
 | 完整域名 | ${baseUrl} |
 | corpId | ${corpId} |
 | corp名称 | ${corpName} |
-| 本地门户 | [http://127.0.0.1:8080/本地操作页面/index.html](http://127.0.0.1:8080/本地操作页面/index.html) |
+| 本地门户 | [http://127.0.0.1:8080/${encodeURIComponent(path.basename(PROJECT_ROOT))}/本地操作页面/index.html](http://127.0.0.1:8080/${encodeURIComponent(path.basename(PROJECT_ROOT))}/本地操作页面/index.html) |
 
 ---
 
@@ -449,23 +454,30 @@ function rebuildAppList(apps) {
 
   // 计算增删
   const newNameSet = new Set(allApps.map(a => a.name));
+  const removedNames = [];
   let removed = 0;
   beforeNames.forEach(({ name, appId }) => {
     if (name && !newNameSet.has(name)) {
       // 只移除已经同步过的应用（有真实 appId 的），不移除未同步应用
       if (appId !== '待创建' && appId !== '请手动补充') {
         removed++;
+        removedNames.push(name);
         console.log('    - 已删除（宜搭中不存在）:', name);
       }
     }
   });
   let added = 0;
-  allApps.forEach(a => { if (!beforeNames.find(b => b.name === a.name)) added++; });
+  const addedNames = [];
+  allApps.forEach(a => { if (!beforeNames.find(b => b.name === a.name)) { added++; addedNames.push(a.name); } });
   const updated = apps.length - added;
   const preserved = localOnlyApps.length;
+  // 保持不变的应用：之前已存在且当前仍在远端应用列表中
+  const unchangedNames = allApps
+    .filter(a => beforeNames.some(b => b.name === a.name))
+    .map(a => a.name);
 
   console.log(`  [重建] 应用列表：共 ${allApps.length} 个（云端 ${apps.length} + 本地未同步 ${preserved}），新增 ${added}，删除 ${removed}，更新 ${updated}`);
-  return { updated, removed, added, preserved };
+  return { updated, removed, added, preserved, addedNames, removedNames, unchangedNames };
 }
 
 /**
@@ -942,7 +954,8 @@ function checkHttpServiceRunning() {
  * 在浏览器中打开门户页面
  */
 function openPortalInBrowser() {
-  const portalUrl = 'http://127.0.0.1:8080/本地操作页面/index.html';
+  const projectName = encodeURIComponent(path.basename(PROJECT_ROOT));
+  const portalUrl = `http://127.0.0.1:8080/${projectName}/本地操作页面/index.html`;
   console.log('\n' + '='.repeat(60));
   console.log('🎉 门户页面已就绪！');
   console.log('  📍 访问地址: ' + portalUrl);
@@ -1044,13 +1057,33 @@ async function main() {
   console.log('  - 未匹配:', notFound, '个');
   console.log('  - 配置文件:', CONFIG.orgConfigFile);
 
+  // 输出结构化变化摘要（供 sync_server / 本地门户解析，展示每个应用的增删改情况）
+  const changeSummary = {
+    success: true,
+    addedNames: rebuildResult.addedNames || [],
+    removedNames: rebuildResult.removedNames || [],
+    unchangedNames: rebuildResult.unchangedNames || [],
+    added: rebuildResult.added,
+    removed: rebuildResult.removed,
+    updated: rebuildResult.updated,
+    preserved: rebuildResult.preserved
+  };
+  console.log('__YIDA_CHANGES__' + JSON.stringify(changeSummary));
+
   // 第四步：启动HTTP服务并打开门户页面
+  // 【v1.5.1】由 sync_server 触发（浏览器刷新应用信息）时跳过打开浏览器/注册自启，避免每次刷新弹新窗口
   console.log('\n🚀 第四步：启动HTTP服务...');
-  await startServicesAndOpenPortal();
+  if (process.env.YIDA_NO_OPEN_PORTAL === '1') {
+    console.log('  ℹ️ 由同步服务触发，跳过打开门户浏览器窗口');
+  } else {
+    await startServicesAndOpenPortal();
+  }
 
   // 第五步：注册开机自启
-  console.log('\n🔌 第五步：注册开机自启...');
-  registerAutoStart();
+  if (process.env.YIDA_NO_OPEN_PORTAL !== '1') {
+    console.log('\n🔌 第五步：注册开机自启...');
+    registerAutoStart();
+  }
 }
 
 /**

@@ -3,7 +3,7 @@
   "_description": "本文件用于配置Skill的全局行为和启用/禁用状态",
   "_dualSource_comment": "双源维护约定：各技能 SKILL.md 的 frontmatter description 是运行时权威面（Agent 实际据此触发），本文件 skills[].description 是索引面（供检索/生成 README 能力表）；修改任一侧描述时必须同步修改另一侧，保持两者一致，禁止只改 config 不改 frontmatter（否则触发词不生效）",
   "version": "2.0.0",
-  "lastUpdated": "2026-07-31",
+  "lastUpdated": "2026-08-14",
   "disabledSkills": [],
   "_exemptedSkills_comment": "豁免登记的目录：不进入 skills 数组，但必须写明豁免理由。校验脚本 scripts/validate-skill-config.js 以此为唯一事实源做反向校验（含 SKILL.md 的目录要么登记、要么在此豁免，否则报错）",
   "exemptedSkills": [
@@ -104,7 +104,7 @@
       "path": ".agents/skills/code-expert",
       "version": "2.7.0",
       "author": "叶秋",
-      "contact": "15270209736",
+      "contact": "",
       "source": "www.yidatrain.com",
       "tags": ["宜搭", "低代码", "JavaScript", "表单开发", "流程自动化", "代码生成"],
       "enabled": true
@@ -124,7 +124,7 @@
       "path": ".agents/skills/formula-generator",
       "version": "4.5.1",
       "author": "叶秋",
-      "contact": "15270209736",
+      "contact": "",
       "source": "www.yidatrain.com",
       "tags": ["宜搭", "公式", "计算", "marks"],
       "enabled": true
@@ -208,7 +208,7 @@
       "path": ".agents/skills/get-schema",
       "version": "1.0.2",
       "author": "叶秋",
-      "contact": "15270209736",
+      "contact": "",
       "source": "www.yidatrain.com",
       "category": "configuration",
       "enabled": true
@@ -365,6 +365,15 @@
       "category": "server-management",
       "tags": ["宜搭", "本地服务", "安全加固", "CORS", "token"],
       "enabled": true
+    },
+    {
+      "name": "yida-consultant",
+      "description": "宜搭问题诊断与修复闭环专家（大管家）。仅当用户同时给出宜搭上下文（宜搭、表单、公式、组件ID、JS代码、业务规则、集成自动化、连接器、流程、数据提交等）和诊断意图（为什么不生效、报错什么原因、保存成功但不执行、计算结果不对、哪里错了、对不对）时触发。接收宜搭相关问题，综合各 Skill 知识进行诊断分析，给出根因和修复方案（含正确写法）。必要时调用其他 Skill 验证。经用户同意后可调用执行型 Skill 修复。注意：不接管'写公式'、'创建表单'、'配置集成自动化'等执行型任务——这些交给对应执行型 Skill。",
+      "path": ".agents/skills/yida-consultant",
+      "version": "1.0.0",
+      "category": "diagnostic",
+      "tags": ["宜搭", "诊断", "排查", "修复", "大管家"],
+      "enabled": true
     }
   ],
   "_disambiguationGroups_comment": "易混技能消歧组（集中负信号）。由 scripts/generate-skill-index.js 渲染为 README 《易混技能消歧表》。when=用户意图，use=应触发技能，not=易被误触发但不该用的技能",
@@ -377,6 +386,14 @@
         { "when": "只要生成规范提示词文件、不要直接出成品", "use": "prompt-assistant", "not": "code-expert / formula-generator" },
         { "when": "跨表增删改（INSERT/UPDATE/DELETE/UPSERT）、单据提交后改其他表", "use": "business-rule", "not": "integration / formula-generator" },
         { "when": "逻辑流、消息通知、定时触发、连接器调用等自动化", "use": "integration", "not": "business-rule" }
+      ]
+    },
+    {
+      "topic": "子表删除（级联）",
+      "rules": [
+        { "when": "构建/排查「删除目标表单子表行」的级联逻辑流（审批通过后删子表行）", "use": "integration", "not": "data-clean" },
+        { "when": "通用集成自动化创建（非子表删除场景）", "use": "integration", "not": "data-clean" },
+        { "when": "仅清空/删除保留表结构的批量数据操作（不走逻辑流）", "use": "data-clean", "not": "integration" }
       ]
     },
     {
@@ -433,6 +450,13 @@
         { "when": "登录宜搭、获取/刷新登录态、Cookie失效重新认证（默认多策略：CDP/环境变量/二维码/Playwright降级）", "use": "auth-plus", "not": "simulated-login / api-client" },
         { "when": "明确要求可视化浏览器登录流程（看到浏览器操作、点击'立即登录'、手动选择组织）", "use": "simulated-login", "not": "auth-plus / api-client" },
         { "when": "仅程序化调用宜搭API（静默登录仅作为API调用的前置能力，不以登录为目的）", "use": "api-client", "not": "auth-plus / simulated-login" }
+      ]
+    },
+    {
+      "topic": "诊断 vs 执行",
+      "rules": [
+        { "when": "同时包含宜搭上下文（公式/代码/表单/业务规则/集成自动化/连接器/组件ID等）和诊断意图（不生效、报错、计算结果不对、保存成功但不执行、哪里错了、对不对）", "use": "yida-consultant", "not": "formula-generator / code-expert / integration / business-rule" },
+        { "when": "创建/生成/写公式、代码、表单、集成自动化、连接器", "use": "对应执行型Skill", "not": "yida-consultant" }
       ]
     }
   ],

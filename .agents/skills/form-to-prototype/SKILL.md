@@ -12,6 +12,10 @@ description: 根据字段清单自动生成HTML原型页面。当用户说'生�
 ### 专属硬规则
 1. **必须使用HTTP方式访问严禁file://** — 原型页面必须通过HTTP服务器访问
 2. **生成后必须更新组织及应用信息.md** — 追加原型页面访问地址
+3. **【模板字符串转义·v2.37.1 强化】修改 prototype_generator.js 内任何模板字符串（反引号 \`...\`）中的 JS/HTML 代码时，所有反斜杠序列必须写双反斜杠** — 模板字符串内 `\n` 会被 JS 解析为换行符、`\s` 解析为 `s`、`\d` 解析为 `d`、`\0` 为八进制、`\'` 为撇号闭合，导致生成的产物 JS 语法错误（如 manifest.html 出现 `Invalid or unexpected token`，整页失效：应用分组空白、Tab 点击无反应）。正确写法：字面 `\n` 须写 `\\n`、`\s` 写 `\\s`、`\S` 写 `\\S`、`\d` 写 `\\d`；Windows 路径建议直接用正斜杠 `/` 避免反斜杠转义。修改后**必须重新生成并确认自检通过**。**事故教训**：v2.37.0 `prototype_generator.js` 第 4120 行 `\n` 写成单反斜杠，产物 app.js 生成跨行单引号字符串，全量重建一次性波及所有应用。
+4. **【生成自检·v2.37.1 强化】自检必须阻断不能只告警** — `validateGeneratedJs` 自检失败必须 `throw` 中止写入，严禁用 try-catch 只打印告警继续（历史事故：v2.37.0 自检已检测到 app.js 语法错误但只输出 `⚠️` 不阻断，坏文件照样落地，sync-ops 返回 `success: true` 覆盖所有应用的原型页面）。**每次生成后必须确认输出含 `[4/5] 产物 JS 语法自检 ✓ 全部通过`**，若出现 `⚠️` 或 `✗` 必须修复模板。
+5. **【版本递增前干跑测试·v2.37.1 新增】递增 `GENERATOR_VERSION` 前必须干跑生成到临时目录并验证产物 JS 语法** — 因为 GENERATOR_VERSION 递增会触发 sync-ops 对所有已存在应用进行全量重建，模板中的 bug 将一次性波及所有应用。干跑步骤：`node prototype_generator.js <字段清单.md> ../../../../temp-file/dryrun` → `node --check temp-file/dryrun/js/*.js` 全部通过 → 再递增 GENERATOR_VERSION。**严禁在未验证产物语法的情况下直接递增版本号**。
+6. **【v3.1.0 多组织并存】所有 URL 中的项目目录段必须自动提取当前项目根目录名（即当前工作目录路径的最后一段，如 `d:\宜搭AI助手直播\宜搭AI助手V2.0.23` → `宜搭AI助手V2.0.23`），直接填入 URL，严禁输出 `{项目目录名}` 占位符让用户手动替换**
 
 ---
 
@@ -19,14 +23,15 @@ description: 根据字段清单自动生成HTML原型页面。当用户说'生�
 
 ## 版本
 
-**v2.17.0** (2026/07/17) — 完整版本记录见 [references/版本记录.md](references/版本记录.md)
+**v2.37.1** (2026/08/17) — 模板字符串转义 bug 导致所有应用原型页面左侧菜单消失，根因：模板内 `\n` 被解析为真实换行→产物 app.js 语法错误；`validateGeneratedJs` 自检只告警不阻断；GENERATOR_VERSION 2.37.0 触发全量重建一次性波及所有应用。修复：`\n`→`\\n`、自检改为 throw 阻断、递增 2.37.1 触发全量重建。新增硬规则：模板转义+自检阻断+版本递增前干跑
+**v2.37.0** (2026/08/16) — 完整版本记录见 [references/版本记录.md](references/版本记录.md)
 
 ## 📚 参考文件索引（按需加载）
 
 | 参考文件 | 内容 | 何时加载 |
 |---------|------|---------|
 | [references/页面设计与模板.md](references/页面设计与模板.md) | 页面设计规范（配色/布局/组件样式）、表单配置加载器（form-config.js）详情、交互功能实现、HTML模板参考、生成器内部工作流程、新旧方案对比 | 需要理解/调整生成的页面样式、模板结构、form-config.js 行为时 |
-| [references/版本记录.md](references/版本记录.md) | v2.14.0~v2.17.0 版本更新记录 | 需要了解历史变更、排查同步/菜单/路径相关回归问题时 |
+| [references/版本记录.md](references/版本记录.md) | v2.14.0~v2.22.0 版本更新记录 | 需要了解历史变更、排查同步/菜单/路径相关回归问题时 |
 
 ## 功能说明
 
@@ -68,16 +73,16 @@ description: 根据字段清单自动生成HTML原型页面。当用户说'生�
 ### 生成器脚本（推荐）
 
 ```bash
-node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清单md文件路径> [输出目录]
+yida-helper run form-to-prototype/scripts/prototype_generator.js <字段清单md文件路径> [输出目录]
 ```
 
 **示例：**
 ```bash
 # 生成到默认目录（原型页面）
-node .agents/skills/form-to-prototype/scripts/prototype_generator.js "出入库管理/01需求梳理/字段清单.md"
+yida-helper run form-to-prototype/scripts/prototype_generator.js "出入库管理/01需求梳理/字段清单.md"
 
 # 指定输出目录
-node .agents/skills/form-to-prototype/scripts/prototype_generator.js "出入库管理/01需求梳理/字段清单.md" "出入库管理/01需求梳理/原型页面"
+yida-helper run form-to-prototype/scripts/prototype_generator.js "出入库管理/01需求梳理/字段清单.md" "出入库管理/01需求梳理/原型页面"
 ```
 
 **生成器特点：**
@@ -85,6 +90,8 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js "出入库�
 - 生成通用模板页面（list.html + form.html）
 - 生成表单配置加载器（form-config.js）
 - 自动生成导航菜单和首页
+- **自动产出 manifest.html 生成清单页**（三个需求文件的一体化查看与编辑视图）
+- **版本感知重建**：生成时写入 `.generator-version`，sync-ops 检测到版本升级时对已存在应用强制全量重建，确保新功能（如 manifest）覆盖所有应用
 - 支持字段ID显示和点击复制
 - 支持同步配置按钮
 
@@ -114,10 +121,19 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js "出入库�
 │   │   ├── form-config.js       # 表单配置加载器（含复制/子表/持久化）
 │   │   ├── form-config-data.js  # 静态配置兜底（开发调试用）
 │   │   └── form-uuid-data.js    # 表单UUID映射（来自系统配置清单）
+│   ├── .generator-version       # 生成器版本号（sync-ops 据此判断是否强制全量重建）
 │   └── templates/               # 通用模板页面
 │       ├── list.html            # 通用列表页（所有表单共用）
-│       └── form.html            # 通用新增/详情页（所有表单共用）
+│       ├── form.html            # 通用新增/详情页（所有表单共用）
+│       ├── guide.html           # 开发引导页（通用操作步骤指引）
+│       └── manifest.html        # 生成清单页（展示并编辑字段清单/规则清单/应用分组）
 ```
+
+**生成清单页（manifest.html）**：与三个需求梳理文件（`字段清单.md`/`规则清单.md`/`应用分组.md`）一一对应，提供：
+- 三个 Tab：① 应用分组 ② 字段清单（按分组→表单→主表/子表完整展示）③ 规则清单（五类规则）
+- 单元格行内编辑 + 增删行，保存通过 `POST /local-files` 回写对应 .md 源文件
+- 所有页面顶栏提供「📥 刷新本地清单」按钮（本地 md → 页面），与「🔄 同步应用表单」（云端→本地）互补
+- 生成清单页是**自动产出**的，属原型生成的一部分，无需单独调用
 
 页面设计规范（配色、布局、列表页/表单页设计）、form-config.js 核心功能、交互功能（字段ID复制/同步配置/公式计算/子表行操作）、HTML模板参考见 [references/页面设计与模板.md](references/页面设计与模板.md)。
 
@@ -172,7 +188,7 @@ node prototype_generator.js "字段清单.md" "01需求梳理/原型页面"
 ### 步骤 2：运行生成器
 
 ```bash
-node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清单路径> [输出目录]
+yida-helper run form-to-prototype/scripts/prototype_generator.js <字段清单路径> [输出目录]
 ```
 
 生成器内部流程：解析字段清单（提取系统名称/表单/主表与子表字段/字段标注）→ 生成静态资源（css/style.css、js/app.js）→ 生成通用模板（templates/list.html、templates/form.html）→ 生成配置加载器（js/form-config.js）→ 生成首页（index.html）。详细说明见 [references/页面设计与模板.md](references/页面设计与模板.md)。
@@ -187,10 +203,10 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
 
 **⚠️ 重要：此步骤必须执行，不可跳过**
 
-生成原型页面后，必须更新项目根目录的 `组织及应用信息.md` 文件：
+生成原型页面后，必须更新当前工作目录的 `组织及应用信息.md` 文件：
 
 1. **检查文件是否存在**
-   - 文件路径：`{项目根目录}/组织及应用信息.md`
+   - 文件路径：当前工作目录下的 `组织及应用信息.md`
    - 如果不存在，跳过此步骤（用户尚未初始化组织信息）
 
 2. **追加原型页面访问地址**
@@ -209,12 +225,12 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
 
 | 应用名称 | 原型页面地址 | 本地状态 |
 |----------|-------------|----------|
-| 项目管理 | http://127.0.0.1:8080/项目管理/01需求梳理/原型页面/index.html | ✅ 已同步 |
+| 项目管理 | http://127.0.0.1:8080/{项目目录名}/项目管理/01需求梳理/原型页面/index.html | ✅ 已同步 |
 ```
 
 4. **访问地址规则**
    - 统一使用 `http://127.0.0.1:8080/` 格式（固定端口 8080）
-   - 路径格式：`{项目名称}/01需求梳理/原型页面/index.html`
+   - 路径格式：`{项目目录名}/{应用名}/01需求梳理/原型页面/index.html`
    - **严禁使用其他端口**（如 8081、8082 等）
 
 ### 步骤 5：交付用户
@@ -232,11 +248,12 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
 📁 生成位置：{完整绝对路径}
 
 🌐 访问地址：
-   http://localhost:8080/{路径}/index.html
+   http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/index.html
 
 📋 文件结构：
    📁 原型页面/
    ├── 📄 index.html
+   ├── 📄 .generator-version
    ├── 📁 css/
    │   └── 📄 style.css
    ├── 📁 js/
@@ -244,11 +261,13 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
    │   └── 📄 form-config.js
    └── 📁 templates/
        ├── 📄 list.html
-       └── 📄 form.html
+       ├── 📄 form.html
+       ├── 📄 guide.html        # 开发引导
+       └── 📄 manifest.html     # 生成清单（字段/规则/应用分组）
 
 ✅ 使用方式：
    1. **启动HTTP服务**（使用 server-manager）：
-      node .agents/skills/server-manager/scripts/server_manager.js start
+      yida-helper run server-manager/scripts/server_manager.js start
    2. **严禁手动启动**：不要使用 `npx http-server` 命令
    3. 访问上方地址
    4. 所有表单共用模板，通过 ?form=表单名 切换
@@ -266,7 +285,7 @@ node .agents/skills/form-to-prototype/scripts/prototype_generator.js <字段清�
 
 2. **访问方式（重要）**
    - **必须使用 HTTP 方式访问**，严禁使用 `file://` 协议打开
-   - 访问地址：`http://127.0.0.1:8080/{路径}/index.html`
+   - 访问地址：`http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/index.html`
    - 点击“同步配置”后会把最新字段持久化到浏览器本地存储，跨页面可用
    - ⚠️ 使用 `file://` 打开会导致同步配置功能失效，且无法正确加载表单配置
 

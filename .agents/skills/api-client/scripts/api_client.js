@@ -19,7 +19,10 @@ const coreUtils = require("../../../../lib/core/utils");
 // ==================== 配置 ====================
 
 const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
-const COOKIE_FILE = path.join(PROJECT_ROOT, ".cookies.json");
+// 阶段二改造：Cookie 优先全局，兼容项目根
+const os = require("os");
+const GLOBAL_COOKIE_FILE = path.join(os.homedir(), ".yida-ai-helper", ".cookies.json");
+const COOKIE_FILE = fs.existsSync(GLOBAL_COOKIE_FILE) ? GLOBAL_COOKIE_FILE : path.join(PROJECT_ROOT, ".cookies.json");
 const LOGIN_SCRIPT = path.join(__dirname, "login_manager.js");
 const CONFIG_FILE = path.join(__dirname, "..", "config", "default.json");
 

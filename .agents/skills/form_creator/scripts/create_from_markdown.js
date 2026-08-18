@@ -1,9 +1,14 @@
 /**
  * 宜搭表单静默创建器 - 从字段清单直接创建到宜搭平台
- * 版本: 2.20.0
- * 更新日期: 2026-07-28
+ * 版本: 2.20.2
+ * 更新日期: 2026-08-17
  *
  * 更新内容:
+ * - v2.20.2: 【多组织并存】修复 updateOrgAppInfo 从 SCRIPT_DIR 查找组织信息导致串目录
+ *           根因：__dirname 始终指向脚本所在项目（V2.0.23），其他项目创建应用时
+ *           组织信息被错误写入 V2.0.23 的 组织及应用信息.md
+ *           修复：改为从 outputDir（字段清单文件所在目录）开始向上查找
+ * - v2.20.1: 【多组织并存】生成原型页面后的访问 URL 增加项目目录段
  * - v2.20.0: 【根因修复】杜绝FORM-TEMP占位符残留导致线上"表单不存在"（进销存3事故）
  *           根因链：字段清单中"被填充的只读关联字段"说明列写"-"（无"关联-->目标表"标记）
  *           → parseFieldConfig 提取不到 associationForm 且无告警
@@ -1254,7 +1259,7 @@ async function main() {
 
   // 10. 更新组织及应用信息
   console.log('\n[8/10] 更新组织及应用信息...');
-  updateOrgAppInfo(appInfo);
+  updateOrgAppInfo(appInfo, outputDir);
 
   // 11. 调用 config-sync 整体同步（当作已有应用处理）
   console.log('\n[9/10] 同步应用到本地（当作已有应用处理）...');
@@ -1483,8 +1488,9 @@ async function syncFormSchemas(outputDir, appId, createdForms) {
       forms: createdForms.map(form => {
         // v2.16.0: 按分组组织JSON文件路径，与sync_config.js的目录结构保持一致
         // v2.19.0: 分组目录加「分组」后缀，与表单目录结构对齐
+        // v2.20.0: 支持多层次分组（form.module 为全路径如"业务规则/1.主表操作主表"）
         const formDirName = `${form.formName}「${form.formType}」`;
-        const groupSubdir = form.module ? `${form.module}「分组」` : '';
+        const groupSubdir = form.module ? form.module.split('/').map(p => `${p}「分组」`).join('/') : '';
         const formDir = groupSubdir
           ? path.join(outputDir, groupSubdir, formDirName)
           : path.join(outputDir, formDirName);
@@ -1534,36 +1540,21 @@ async function syncFormSchemas(outputDir, appId, createdForms) {
  * 将新创建的应用添加到应用列表的最前面（序号为1）
  * @param {Object} appInfo - 应用信息
  */
-function updateOrgAppInfo(appInfo) {
+function updateOrgAppInfo(appInfo, startDir) {
   try {
-    // 查找组织及应用信息.md文件（从当前目录向上查找）
+    // v3.0.0: 从 outputDir 开始向上查找组织及应用信息.md（多组织并存模式下
+    // SCRIPT_DIR/__dirname 始终指向 V2.0.23 的脚本目录，会导致其他项目创建
+    // 的应用信息错误写入 V2.0.23）
     let orgInfoPath = null;
-    let currentDir = SCRIPT_DIR;
-    
-    // 向上查找5层目录（从 .agents/skills/form_creator/scripts 到项目根目录）
-    for (let i = 0; i < 6; i++) {
+    let currentDir = startDir || SCRIPT_DIR;
+
+    while (currentDir !== path.dirname(currentDir)) {
       const possiblePath = path.join(currentDir, '组织及应用信息.md');
       if (fs.existsSync(possiblePath)) {
         orgInfoPath = possiblePath;
         break;
       }
       currentDir = path.dirname(currentDir);
-    }
-    
-    // 如果没找到，尝试从环境变量或默认路径获取
-    if (!orgInfoPath) {
-      const defaultPath = path.join(process.cwd(), '组织及应用信息.md');
-      if (fs.existsSync(defaultPath)) {
-        orgInfoPath = defaultPath;
-      }
-    }
-    
-    // 最后尝试项目根目录（基于常见结构）
-    if (!orgInfoPath) {
-      const rootPath = path.join(SCRIPT_DIR, '..', '..', '..', '..', '组织及应用信息.md');
-      if (fs.existsSync(rootPath)) {
-        orgInfoPath = rootPath;
-      }
     }
     
     if (!orgInfoPath) {
@@ -2476,9 +2467,23 @@ async function generatePrototype(markdownPath, outputDir, appInfo) {
     
     console.log(`  ✅ 原型页面生成成功`);
     
-    // 构建访问地址
-    const projectName = path.basename(outputDir);
-    result.url = `http://127.0.0.1:8080/${projectName}/01需求梳理/原型页面/index.html`;
+    // 构建访问地址（v3.1.0: 多组织并存模式，URL 需带项目目录段）
+    const appName = path.basename(outputDir);
+    let projectDirName = '';
+    try {
+      let dir = path.dirname(outputDir);
+      const root = path.parse(dir).root;
+      while (dir !== root) {
+        if (fs.existsSync(path.join(dir, '组织及应用信息.md'))) {
+          projectDirName = path.basename(dir);
+          break;
+        }
+        dir = path.dirname(dir);
+      }
+    } catch (_) {}
+    result.url = projectDirName
+      ? `http://127.0.0.1:8080/${encodeURIComponent(projectDirName)}/${encodeURIComponent(appName)}/01需求梳理/原型页面/index.html`
+      : `http://127.0.0.1:8080/${encodeURIComponent(appName)}/01需求梳理/原型页面/index.html`;
     result.success = true;
     
     // 注意：组织及应用信息.md 的更新由 prototype_generator.js 统一处理

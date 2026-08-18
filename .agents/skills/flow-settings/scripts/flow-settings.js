@@ -1,8 +1,11 @@
-﻿const path = require('path');
+﻿﻿const path = require('path');
 const fs = require('fs');
+const os = require('os');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
-const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
+// 阶段二改造：Cookie 优先全局，兼容项目根
+const GLOBAL_COOKIE_FILE = path.join(os.homedir(), '.yida-ai-helper', '.cookies.json');
+const COOKIE_FILE = fs.existsSync(GLOBAL_COOKIE_FILE) ? GLOBAL_COOKIE_FILE : path.join(PROJECT_ROOT, '.cookies.json');
 const FORM_MANAGER_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'form_manager.js');
 const API_CLIENT_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'api_client.js');
 const PLAYWRIGHT_CORE_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'js-action-tester', 'node_modules', 'playwright-core');

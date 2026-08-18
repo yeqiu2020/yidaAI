@@ -3,8 +3,19 @@
  * 通过浏览器自动化完成宜搭平台的登录流程
  * 与 simulated-login 不同，此版本在组织选择环节等待用户手动操作
  *
- * 版本: v1.0.12
- * 更新日期: 2026-04-27
+ * 版本: v1.0.17
+ * 更新日期: 2026-08-17
+ * 修复: dashboard 页面被误判为"未知页面"导致空转循环的问题
+ *       根因：handleLoginFlow 的已登录检测只检查 bodyText 关键词（"表单设计"/"我的应用"等），
+ *       而宜搭新版 dashboard 页面内容为"AI宜搭 CLI"、"最近编辑"等，不匹配任何关键词，
+ *       导致已登录到 qfhefh.aliwork.com/dashboard 的页面被判为 unknown 状态空转。
+ *       修复：当 URL 已是有效组织域名（非 www.aliwork.com）时，直接判定为已登录。
+ * 修复: Cookie 验证由 networkidle 改为 domcontentloaded，解决宜搭 SPA 持续后台请求导致"刷新应用信息"卡 30s 超时变慢的问题
+ * 修复: Cookie 验证误用 networkidle 且超时即判失效，导致每次刷新应用信息都弹登录页面。
+ *       改为与 api-client/login_manager.js 的 fetchPageInfo 一致的验证方式：
+ *       networkidle 超时不报错 → 检查是否重定向到登录页 → 循环提取 csrf_token 判断登录态。
+ * 修复: 新增 homepage 页面状态识别，在 www.aliwork.com 首页明确提示用户点击"登录注册"按钮
+ *       修复首页被误判为"未知页面"的问题，每2秒持续检测并输出清晰的操作指引
  * 修复: 添加 UTF-8 编码支持，解决 Windows 终端中文乱码
  * 修复: 修复页面跳转后未正确检测登录成功状态的问题
  *       在捕获 Execution context was destroyed 异常后，增加重新检测页面状态的逻辑
@@ -30,6 +41,7 @@
 
 const { chromium } = require('playwright');
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const { execSync } = require('child_process');
 
@@ -48,13 +60,35 @@ if (process.platform === 'win32') {
 // ==================== 配置 ====================
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
-const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
+// 阶段二改造：Cookie 优先全局，兼容项目根
+const GLOBAL_COOKIE_FILE = path.join(os.homedir(), '.yida-ai-helper', '.cookies.json');
+const COOKIE_FILE = fs.existsSync(GLOBAL_COOKIE_FILE) ? GLOBAL_COOKIE_FILE : path.join(PROJECT_ROOT, '.cookies.json');
 const DEFAULT_BASE_URL = 'https://www.aliwork.com';
 const LOGIN_URL = 'https://www.aliwork.com/workPlatform';
 
 // 浏览器可执行文件路径（支持自定义 Playwright 浏览器位置）
 const CHROMIUM_EXECUTABLE_PATH = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || 
   path.join(PROJECT_ROOT, '.playwright-browsers', 'chromium-1217', 'chrome-win64', 'chrome.exe');
+
+// ==================== 浏览器状态检测 ====================
+
+/**
+ * 检测错误是否表示浏览器已关闭
+ * @param {Error} error - 错误对象
+ * @returns {boolean}
+ */
+function isBrowserClosedError(error) {
+  if (!error || !error.message) return false;
+  const msg = error.message.toLowerCase();
+  return (
+    msg.includes('target closed') ||
+    msg.includes('browser closed') ||
+    msg.includes('target page, context or browser has been closed') ||
+    msg.includes('protocol error') ||
+    msg.includes('browser has been closed') ||
+    msg.includes('context has been closed')
+  );
+}
 
 // ==================== URL 验证工具 ====================
 
@@ -177,10 +211,11 @@ function saveCookieData(data) {
  * 自动处理各种登录页面，但在组织选择时等待用户手动操作
  * 
  * @param {Object} page - Playwright page 对象
+ * @param {Object} browser - Playwright browser 对象（用于检测浏览器是否关闭）
  * @param {Object} config - 配置选项
- * @returns {Promise<Object>} {success, message}
+ * @returns {Promise<Object>} {success, message, browserClosed}
  */
-async function handleLoginFlow(page, config = {}) {
+async function handleLoginFlow(page, browser, config = {}) {
   console.log('  🔐 开始处理登录流程...');
   console.log('  📋 系统会实时显示页面状态和指导信息，请按照提示操作');
   
@@ -229,6 +264,17 @@ async function handleLoginFlow(page, config = {}) {
         };
       });
     } catch (e) {
+      // 【新增】检测浏览器是否被关闭
+      if (isBrowserClosedError(e)) {
+        console.log('\n⚠️ ============================================');
+        console.log('   🔴 检测到浏览器已被关闭！');
+        console.log('   📌 请不要关闭浏览器窗口，保持浏览器打开');
+        console.log('   👉 如果浏览器被误关，请重新打开并访问宜搭');
+        console.log('   🔄 脚本将尝试重新连接浏览器...');
+        console.log('   ============================================\n');
+        return { success: false, message: '浏览器被关闭', browserClosed: true };
+      }
+      
       // 页面正在跳转或上下文被销毁，等待后重试
       if (e.message.includes('Execution context was destroyed') || e.message.includes('contextDestroyed')) {
         console.log(`\n⏳ 页面正在跳转中，等待上下文重建...`);
@@ -275,12 +321,23 @@ async function handleLoginFlow(page, config = {}) {
     // 判断页面状态
     const bodyText = pageInfo.bodyText;
     let pageState = { type: 'unknown', message: '未知页面' };
-    
-    // 1. 检查是否已登录
+
+    // 0. 【最高优先级】检查 URL 是否已是有效组织域名（非 www.aliwork.com 的 *.aliwork.com）
+    //    这是最可靠的登录态判断：能访问组织域名说明登录已成功，不依赖页面内容关键词
+    //    新版宜搭 dashboard 页面（含"AI宜搭 CLI"、"最近编辑"等）不会包含旧版关键词，
+    //    但只要有有效组织域名就足以确认已登录
+    if (!currentUrl.includes('//www.aliwork.com') && currentUrl.includes('.aliwork.com')) {
+      const orgDomain = currentUrl.match(/^(https:\/\/[^\/]+)/);
+      if (orgDomain && isValidOrgBaseUrl(orgDomain[1])) {
+        pageState = { type: 'logged-in', message: `已登录到宜搭（${orgDomain[1]}）` };
+      }
+    }
+
+    // 1. 检查是否已登录到组织工作台（内容关键词检测，作为兜底）
     const isWwwHomepage = currentUrl.includes('//www.aliwork.com');
-    if (!isWwwHomepage && (
-        bodyText.includes('表单设计') || bodyText.includes('组件库') || 
-        bodyText.includes('我的应用') || 
+    if (pageState.type === 'unknown' && !isWwwHomepage && (
+        bodyText.includes('表单设计') || bodyText.includes('组件库') ||
+        bodyText.includes('我的应用') ||
         (bodyText.includes('工作台') && !bodyText.includes('宜搭工作台'))
     )) {
       pageState = { type: 'logged-in', message: '已登录到宜搭工作台' };
@@ -313,6 +370,13 @@ async function handleLoginFlow(page, config = {}) {
     // 5. 检查协议页面
     else if (bodyText.includes('确定') && pageInfo.hasAgreementBtn) {
       pageState = { type: 'agreement', message: '协议同意页面' };
+    }
+    // 6. 检查宜搭首页（带登录注册按钮）
+    else if (isWwwHomepage && (bodyText.includes('登录注册') || bodyText.includes('登录'))) {
+      pageState = { 
+        type: 'homepage', 
+        message: '宜搭首页（未登录）'
+      };
     }
     
     // 检测状态变化
@@ -398,6 +462,17 @@ async function handleLoginFlow(page, config = {}) {
         } catch (e) {
           console.log(`   ⚠️ 自动点击失败，请手动点击`);
         }
+        break;
+        
+      case 'homepage':
+        console.log(`\n🏠 【宜搭首页】`);
+        console.log(`   当前处于宜搭官网首页，尚未登录`);
+        console.log(`\n👉 请在浏览器中点击右上角的"登录注册"按钮`);
+        console.log(`   登录完成后，如果有多组织，请选择您要初始化的组织`);
+        console.log(`\n⏸️  【等待用户操作中】`);
+        console.log(`   系统正在后台持续扫描（每2秒检测一次）`);
+        console.log(`   请在浏览器完成登录和组织的选择...`);
+        console.log(`   完成后系统将自动继续，无需关闭此终端\n`);
         break;
         
       case 'unknown':
@@ -526,14 +601,45 @@ async function ensureLogin(options = {}) {
         const page = await context.newPage();
         
         const testUrl = `${savedBaseUrl}/myApp`;
-        await page.goto(testUrl, { waitUntil: 'networkidle', timeout: 30000 });
-        
-        // 检查是否已登录
-        const isLoggedIn = await page.evaluate(() => {
-          const bodyText = document.body.innerText || '';
-          return bodyText.includes('我的应用') || bodyText.includes('工作台') || 
-                 bodyText.includes('表单设计') || bodyText.includes('组件库');
-        });
+        // 验证方式与 api-client/login_manager.js 的 fetchPageInfo 一致：
+        // 1. domcontentloaded 加载页面（宜搭 SPA 有持续后台请求，networkidle 会等到 30-60s 超时，必须用 domcontentloaded）
+        // 2. 检查是否被重定向到登录页
+        // 3. 循环提取 csrf_token（隐藏 input，DOM 早期就存在，不依赖 SPA 渲染完成）
+        // 【加速】历史：networkidle 每次刷新都卡满 30s 超时，导致"刷新登录态/刷新应用信息"变慢十几秒
+        try {
+          await page.goto(testUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
+        } catch (e) {
+          console.log(`  ⚠️ 页面加载超时（正常，宜搭有持续后台请求），继续验证...`);
+        }
+
+        // 检查是否被重定向到登录页
+        const currentUrl = page.url();
+        if (currentUrl.toLowerCase().includes('login') || currentUrl.toLowerCase().includes('sign')) {
+          console.log('  ❌ 被重定向到登录页，Cookie 无效');
+          // 不在这里 close browser，让 catch 块统一处理
+          throw new Error('REDIRECTED_TO_LOGIN');
+        }
+
+        // 循环提取 csrf_token（最多 10 次，每次间隔 500ms）
+        let isLoggedIn = false;
+        for (let i = 0; i < 10; i++) {
+          try {
+            const csrfToken = await page.evaluate(() => {
+              const input = document.querySelector("input[name='_csrf_token']");
+              return input ? input.value : null;
+            });
+            if (csrfToken) {
+              isLoggedIn = true;
+              console.log(`  ✅ csrf_token 验证成功: ${csrfToken.substring(0, 20)}...`);
+              break;
+            }
+          } catch (e) { /* ignore */ }
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+
+        if (!isLoggedIn) {
+          console.log('  ⚠️ 未获取到 csrf_token，Cookie 可能已失效');
+        }
         
         if (isLoggedIn) {
           console.log('  ✅ Cookie 有效，无需重新登录');
@@ -608,8 +714,8 @@ async function ensureLogin(options = {}) {
       throw new Error('浏览器启动失败');
     }
     
-    const context = await browser.newContext();
-    const page = await context.newPage();
+    let context = await browser.newContext();
+    let page = await context.newPage();
     
     // 打开登录页面（使用 commit 最快速返回）
     console.log('  📄 正在打开登录页面，请稍候...');
@@ -640,9 +746,49 @@ async function ensureLogin(options = {}) {
     // 处理登录流程
     console.log('\n  ⏳ 进入登录状态检测循环（每2秒检测一次）...');
     console.log('  💡 请按照屏幕提示完成登录操作\n');
-    const loginResult = await handleLoginFlow(page, { headless });
+    const loginResult = await handleLoginFlow(page, browser, { headless });
     
-    if (!loginResult.success) {
+    // 【新增】检测浏览器是否被关闭，如果是则尝试重新打开
+    if (loginResult.browserClosed) {
+      console.log('\n🔄 浏览器被关闭，尝试重新打开...');
+      try {
+        await browser.close().catch(() => {});
+      } catch (e) {}
+      
+      // 重新打开浏览器
+      const launchOptions = { 
+        headless: false,
+        timeout: 30000
+      };
+      if (fs.existsSync(CHROMIUM_EXECUTABLE_PATH)) {
+        launchOptions.executablePath = CHROMIUM_EXECUTABLE_PATH;
+      }
+      
+      browser = await chromium.launch(launchOptions);
+      context = await browser.newContext();
+      const newPage = await context.newPage();
+      
+      // 导航到登录页面
+      await newPage.goto(targetUrl, { waitUntil: 'commit', timeout: 15000 });
+      await newPage.waitForLoadState('domcontentloaded', { timeout: 15000 }).catch(() => {});
+      await newPage.waitForTimeout(2000);
+      
+      console.log('✅ 浏览器已重新打开，继续登录流程...');
+      
+      // 递归调用 handleLoginFlow 重新尝试
+      const retryResult = await handleLoginFlow(newPage, browser, { headless });
+      
+      if (retryResult.browserClosed) {
+        throw new Error('浏览器被重复关闭，请保持浏览器打开并重试');
+      }
+      
+      if (!retryResult.success) {
+        throw new Error('登录流程未完成');
+      }
+      
+      // 使用新的 page 继续后续流程
+      page = newPage;
+    } else if (!loginResult.success) {
       throw new Error('登录流程未完成');
     }
     

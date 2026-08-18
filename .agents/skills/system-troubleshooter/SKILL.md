@@ -17,7 +17,18 @@ description: 当用户说"系统问题"、"终端乱码"、"编码错误"、"脚
 
 # 系统问题处理中心
 
-版本：v1.0.0
+版本：v1.1.0
+
+### v1.1.0 更新内容 (2026-08-01)
+- **新增 Node.js 路径修复工具** (`scripts/fix-node-path.js`)
+  - 自动查找常见 Node.js 安装路径（官方/Trae/Cursor/nvm等）
+  - 支持 PowerShell 7 环境自动同步
+  - 临时修复当前会话 + 永久添加到用户环境变量
+  - 提供详细的修复结果返回
+- **更新知识库文档** (`knowledge-base/environment/node-path.md`)
+  - 增加自动修复工具使用说明
+  - 补充 PowerShell 7 问题诊断
+  - 完善编辑器自带 Node.js 的处理方案
 
 ## 一、角色定义
 
@@ -181,13 +192,66 @@ console.log('中文输出测试'); // 现在可以正常显示中文了
 - 仅在 Windows 平台生效，其他平台自动跳过
 - 默认静默模式，失败不会中断脚本执行
 
-### 8.2 问题检测器
+### 8.2 Node.js 路径修复工具
+
+**文件位置**: `scripts/fix-node-path.js`
+
+**功能**: 自动查找并修复 Node.js 路径问题，支持 PowerShell 7 和编辑器自带 Node.js
+
+**适用场景**:
+- 执行 `node` 命令提示「不是内部命令」
+- PowerShell 7 无法识别 Node.js
+- 使用 Trae/Cursor 等编辑器自带的 Node.js
+
+**命令行使用**:
+```powershell
+yida-helper run system-troubleshooter/scripts/fix-node-path.js
+```
+
+**脚本中引用**:
+```javascript
+const fixNodePath = require('../system-troubleshooter/scripts/fix-node-path.js');
+
+// 自动修复 Node.js 路径
+const result = fixNodePath({
+  silent: false,    // 是否静默模式
+  permanent: true   // 是否永久添加到用户环境变量
+});
+
+if (result.success) {
+  console.log('✅ Node.js 已可用，版本:', result.version);
+  console.log('📁 安装路径:', result.path);
+} else {
+  console.error('❌ 修复失败:', result.message);
+}
+```
+
+**返回值**:
+```javascript
+{
+  success: true,           // 是否修复成功
+  fixed: true,             // 是否执行了修复操作
+  version: 'v22.22.2',     // Node.js 版本
+  path: 'C:\\...\\node',   // Node.js 安装路径
+  message: '已修复并永久添加' // 详细说明
+}
+```
+
+**支持的安装源**:
+- ✅ 官方 Node.js 安装包
+- ✅ Trae 编辑器自带 (`~/.trae-cn/binaries/node`)
+- ✅ Cursor 编辑器自带 (`~/.cursor/binaries/node`)
+- ✅ CodeBuddy 编辑器自带 (`~/.codebuddy/binaries/node`)
+- ✅ NVM 版本管理器
+- ✅ 其他常见安装路径
+
+### 8.3 问题检测器
 
 **文件位置**: `scripts/problem-detector.js`
 
 **功能**: 自动检测常见系统问题
 
-### 8.3 故障排除工具
+### 8.4 故障排除工具
 
 **文件位置**: `scripts/troubleshoot.js`
 

@@ -10,7 +10,17 @@
 
 ## 版本更新说明
 
-**当前版本：v6.61.0** (2026-07-28)
+**当前版本：v6.63.0** (2026-08-17)
+
+### 更新内容
+- 🐛 **【根因修复】点击"同步表单字段"后宜搭新增字段不在原型页面显示**：`sync_server.js` 的 `/sync-form` 端点调用 `executeSync` 后直接返回，未刷新原型页面字段数据源。`sync_single_form.js` 仅更新了 `${formName}「...」.json` 和 `组件ID清单.md`，但 `updatePrototypePage()` 是为**老的 form_creator 布局**写的（去找 `01需求梳理/原型页面/forms/${formName}.html` 做正则替换），而 form-to-prototype 项目根本没有 `forms/` 子目录，字段实际数据源是 `form-config.js` 里的 `staticConfigData`，结果就是同步过程根本没碰 `form-config.js`，页面刷新后读的还是旧字段。修复（`sync_server.js v2.8.1`）：在 `executeSync` 成功后追加调用 `regenerateFormConfigJs(projectDir)`，它会调用 `prototype_generator.js --form-config-only`，从已更新的 `组件ID清单.md` 重新构建 `staticConfigData` 写入 `form-config.js`。`regenerateFormConfigJs` 内部已有「字段清单不存在则跳过」的兜底，不影响老项目。
+
+**历史版本：v6.62.0** (2026-08-16)
+
+### 更新内容
+- 🐛 **【根因修复】同步表单字段报 "signal timed out"**：`sync_single_form.js` 的 `ensureLoginContext()` 原调用 `login_manager.js` 的 `ensureLogin()`，每次同步都启动 Playwright 浏览器验证登录态；Cookie 失效时弹浏览器等扫码（最长10分钟），导致同步服务子进程卡死、前端 `AbortSignal.timeout(60000)` 超时报 "signal timed out"（DOMException TimeoutError 的 message）。修复：改为纯 Cookie 读取（`coreUtils.loadCookieData` + `extractInfoFromCookies` 兜底提取 csrf_token），不启动 Playwright；同步耗时从 ~15秒降到 ~0.5秒。Cookie 失效时 `getFormSchema` API 返回登录页/LOGIN FAILED，抛出 `LOGIN_REQUIRED:` 前缀错误，前端 `syncForm` catch 块检测到后引导用户到「本地操作页面」点"刷新登录"按钮（`/refresh-login` SSE 端点），不再卡死。同步改动 `prototype_generator.js` v2.37.0（syncForm 错误提示）+ 移除未使用的 `LOGIN_MANAGER`/`API_CLIENT_DIR` 常量。
+
+**历史版本：v6.61.0** (2026-07-28)
 
 ### 更新内容
 - 🐛 **【根因修复】杜绝 FORM-TEMP 占位符残留导致线上"表单不存在"（进销存3事故）**：字段清单中"被填充的只读关联字段"说明列写`-`（无`关联-->`标记）→ 解析层静默丢失目标表名 → schema_builder.js 静默兜底生成 FORM-TEMP 占位符 → updateAssociationFields 按空 formTitle 匹配不到静默跳过 → 无自检带病交付，线上点"新增"必报"表单不存在"。修复（`create_from_markdown.js v2.20.0` + `schema_builder.js v1.4.0` 多层防御）：1) 新增 `validateAssociationTargets` 建表前校验+字段名推断兑底，推断失败零成本中止；2) targetMeta 匹配不到计入失败汇总；3) 新增 `scanAndFixPlaceholders` 建表后自检（步骤[5/10]），可解析的自动回填、不可解析的醒目告警+非零退出码；4) schema_builder 兜底分支显式告警。详见 faq.md 问题14。

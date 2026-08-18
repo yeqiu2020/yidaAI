@@ -1,6 +1,11 @@
 /**
  * 批量提交模块
- * 版本: 3.7.2
+ * 版本: 3.7.3
+ *
+ * 【v3.7.3 变更】新增 DateField 自动填充：扫描所有表单Schema，
+ * 为AI未提供值的DateField字段自动填充当前时间戳。
+ * 根因：AI通常不会为"创建时间"等日期字段生成当前时间戳，
+ * 而宜搭API提交时不会像UI那样自动填充日期字段。
  *
  * 【v3.7.2 变更】修复 EmployeeField（成员组件）字段值缺失问题：
  * 1. submitAllWithAutoAssociations 新增 EmployeeField 自动填充：扫描所有表单Schema，
@@ -874,6 +879,83 @@ async function submitAllWithAutoAssociations(projectDir, formDataMap, formOrder,
       console.log(`  ✅ 自动填充了 ${empFillCount} 个 EmployeeField`);
     } else {
       console.log('  ℹ️ 所有 EmployeeField 已有值，无需自动填充');
+    }
+  }
+
+  // 【v3.7.3】DateField 自动填充：为所有表单中缺失的 DateField 字段自动填充当前时间戳
+  // 根因：AI通常不会为"创建时间"等日期字段生成当前时间戳，
+  // 而宜搭API提交时不会像UI那样自动填充日期字段。
+  {
+    console.log('\n========== DateField 自动填充 ==========');
+    let dateFillCount = 0;
+    const now = Date.now();
+    for (const formName of formOrder) {
+      const form = allForms.find(f => f.name === formName);
+      if (!form) continue;
+
+      const formDirName = form.dir.includes('/') ? form.dir.split('/').pop() : form.dir;
+      const schemaPath = path.join(projectDir, form.dir, formDirName + '.json');
+      if (!fs.existsSync(schemaPath)) continue;
+
+      let schema;
+      try { schema = JSON.parse(fs.readFileSync(schemaPath, 'utf8')); } catch (e) { continue; }
+
+      const fieldMapping = extractFieldMapping(schema);
+
+      // 找出所有 DateField 字段
+      const dateFields = [];
+      for (const [label, info] of Object.entries(fieldMapping)) {
+        if (info.componentName === 'DateField' && !info.isSubform && !info.isSubformColumn) {
+          dateFields.push({ label, fieldId: info.fieldId });
+        }
+      }
+
+      if (dateFields.length === 0) continue;
+
+      const dataList = formDataMap[formName];
+      if (!dataList) continue;
+
+      for (const dataItem of dataList) {
+        for (const dateField of dateFields) {
+          // 只在AI未提供值时自动填充
+          if (!dataItem[dateField.label] || dataItem[dateField.label] === '' || dataItem[dateField.label] === null || dataItem[dateField.label] === undefined) {
+            dataItem[dateField.label] = now;
+            dateFillCount++;
+            console.log(`  📝 ${formName}.${dateField.label} ← ${new Date(now).toLocaleString('zh-CN')}`);
+          }
+        }
+      }
+
+      // 处理子表内的 DateField
+      for (const [label, info] of Object.entries(fieldMapping)) {
+        if (info.componentName === 'TableField' && info.isSubform) {
+          const subTableLabel = label;
+          const subDateColumns = Object.entries(fieldMapping).filter(([l, i]) =>
+            i.isSubformColumn && i.parentFieldId === info.fieldId && i.componentName === 'DateField'
+          );
+          if (subDateColumns.length === 0) continue;
+
+          for (const dataItem of dataList) {
+            const subRows = dataItem[subTableLabel];
+            if (!Array.isArray(subRows)) continue;
+            for (const row of subRows) {
+              for (const [colLabel, colInfo] of subDateColumns) {
+                const colName = colLabel.split('.').pop();
+                if (!row[colName] || row[colName] === '' || row[colName] === null) {
+                  row[colName] = now;
+                  dateFillCount++;
+                  console.log(`  📝 ${formName}.${subTableLabel}.${colName} ← ${new Date(now).toLocaleString('zh-CN')}`);
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    if (dateFillCount > 0) {
+      console.log(`  ✅ 自动填充了 ${dateFillCount} 个 DateField`);
+    } else {
+      console.log('  ℹ️ 所有 DateField 已有值，无需自动填充');
     }
   }
 

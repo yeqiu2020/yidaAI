@@ -162,6 +162,53 @@ DAYS(DATE(结束), DATE(开始)) * 24  // DAYS只返回整天数
 
 ---
 
+### 错误7.1：严格日期对象 vs 宽松日期值 — TODAY()/NOW() 不能用于比较函数
+
+**⚠️ 宜搭内部有两种"日期类型"，TODAY()/NOW() 返回的不是比较函数能接受的严格日期对象！**
+
+**错误表现**：
+- 报错："参数类型不合法，函数 GT/TIMECOMPARE 的第N个参数类型不合法"
+- 公式编辑器无法保存
+
+❌ **错误**（TODAY() 用于比较函数的任何参数位置都报错）：
+```
+GT(TODAY(), DATE(​字段​))
+TIMECOMPARE(DATE(​字段​), TODAY())
+TIMECOMPARE(TODAY(), DATE(​字段​))
+```
+
+✅ **正确**（TODAY() 转换后使用）：
+```
+// 方案1：TODAY() → 时间戳（推荐）
+GT(TIMESTAMP(TODAY()), DATE(​需到货日期​))
+
+// 方案2：双重转换 → 严格日期对象
+GT(DATE(TIMESTAMP(TODAY())), DATE(​需到货日期​))
+
+// 方案3：纯时间戳比较（dateField 本身就是时间戳）
+GT(​入库日期​, ​需到货日期​)
+```
+
+**测试验证**：
+
+| 写法 | 结果 | 说明 |
+|------|:----:|------|
+| `GT(DATE(A), DATE(B))` | ✅ | DATE() 创建严格日期对象 |
+| `GT(TODAY(), DATE(B))` | ❌ | TODAY() 不是严格日期对象 |
+| `TIMECOMPARE(DATE(A), TODAY())` | ❌ | 第二参数也报错 |
+| `IF(TODAY(), "真", "假")` | ✅ | 非比较函数，可用 |
+| `YEAR(NOW())` | ✅ | 非比较函数，可用 |
+| `GT(TIMESTAMP(TODAY()), dateField)` | ✅ | 时间戳（数值），可用 |
+
+**根因**：宜搭公式引擎中，严格日期对象只能由 `DATE()` 函数创建。`TODAY()`/`NOW()` 返回的是宽松日期值，缺少比较函数要求的内部类型标签，因此报"参数类型不合法"。
+
+**统一方案**：
+> 比较函数（GT/LT/TIMECOMPARE）中涉及 `TODAY()` → **`TIMESTAMP(TODAY())`** 转数值  
+> 比较两个 `dateField` → 直接 `GT(字段A, 字段B)`（时间戳比较）  
+> 非比较函数（YEAR/TEXT/IF）→ `TODAY()` 可直接使用
+
+---
+
 ## 三、IF函数使用错误
 
 ### 错误8：IF函数真假值留空

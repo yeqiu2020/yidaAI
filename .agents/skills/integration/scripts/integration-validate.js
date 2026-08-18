@@ -376,6 +376,21 @@ async function runCli(args) {
               flatProps = { ...props, ...props.addDataRules };
               delete flatProps.addDataRules;
             }
+            // GetSingleDataNode/GetBatchDataNode: sourceId/condition 等嵌套在 getData 下
+            if ((child.componentName === 'GetSingleDataNode' || child.componentName === 'GetBatchDataNode') && props.getData) {
+              flatProps = { ...props, ...props.getData };
+              delete flatProps.getData;
+            }
+            // DeleteDataNode: sourceId/type 嵌套在 deleteData 下
+            if (child.componentName === 'DeleteDataNode' && props.deleteData) {
+              flatProps = { ...props, ...props.deleteData };
+              delete flatProps.deleteData;
+            }
+            // InitiateApprovalNode: assignments/initiator 嵌套在 initiateApprovalRules 下
+            if (child.componentName === 'InitiateApprovalNode' && props.initiateApprovalRules) {
+              flatProps = { ...props, ...props.initiateApprovalRules };
+              delete flatProps.initiateApprovalRules;
+            }
             return {
               type: typeMap[child.componentName] || child.componentName,
               nodeId: child.id,

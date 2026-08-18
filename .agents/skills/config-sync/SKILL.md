@@ -19,7 +19,7 @@ description: 宜搭应用配置同步工具，用于从宜搭平台获取应用I
 
 ## 版本
 
-**v3.19.0** (2026-07-15) — 历史版本更新详情见 [references/版本历史.md](references/版本历史.md)
+**v3.20.1** (2026-08-02) — 历史版本更新详情见 [references/版本历史.md](references/版本历史.md)
 
 ## 📚 参考文件索引（按需加载）
 
@@ -107,10 +107,10 @@ description: 宜搭应用配置同步工具，用于从宜搭平台获取应用I
 
 ```powershell
 # 方式A - 同步所有应用（触发语句："将组织内所有应用同步到本地"）
-node .agents/skills/config-sync/scripts/sync_batch_apps.js
+yida-helper run config-sync/scripts/sync_batch_apps.js
 
 # 方式B - 同步指定应用（触发语句："将组织内应用【进销存管理, 客户管理】同步到本地"）
-node .agents/skills/config-sync/scripts/sync_batch_apps.js "进销存管理,客户管理"
+yida-helper run config-sync/scripts/sync_batch_apps.js "进销存管理,客户管理"
 ```
 
 ### 场景1：form_creator 创建应用后自动同步（推荐）
@@ -118,7 +118,7 @@ node .agents/skills/config-sync/scripts/sync_batch_apps.js "进销存管理,客�
 执行逻辑：从系统配置清单读取应用ID和表单UUID → 验证应用ID有效性 → 同步所有表单的组件ID和结构 → 生成各表单的组件ID清单.md。
 
 ```powershell
-node .agents/skills/config-sync/scripts/sync_form_schemas.js "./进销存管理"
+yida-helper run config-sync/scripts/sync_form_schemas.js "./进销存管理"
 ```
 
 ### 场景2：已有项目同步（手动填入应用ID）
@@ -126,7 +126,7 @@ node .agents/skills/config-sync/scripts/sync_form_schemas.js "./进销存管理"
 执行逻辑：使用指定应用ID获取表单列表 → 更新系统配置清单.md → 同步所有表单的组件ID和结构。
 
 ```powershell
-node .agents/skills/config-sync/scripts/sync_all_configs.js "./进销存管理" "APP_XXX"
+yida-helper run config-sync/scripts/sync_all_configs.js "./进销存管理" "APP_XXX"
 ```
 
 ### 场景3：同步表单列表（删除/新增/更新）
@@ -135,14 +135,14 @@ node .agents/skills/config-sync/scripts/sync_all_configs.js "./进销存管理" 
 
 ```powershell
 # 标准模式（后台运行）
-node .agents/skills/config-sync/scripts/sync_form_list_playwright.js "./进销存管理"
+yida-helper run config-sync/scripts/sync_form_list_playwright.js "./进销存管理"
 
 # 可视化模式（显示浏览器）
-node .agents/skills/config-sync/scripts/sync_form_list_playwright.js "./进销存管理" --visual
+yida-helper run config-sync/scripts/sync_form_list_playwright.js "./进销存管理" --visual
 
 # 指定应用ID / 指定应用ID + 可视化
-node .agents/skills/config-sync/scripts/sync_form_list_playwright.js "./进销存管理" "APP_XXX"
-node .agents/skills/config-sync/scripts/sync_form_list_playwright.js "./进销存管理" "APP_XXX" --visual
+yida-helper run config-sync/scripts/sync_form_list_playwright.js "./进销存管理" "APP_XXX"
+yida-helper run config-sync/scripts/sync_form_list_playwright.js "./进销存管理" "APP_XXX" --visual
 ```
 
 ### 场景4：后续维护更新
@@ -153,7 +153,7 @@ node .agents/skills/config-sync/scripts/sync_form_list_playwright.js "./进销�
 执行逻辑：从系统配置清单读取应用ID → 获取所有表单列表和Schema → 解析字段结构 → 生成标准格式的 `字段清单.md`（含主表和子表字段）和 `表单清单.md`。
 
 ```powershell
-node .agents/skills/config-sync/scripts/generate_field_list.js "./进销存管理"
+yida-helper run config-sync/scripts/generate_field_list.js "./进销存管理"
 ```
 
 **字段类型映射**：TextField→单行文本、TextareaField→多行文本、NumberField→数值、DateField→日期/日期时间、RadioField→单选、MultiSelectField→复选/下拉复选、SelectField→下拉单选、AssociationFormField→关联表单、EmployeeField→成员、DepartmentSelectField→部门、AttachmentField→附件、ImageField→图片、SerialNumberField→流水号、TableField→子表
@@ -201,35 +201,35 @@ config-sync/
 ### 同步系统配置清单（sync_config.js）
 ```powershell
 # 模式1：从系统配置清单读取应用ID
-node .agents/skills/config-sync/scripts/sync_config.js --output ./进销存管理
+yida-helper run config-sync/scripts/sync_config.js --output ./进销存管理
 
 # 模式2：指定应用ID
-node .agents/skills/config-sync/scripts/sync_config.js --appId APP_XXX --output ./进销存管理
+yida-helper run config-sync/scripts/sync_config.js --appId APP_XXX --output ./进销存管理
 ```
 其他参数：`--appName`（应用名称，v3.14.0新增）、`--smart-group`（强制AI智能分组）。
 
 ### 同步表单结构及组件ID（sync_form_schemas.js，v3.1.0新用法）
 ```powershell
 # 同步所有表单（从系统配置清单读取应用ID和表单UUID）
-node .agents/skills/config-sync/scripts/sync_form_schemas.js "./进销存管理"
+yida-helper run config-sync/scripts/sync_form_schemas.js "./进销存管理"
 
 # 指定应用ID（覆盖系统配置清单中的值）
-node .agents/skills/config-sync/scripts/sync_form_schemas.js "./进销存管理" "APP_XXX"
+yida-helper run config-sync/scripts/sync_form_schemas.js "./进销存管理" "APP_XXX"
 
 # 只同步指定表单 / 多个表单（逗号分隔）/ 指定应用ID并同步指定表单
-node .agents/skills/config-sync/scripts/sync_form_schemas.js "./进销存管理" --forms "产品信息"
-node .agents/skills/config-sync/scripts/sync_form_schemas.js "./进销存管理" --forms "产品信息,仓库信息"
-node .agents/skills/config-sync/scripts/sync_form_schemas.js "./进销存管理" "APP_XXX" --forms "产品信息,仓库信息"
+yida-helper run config-sync/scripts/sync_form_schemas.js "./进销存管理" --forms "产品信息"
+yida-helper run config-sync/scripts/sync_form_schemas.js "./进销存管理" --forms "产品信息,仓库信息"
+yida-helper run config-sync/scripts/sync_form_schemas.js "./进销存管理" "APP_XXX" --forms "产品信息,仓库信息"
 ```
 说明：`--forms` 支持逗号分隔多个表单名，支持模糊匹配（输入"产品"可匹配"产品信息"）；指定表单不存在时会显示可用表单列表。
 
 ### 统一同步所有配置（sync_all_configs.js，v3.0.0新用法）
 ```powershell
 # 同步系统配置清单 + 所有表单结构
-node .agents/skills/config-sync/scripts/sync_all_configs.js "./进销存管理"
+yida-helper run config-sync/scripts/sync_all_configs.js "./进销存管理"
 
 # 指定应用ID
-node .agents/skills/config-sync/scripts/sync_all_configs.js "./进销存管理" "APP_XXX"
+yida-helper run config-sync/scripts/sync_all_configs.js "./进销存管理" "APP_XXX"
 ```
 
 ### 编程调用（速查）

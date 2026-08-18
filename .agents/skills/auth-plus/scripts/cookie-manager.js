@@ -14,7 +14,30 @@
 
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 const { findProjectRoot, loadCookieData, resolveBaseUrl, extractInfoFromCookies } = require('../../../../lib/core/utils');
+
+// ── 阶段二改造：全局 Cookie 优先 ───────────────────────
+
+const GLOBAL_DATA_DIR = path.join(os.homedir(), '.yida-ai-helper');
+const GLOBAL_COOKIE_FILE = path.join(GLOBAL_DATA_DIR, '.cookies.json');
+const GLOBAL_CACHE_DIR = path.join(GLOBAL_DATA_DIR, '.cache');
+
+/**
+ * 获取全局 Cookie 文件路径
+ * @returns {string}
+ */
+function getGlobalCookieFile() {
+  return GLOBAL_COOKIE_FILE;
+}
+
+/**
+ * 获取全局 .cache 目录路径（环境隔离 Cookie 存放处）
+ * @returns {string}
+ */
+function getGlobalCacheDir() {
+  return GLOBAL_CACHE_DIR;
+}
 
 // ── 配置 ───────────────────────────────────────────────
 
@@ -27,15 +50,25 @@ const DEFAULT_ENV = process.env.YIDA_ENV || 'default';
  */
 function getCookieFilePath(env) {
   const envName = env || DEFAULT_ENV;
-  const root = findProjectRoot();
-  const cacheDir = path.join(root, '.cache');
 
-  // default 环境使用主文件 .cookies.json（兼容现有脚本）
+  // default 环境使用主文件 .cookies.json，优先全局
   if (envName === 'default') {
+    if (fs.existsSync(GLOBAL_COOKIE_FILE)) {
+      return GLOBAL_COOKIE_FILE;
+    }
+    const root = findProjectRoot();
     return path.join(root, '.cookies.json');
   }
 
-  // 其他环境使用 .cache/cookies-{env}.json
+  // 其他环境使用 .cache/cookies-{env}.json，优先全局
+  const globalEnvFile = path.join(GLOBAL_CACHE_DIR, `cookies-${envName}.json`);
+  if (fs.existsSync(globalEnvFile)) {
+    return globalEnvFile;
+  }
+
+  // 回退项目根
+  const root = findProjectRoot();
+  const cacheDir = path.join(root, '.cache');
   return path.join(cacheDir, `cookies-${envName}.json`);
 }
 
@@ -44,19 +77,24 @@ function getCookieFilePath(env) {
  * @returns {string[]}
  */
 function listEnvironments() {
-  const root = findProjectRoot();
-  const cacheDir = path.join(root, '.cache');
   const envs = ['default']; // default 总是存在
+  const envSet = new Set(envs);
 
-  if (!fs.existsSync(cacheDir)) {
-    return envs;
-  }
+  // 阶段二改造：同时扫描全局和项目根的 .cache 目录
+  const scanDirs = [
+    GLOBAL_CACHE_DIR,
+    path.join(findProjectRoot(), '.cache'),
+  ];
 
-  const files = fs.readdirSync(cacheDir);
-  for (const file of files) {
-    const match = file.match(/^cookies-(.+)\.json$/);
-    if (match) {
-      envs.push(match[1]);
+  for (const cacheDir of scanDirs) {
+    if (!fs.existsSync(cacheDir)) continue;
+    const files = fs.readdirSync(cacheDir);
+    for (const file of files) {
+      const match = file.match(/^cookies-(.+)\.json$/);
+      if (match && !envSet.has(match[1])) {
+        envs.push(match[1]);
+        envSet.add(match[1]);
+      }
     }
   }
 
@@ -84,11 +122,23 @@ function saveCookieData(cookieData, env) {
   };
 
   fs.writeFileSync(filePath, JSON.stringify(dataToSave, null, 2));
-  console.log(`  ✅ 登录态已保存到 ${path.relative(findProjectRoot(), filePath)}`);
+  console.log(`  ✅ 登录态已保存到 ${filePath}`);
 
-  // 如果不是 default 环境，同步到主文件（方便旧脚本读取）
-  if ((env || DEFAULT_ENV) !== 'default') {
+  // 阶段二改造：default 环境额外写入全局目录（所有项目共享）
+  if ((env || DEFAULT_ENV) === 'default') {
+    const globalDir = path.dirname(GLOBAL_COOKIE_FILE);
+    if (!fs.existsSync(globalDir)) {
+      fs.mkdirSync(globalDir, { recursive: true });
+    }
+    fs.writeFileSync(GLOBAL_COOKIE_FILE, JSON.stringify(dataToSave, null, 2));
+    console.log(`  ✅ 已同步到全局 ${GLOBAL_COOKIE_FILE}`);
+  } else {
+    // 非 default 环境：同步到主文件（方便旧脚本读取）
     const mainFile = getCookieFilePath('default');
+    const mainDir = path.dirname(mainFile);
+    if (!fs.existsSync(mainDir)) {
+      fs.mkdirSync(mainDir, { recursive: true });
+    }
     fs.writeFileSync(mainFile, JSON.stringify(dataToSave, null, 2));
     console.log(`  ✅ 已同步到主文件 .cookies.json`);
   }
@@ -153,6 +203,13 @@ function switchEnvironment(env) {
     fs.mkdirSync(dir, { recursive: true });
   }
   fs.writeFileSync(mainFile, JSON.stringify(cookieData, null, 2));
+
+  // 阶段二改造：同时同步到全局目录
+  const globalDir = path.dirname(GLOBAL_COOKIE_FILE);
+  if (!fs.existsSync(globalDir)) {
+    fs.mkdirSync(globalDir, { recursive: true });
+  }
+  fs.writeFileSync(GLOBAL_COOKIE_FILE, JSON.stringify(cookieData, null, 2));
 
   console.log(`  ✅ 已切换到环境: ${env}`);
   console.log(`     Cookie 数量: ${cookieData.cookies?.length || 0}`);
@@ -239,4 +296,7 @@ module.exports = {
   deleteEnvironment,
   quickValidateCookies,
   DEFAULT_ENV,
+  // 阶段二新增
+  getGlobalCookieFile,
+  getGlobalCacheDir,
 };

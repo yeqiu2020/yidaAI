@@ -1,25 +1,29 @@
-﻿﻿/**
+/**
  * 宜搭应用配置同步脚本 - 主入口
-* 版本: 3.12.1
-* 更新日期: 2026-07-07
+* 版本: 3.13.1
+* 更新日期: 2026-08-05
  *
  * 更新内容:
-* - v3.12.1: 【修复】恢复「分组」后缀逻辑，同时修复 createFormDirectory 未加后缀的根因
-*           问题：v3.12.0 错误地移除了「分组」后缀，但用户需要保留该标识
-*           根因：createFormDirectory 函数（L209）使用不带后缀的 groupName，
-*                 而主同步逻辑使用带后缀的 groupDirName，导致两套逻辑冲突创建重复目录
-*           修复：1. 恢复主同步逻辑使用 `${form.module}「分组」` 作为分组目录名
-*                 2. 修复 createFormDirectory 函数也使用 `${groupName}「分组」` 后缀
-*                 3. findFormDirectory 第二轮搜索恢复正常查找带「分组」后缀的目录
-*                 4. 向后兼容：发现不带后缀的旧目录时自动重命名为带后缀
+* - v3.13.1: 【修复】从本地加载表单时，补充获取导航API分组路径
+*           问题：当 sync_config.js 从系统配置清单等本地源加载表单时，
+*                 未调用导航API获取分组路径，导致 allGroupPaths 为空，
+*                 空分组目录无法被创建。
+*           修复：1. fetchFormNavigation 改为返回 { formToGroup, allGroupPaths }
+*                 2. 表单从本地源加载后，如果 allGroupPaths 为空，补充调用
+*                    fetchFormNavigation 获取分组路径
+*                 3. Playwright回退模式也返回真实的 allGroupPaths
 *
-* - v3.12.0: 【已废弃】移除分组目录的「分组」后缀（此版本已被 v3.12.1 撤销）
- *
- * - v3.9.0: 【新增】同步已有应用时自动获取宜搭导航分组信息
- *           问题：同步老应用时fetchFormList不获取分组信息，导致本地文件全部扁平排列无分组。
- *           修复：新增fetchFormNavigation函数，调用getFormNavigationListByOrder.json API获取导航树，
- *                 通过formUuid匹配找到每个表单所属的分组名称，设置module字段。
- *                 API方式和Playwright方式都支持分组信息获取。
+* - v3.13.0: 【新增】支持宜搭多层次分组结构（分组内有分组）
+*           问题：宜搭分组可嵌套（如"业务规则分组"下有"1.主表操作主表"等子分组），
+*                 但之前只处理一层扁平分组，所有分组目录直接放在应用根目录。
+*           修复：1. 新增 buildGroupTree 函数，从导航 API 构建分组树
+*                 2. 新增 computeGroupFullPath 函数，计算分组的全路径（如"业务规则分组/1.主表操作主表"）
+*                 3. form.module 改为存储全路径，目录创建时递归生成嵌套分组目录
+*                 4. 新增 createEmptyGroupDirectories 函数，空分组也能同步目录结构
+*                 5. 系统配置清单「所属分组」列显示全路径
+*                 6. 向后兼容旧目录结构
+*
+* - v3.12.1: 【修复】恢复「分组」后缀逻辑，同时修复 createFormDirectory 未加后缀的根因
  *
  * - v3.8.1: 【修复】findFormDirectory 不再跳过带编号的分组目录
  *           问题：generate_from_markdown.js 创建的目录带编号（如 02基础信息），
@@ -207,7 +211,134 @@ function hasExistingGroups(baseDir) {
 }
 
 /**
- * 创建表单目录结构（支持分组）
+ * 构建宜搭分组树
+ * v3.13.0: 新增，从导航API返回的NAV节点构建分组树，支持多层次嵌套
+ * @param {Array} navItems - 导航API返回的所有项（含NAV和PAGE类型）
+ * @returns {Object} { groupTree: Array, navNodeInfo: Object, allGroupPaths: Array }
+ *   - groupTree: 根分组数组（每个节点有 {navUuid, name, fullPath, children, parentNavUuid}）
+ *   - navNodeInfo: { navUuid → {name, parentNavUuid, fullPath} }
+ *   - allGroupPaths: 所有分组的全路径数组（含空分组）
+ */
+function buildGroupTree(navItems) {
+  // 1. 收集所有NAV节点
+  const navNodeInfo = {};
+  const navNodes = [];
+  for (const item of navItems) {
+    if (item.navType === 'NAV' && !item.formUuid) {
+      const name = item.title?.zh_CN || item.title || '';
+      if (name) {
+        navNodeInfo[item.navUuid] = {
+          name: name,
+          parentNavUuid: item.parentNavUuid || null,
+          fullPath: '' // 稍后计算
+        };
+        navNodes.push(item);
+      }
+    }
+  }
+
+  // 2. 递归计算每个节点的全路径
+  function computeFullPath(navUuid, visited = new Set()) {
+    const node = navNodeInfo[navUuid];
+    if (!node) return '';
+    // 防止循环引用
+    if (visited.has(navUuid)) return node.name;
+    visited.add(navUuid);
+    if (node.fullPath) return node.fullPath;
+    if (!node.parentNavUuid) {
+      node.fullPath = node.name;
+    } else {
+      const parentPath = computeFullPath(node.parentNavUuid, visited);
+      node.fullPath = parentPath ? `${parentPath}/${node.name}` : node.name;
+    }
+    return node.fullPath;
+  }
+
+  // 为所有节点计算全路径
+  for (const navUuid of Object.keys(navNodeInfo)) {
+    computeFullPath(navUuid);
+  }
+
+  // 3. 构建树结构（用于目录创建）
+  const childrenMap = {}; // parentNavUuid → [childNavUuid]
+  for (const node of navNodes) {
+    const parentId = node.parentNavUuid || 'root';
+    if (!childrenMap[parentId]) childrenMap[parentId] = [];
+    childrenMap[parentId].push(node.navUuid);
+  }
+
+  function buildTree(navUuid) {
+    const node = navNodeInfo[navUuid];
+    if (!node) return null;
+    return {
+      navUuid: navUuid,
+      name: node.name,
+      fullPath: node.fullPath,
+      parentNavUuid: node.parentNavUuid,
+      children: (childrenMap[navUuid] || []).map(childId => buildTree(childId)).filter(Boolean)
+    };
+  }
+
+  const rootGroups = (childrenMap['root'] || []).map(id => buildTree(id)).filter(Boolean);
+
+  // 4. 收集所有分组的全路径
+  const allGroupPaths = Object.values(navNodeInfo).map(n => n.fullPath);
+
+  return { groupTree: rootGroups, navNodeInfo, allGroupPaths };
+}
+
+/**
+ * 将分组的全路径转换为带「分组」后缀的目录路径
+ * v3.13.0: 新增，支持多层次嵌套
+ * 例: "业务规则分组/1.主表操作主表" → "业务规则分组「分组」/1.主表操作主表「分组」"
+ * @param {string} baseDir - 基础目录
+ * @param {string} modulePath - 分组全路径（如 "业务规则分组/1.主表操作主表"）
+ * @returns {string} 完整目录路径
+ */
+function modulePathToDirPath(baseDir, modulePath) {
+  if (!modulePath) return baseDir;
+  const parts = modulePath.split('/');
+  let currentDir = baseDir;
+  for (const part of parts) {
+    currentDir = path.join(currentDir, `${part}「分组」`);
+  }
+  return currentDir;
+}
+
+/**
+ * 确保分组目录层级存在（递归创建）
+ * v3.13.0: 新增，支持多层次嵌套分组目录
+ * @param {string} baseDir - 应用根目录
+ * @param {string} modulePath - 分组全路径（如 "业务规则分组/1.主表操作主表"）
+ * @returns {string} 创建后的分组目录路径
+ */
+function ensureGroupDirExists(baseDir, modulePath) {
+  if (!modulePath) return baseDir;
+  const dirPath = modulePathToDirPath(baseDir, modulePath);
+  if (!fs.existsSync(dirPath)) {
+    fs.mkdirSync(dirPath, { recursive: true });
+    console.log(`   📁 创建分组目录: ${path.relative(baseDir, dirPath)}`);
+  }
+  return dirPath;
+}
+
+/**
+ * 创建所有分组目录（包括空分组）
+ * v3.13.0: 新增，确保即使分组内没有表单，也能同步目录结构
+ * @param {string} baseDir - 应用根目录
+ * @param {Array} allGroupPaths - 所有分组的全路径数组
+ */
+function createEmptyGroupDirectories(baseDir, allGroupPaths) {
+  if (!allGroupPaths || allGroupPaths.length === 0) return;
+  console.log(`   📁 创建空分组目录...`);
+  for (const groupPath of allGroupPaths) {
+    ensureGroupDirExists(baseDir, groupPath);
+  }
+}
+
+/**
+ * 创建表单目录结构（支持多层次分组）
+ * v3.13.0: 支持多层次嵌套分组
  * v3.8.1: 恢复分组目录创建功能
  */
 function createFormDirectory(baseDir, groupName, formName, formType) {
@@ -215,9 +346,8 @@ function createFormDirectory(baseDir, groupName, formName, formType) {
   let formPath;
 
   if (groupName) {
-    // v3.12.1: 有分组信息，创建到带「分组」后缀的子目录中
-    const groupDirName = `${groupName}「分组」`;
-    const groupDir = path.join(baseDir, groupDirName);
+    // v3.13.0: 支持多层次嵌套分组，groupName 可以是 "父分组/子分组"
+    const groupDir = ensureGroupDirExists(baseDir, groupName);
     formPath = path.join(groupDir, folderName);
   } else {
     // 无分组信息，直接在根目录创建
@@ -227,7 +357,7 @@ function createFormDirectory(baseDir, groupName, formName, formType) {
   // 创建表单目录（recursive会自动创建分组目录）
   if (!fs.existsSync(formPath)) {
     fs.mkdirSync(formPath, { recursive: true });
-    const dirLabel = groupName ? `${groupName}「分组」/${folderName}` : folderName;
+    const dirLabel = groupName ? `${groupName}（分组）/${folderName}` : folderName;
     console.log(`     📁 创建表单目录: ${dirLabel}`);
   }
 
@@ -352,7 +482,7 @@ function parseAppIdFromConfig(configPath) {
   }
   
   const content = fs.readFileSync(configPath, 'utf-8');
-  const appIdMatch = content.match(/\|\s*\*\*应用ID\*\*\s*\|\s*(APP[_-][A-Z0-9]+)\s*\|/);
+  const appIdMatch = content.match(/\|\s*(?:\*\*)?应用ID(?:\*\*)?\s*\|\s*(APP[_-][A-Z0-9]+)\s*\|/);
   return appIdMatch ? appIdMatch[1] : null;
 }
 
@@ -575,7 +705,10 @@ async function fetchFormListWithPlaywright(appId, outputDir) {
     }
     
     const outputFile = path.join(tempDir, 'forms_deploy_list.json');
-    const cookieFile = path.join(path.resolve(__dirname, '..', '..', '..', '..'), '.cookies.json');
+    // 阶段二改造：Cookie 优先全局，兼容项目根
+    const { findCookieFile } = require('../../../../lib/core/paths');
+    const cookieFile = findCookieFile();
+    if (!cookieFile) { throw new Error('未找到 .cookies.json，请先登录'); }
     
     // 调用Playwright脚本获取表单列表
     // 参数: appId, appName, outputFile, cookieFile, visualMode
@@ -646,13 +779,18 @@ async function fetchFormListWithPlaywright(appId, outputDir) {
 
 /**
  * 获取宜搭应用的导航分组信息
+ * v3.13.0: 支持多层次分组，form.module 改为存储全路径
+ * v3.13.1: 返回 { formToGroup, allGroupPaths }，allGroupPaths 包含所有分组全路径（含空分组）
  * v3.9.0新增：调用 getFormNavigationListByOrder.json API，构建 formUuid → 分组名称 的映射
  * @param {Object} authRef - 登录态引用
  * @param {string} appId - 应用ID
- * @returns {Object} { formUuid: groupName } 映射
+ * @returns {Object} { formToGroup: Object, allGroupPaths: Array }
+ *   - formToGroup: { formUuid: groupName } 映射（groupName 为全路径）
+ *   - allGroupPaths: 所有分组的全路径数组（含空分组）
  */
 async function fetchFormNavigation(authRef, appId) {
   const formToGroup = {};
+  let allGroupPaths = [];
 
   try {
     console.log(`  📡 调用API: getFormNavigationListByOrder (获取导航分组)`);
@@ -668,52 +806,47 @@ async function fetchFormNavigation(authRef, appId) {
 
     if (!navResult?.success || !Array.isArray(navResult.content)) {
       console.log(`  ⚠️ 获取导航分组失败，表单将不包含分组信息`);
-      return formToGroup;
+      return { formToGroup: {}, allGroupPaths: [] };
     }
 
-    // 解析导航树：先构建 navUuid → 分组名称 的映射，再遍历表单项找到其父分组
-    const navUuidToGroupName = {};
-    for (const item of navResult.content) {
-      if (item.navType === 'NAV' && !item.formUuid) {
-        // NAV类型且无formUuid = 分组节点
-        const groupName = item.title?.zh_CN || item.title || '';
-        if (groupName) {
-          navUuidToGroupName[item.navUuid] = groupName;
-        }
-      }
-    }
+    // v3.13.0: 使用 buildGroupTree 构建分组树，获取全路径映射
+    const { navNodeInfo, allGroupPaths: groupPaths } = buildGroupTree(navResult.content);
+    allGroupPaths = groupPaths;
 
-    // 遍历表单导航项，通过 parentNavUuid 找到所属分组
+    // 遍历表单导航项，通过 parentNavUuid 找到所属分组的全路径
     let groupedCount = 0;
     for (const item of navResult.content) {
       if (item.formUuid && item.parentNavUuid) {
-        const groupName = navUuidToGroupName[item.parentNavUuid];
-        if (groupName) {
-          formToGroup[item.formUuid] = groupName;
+        const nodeInfo = navNodeInfo[item.parentNavUuid];
+        if (nodeInfo && nodeInfo.fullPath) {
+          formToGroup[item.formUuid] = nodeInfo.fullPath;
           groupedCount++;
         }
       }
     }
 
     const groupNames = [...new Set(Object.values(formToGroup))];
-    console.log(`  ✅ 获取到 ${groupNames.length} 个分组，${groupedCount} 个表单有分组信息: ${groupNames.join(', ')}`);
+    console.log(`  ✅ 获取到 ${groupNames.length} 个分组（含空分组），${groupedCount} 个表单有分组信息: ${groupNames.join(', ')}`);
   } catch (error) {
     console.log(`  ⚠️ 获取导航分组失败: ${error.message}，表单将不包含分组信息`);
   }
 
-  return formToGroup;
+  return { formToGroup, allGroupPaths };
 }
 
 /**
  * 获取表单列表
- * v3.13.0: 【重要修复】getFormList.json API 已失效（返回404），
- *          改用 getFormNavigationListByOrder.json 导航列表 API 获取表单列表，
- *          一次调用同时获取表单列表和分组信息（无需再调 fetchFormNavigation）
+ * v3.13.0: 【新增】构建分组树，form.module 改为存储全路径（如"业务规则分组/1.主表操作主表"）
+ * v3.13.0（原）: getFormList.json API 已失效，改用 getFormNavigationListByOrder.json
  * 失败时自动回退到Playwright方式
+ * @returns {Object} { forms: Array, allGroupPaths: Array }
+ *   - forms: 表单列表，每个表单的 module 为全路径
+ *   - allGroupPaths: 所有分组的全路径数组（含空分组）
  */
 async function fetchFormList(authRef, appId, outputDir = null) {
   const forms = [];
   let apiFailed = false;
+  let allGroupPaths = [];
   
   try {
     console.log(`  📡 调用API: getFormNavigationListByOrder (获取导航列表)`);
@@ -734,18 +867,11 @@ async function fetchFormList(authRef, appId, outputDir = null) {
       console.warn(`  ⚠️ 导航列表API失败: ${navResult?.errorMsg || '返回格式异常'}`);
       apiFailed = true;
     } else {
-      // 1. 先构建 navUuid → 分组名称 的映射
-      const navUuidToGroupName = {};
-      for (const item of navResult.content) {
-        if (item.navType === 'NAV' && !item.formUuid) {
-          const groupName = item.title?.zh_CN || item.title || '';
-          if (groupName) {
-            navUuidToGroupName[item.navUuid] = groupName;
-          }
-        }
-      }
+      // v3.13.0: 使用 buildGroupTree 构建分组树，获取全路径映射
+      const { navNodeInfo, allGroupPaths: groupPaths } = buildGroupTree(navResult.content);
+      allGroupPaths = groupPaths;
 
-      // 2. 从导航项中提取表单（navType === 'PAGE' 且有 formUuid）
+      // 从导航项中提取表单（navType === 'PAGE' 且有 formUuid）
       const formItems = navResult.content.filter(item => item.navType === 'PAGE' && item.formUuid);
       console.log(`  📋 解析到 ${formItems.length} 个表单`);
 
@@ -753,17 +879,23 @@ async function fetchFormList(authRef, appId, outputDir = null) {
       for (let i = 0; i < formItems.length; i++) {
         const item = formItems[i];
         const formName = item.title?.zh_CN || item.title || '未命名表单';
-        // 通过 parentNavUuid 找到所属分组
-        const groupName = item.parentNavUuid ? (navUuidToGroupName[item.parentNavUuid] || null) : null;
-        if (groupName) groupNames.add(groupName);
-        console.log(`     [${i+1}] ${formName} - UUID: ${item.formUuid.substring(0, 16)}... ${groupName ? '(' + groupName + ')' : ''}`);
+        // v3.13.0: 通过 parentNavUuid 找到所属分组的全路径
+        let fullPath = null;
+        if (item.parentNavUuid) {
+          const nodeInfo = navNodeInfo[item.parentNavUuid];
+          if (nodeInfo && nodeInfo.fullPath) {
+            fullPath = nodeInfo.fullPath;
+          }
+        }
+        if (fullPath) groupNames.add(fullPath);
+        console.log(`     [${i+1}] ${formName} - UUID: ${item.formUuid.substring(0, 16)}... ${fullPath ? '(' + fullPath + ')' : ''}`);
         forms.push({
           index: i + 1,
           name: formName,
           type: item.formType === 'process' ? '流程' : '表单',
           formUuid: item.formUuid,
           processCode: item.processCode || null,
-          module: groupName  // 直接填充分组信息
+          module: fullPath  // v3.13.0: 存储全路径
         });
       }
 
@@ -772,7 +904,7 @@ async function fetchFormList(authRef, appId, outputDir = null) {
       }
 
       // API方式成功，直接返回
-      return forms;
+      return { forms, allGroupPaths };
     }
   } catch (error) {
     console.warn(`  ⚠️ 获取表单列表失败: ${error.message}`);
@@ -784,7 +916,9 @@ async function fetchFormList(authRef, appId, outputDir = null) {
     const playwrightForms = await fetchFormListWithPlaywright(appId, outputDir);
     if (playwrightForms.length > 0) {
       // Playwright方式获取分组信息
-      const formToGroup = await fetchFormNavigation(authRef, appId);
+      const navResult = await fetchFormNavigation(authRef, appId);
+      const formToGroup = navResult.formToGroup || {};
+      const navGroupPaths = navResult.allGroupPaths || [];
       if (Object.keys(formToGroup).length > 0) {
         for (const form of playwrightForms) {
           if (formToGroup[form.formUuid]) {
@@ -792,11 +926,11 @@ async function fetchFormList(authRef, appId, outputDir = null) {
           }
         }
       }
-      return playwrightForms;
+      return { forms: playwrightForms, allGroupPaths: navGroupPaths };
     }
   }
 
-  return forms;
+  return { forms, allGroupPaths };
 }
 
 /**
@@ -956,18 +1090,18 @@ function generateSystemConfig(appInfo, forms, existingConfig = null) {
   let existingCreateTime = now;
   
   if (existingConfig) {
-    // 提取现有的应用ID
-    const appIdMatch = existingConfig.match(/\*\*应用ID\*\*\s*\|\s*([^|\n]+)/);
+    // 提取现有的应用ID（兼容加粗/未加粗表头）
+    const appIdMatch = existingConfig.match(/(?:\*\*)?应用ID(?:\*\*)?\s*\|\s*([^|\n]+)/);
     if (appIdMatch && appIdMatch[1].trim()) {
       existingAppId = appIdMatch[1].trim();
     }
-    // 提取现有的应用名称
-    const appNameMatch = existingConfig.match(/\*\*应用名称\*\*\s*\|\s*([^|\n]+)/);
+    // 提取现有的应用名称（兼容加粗/未加粗表头）
+    const appNameMatch = existingConfig.match(/(?:\*\*)?应用名称(?:\*\*)?\s*\|\s*([^|\n]+)/);
     if (appNameMatch && appNameMatch[1].trim()) {
       existingAppName = appNameMatch[1].trim();
     }
-    // 提取现有的创建时间
-    const createTimeMatch = existingConfig.match(/\*\*创建时间\*\*\s*\|\s*([^|\n]+)/);
+    // 提取现有的创建时间（兼容加粗/未加粗表头）
+    const createTimeMatch = existingConfig.match(/(?:\*\*)?创建时间(?:\*\*)?\s*\|\s*([^|\n]+)/);
     if (createTimeMatch && createTimeMatch[1].trim()) {
       existingCreateTime = createTimeMatch[1].trim();
     }
@@ -1191,9 +1325,10 @@ function generateComponentMd(formName, components) {
 
 /**
  * 查找表单对应的目录
+ * v3.13.0: 支持递归查找嵌套分组目录
  * v3.8.1: 修复带编号目录查找问题
  * v3.8.0: 恢复分组目录查找功能
- * 优先在当前目录查找，找不到再递归查找分组子目录
+ * 优先在当前目录查找，找不到再递归查找分组子目录（支持多层嵌套）
  * 支持多种匹配方式：精确匹配、包含匹配、模糊匹配
  */
 function findFormDirectory(formName, baseDir) {
@@ -1205,74 +1340,53 @@ function findFormDirectory(formName, baseDir) {
     return null;
   }
 
-  // 第一轮：在当前目录直接查找表单目录
-  const rootItems = fs.readdirSync(baseDir, { withFileTypes: true });
-  for (const item of rootItems) {
-    if (!item.isDirectory()) continue;
-
-    const dirName = item.name;
-
-    // v3.8.1: 跳过特殊目录（01需求梳理、temp-file等），但不跳过分组目录（包括带编号的分组目录）
-    // 只跳过01需求梳理等特殊目录，不跳过分组目录
-    if (dirName === '01需求梳理' || dirName.startsWith('.') || dirName === 'temp-file') continue;
-
-    // 精确匹配：目录名包含表单名
-    if (dirName.includes(formName)) {
-      const fullPath = path.join(baseDir, dirName);
-      console.log(`     ✅ 找到目录: ${dirName}`);
-      return fullPath;
+  // 递归查找表单目录
+  function searchDir(currentDir, depth = 0) {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(currentDir, { withFileTypes: true });
+    } catch (_) {
+      return null;
     }
 
-    // 模糊匹配：提取目录名中的中文部分进行匹配
-    const chineseMatch = dirName.match(/[\u4e00-\u9fa5]+/g);
-    if (chineseMatch) {
-      const chineseName = chineseMatch.join('');
-      if (chineseName.includes(formName) || formName.includes(chineseName)) {
-        const fullPath = path.join(baseDir, dirName);
-        console.log(`     ✅ 找到目录: ${dirName}`);
-        return fullPath;
-      }
-    }
-  }
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const dirName = entry.name;
 
-  // 第二轮：v3.8.0恢复 - 在分组子目录中查找
-  for (const item of rootItems) {
-    if (!item.isDirectory()) continue;
+      // 跳过特殊目录
+      if (dirName === '01需求梳理' || dirName.startsWith('.') || dirName === 'temp-file' || dirName === 'node_modules') continue;
 
-    const dirName = item.name;
-    // v3.8.1: 跳过特殊目录，但不跳过分组目录（包括带编号的分组目录）
-    if (dirName === '01需求梳理' || dirName.startsWith('.') || dirName === 'temp-file') continue;
-    // 跳过已经匹配过的表单目录（含「普通表单」或「流程表单」的）
-    if (dirName.includes('「普通表单」') || dirName.includes('「流程表单」')) continue;
-
-    // 递归在分组目录中查找
-    const groupDir = path.join(baseDir, dirName);
-    const subItems = fs.readdirSync(groupDir, { withFileTypes: true });
-    for (const subItem of subItems) {
-      if (!subItem.isDirectory()) continue;
-
-      const subDirName = subItem.name;
-      if (subDirName.includes(formName)) {
-        const fullPath = path.join(groupDir, subDirName);
-        console.log(`     ✅ 找到目录: ${dirName}/${subDirName}`);
-        return fullPath;
-      }
-
-      // 模糊匹配
-      const chineseMatch = subDirName.match(/[\u4e00-\u9fa5]+/g);
-      if (chineseMatch) {
-        const chineseName = chineseMatch.join('');
-        if (chineseName.includes(formName) || formName.includes(chineseName)) {
-          const fullPath = path.join(groupDir, subDirName);
-          console.log(`     ✅ 找到目录: ${dirName}/${subDirName}`);
+      // 检查是否为目标表单目录（含「普通表单」或「流程表单」）
+      if (dirName.includes('「普通表单」') || dirName.includes('「流程表单」')) {
+        if (dirName.includes(formName)) {
+          const fullPath = path.join(currentDir, dirName);
+          console.log(`     ✅ 找到目录: ${path.relative(baseDir, fullPath)}`);
           return fullPath;
         }
+        // 模糊匹配
+        const chineseMatch = dirName.match(/[\u4e00-\u9fa5]+/g);
+        if (chineseMatch) {
+          const chineseName = chineseMatch.join('');
+          if (chineseName.includes(formName) || formName.includes(chineseName)) {
+            const fullPath = path.join(currentDir, dirName);
+            console.log(`     ✅ 找到目录: ${path.relative(baseDir, fullPath)}`);
+            return fullPath;
+          }
+        }
+      } else {
+        // 分组目录（含「分组」后缀），递归搜索
+        const result = searchDir(path.join(currentDir, dirName), depth + 1);
+        if (result) return result;
       }
     }
+    return null;
   }
 
-  console.log(`     ⚠️ 未找到表单目录`);
-  return null;
+  const result = searchDir(baseDir);
+  if (!result) {
+    console.log(`     ⚠️ 未找到表单目录`);
+  }
+  return result;
 }
 
 /**
@@ -1300,6 +1414,7 @@ async function syncConfig(options = {}) {
   let appId = providedAppId;
   const configPath = path.join(outputDir, '系统配置清单.md');
   const tempFormsFile = path.join(outputDir, '.temp_forms.json');
+  let allGroupPaths = []; // v3.13.0: 所有分组的全路径（含空分组），用于创建空分组目录
 
   // 尝试从部署运维信息文件解析应用ID
   if (!appId && formsFile) {
@@ -1366,7 +1481,9 @@ async function syncConfig(options = {}) {
     const maxRetries = 3;
 
     while (retryCount < maxRetries) {
-      verifyForms = await fetchFormList(authRef, appId, outputDir);
+      const verifyResult = await fetchFormList(authRef, appId, outputDir);
+      verifyForms = verifyResult.forms;
+      if (verifyResult.allGroupPaths) allGroupPaths = verifyResult.allGroupPaths;
       if (verifyForms.length > 0) {
         console.log(`   ✅ 应用验证成功，从平台获取到 ${verifyForms.length} 个表单`);
         break;
@@ -1425,7 +1542,9 @@ async function syncConfig(options = {}) {
   if (forms.length === 0 && options.forceUpdate) {
     console.log('   🔄 强制更新模式：使用API获取的最新表单列表');
     // 强制更新模式下，直接从API获取表单列表
-    forms = await fetchFormList(authRef, appId, outputDir);
+    const forceResult = await fetchFormList(authRef, appId, outputDir);
+    forms = forceResult.forms;
+    if (forceResult.allGroupPaths) allGroupPaths = forceResult.allGroupPaths;
     if (forms.length > 0 && forms[0].formUuid && forms[0].formUuid !== 'undefined') {
       console.log(`   ✅ 从API获取到 ${forms.length} 个表单（最新数据）`);
     } else {
@@ -1484,7 +1603,9 @@ async function syncConfig(options = {}) {
     // 最后尝试调用API（失败时会自动回退到Playwright方式）
     if (forms.length === 0) {
       console.log('   📡 尝试从API获取表单列表...');
-      forms = await fetchFormList(authRef, appId, outputDir);
+      const apiResult = await fetchFormList(authRef, appId, outputDir);
+      forms = apiResult.forms;
+      if (apiResult.allGroupPaths) allGroupPaths = apiResult.allGroupPaths;
       if (forms.length > 0 && forms[0].formUuid && forms[0].formUuid !== 'undefined') {
         console.log(`   ✅ 从API获取到 ${forms.length} 个表单`);
       } else {
@@ -1494,7 +1615,24 @@ async function syncConfig(options = {}) {
     }
   }
   
-  // 5. 补充获取流程Code（对于流程表单且没有processCode的）
+  // 5. 如果从本地加载表单时没有获取到分组路径，补充获取
+  // v3.13.1: 确保即使表单从本地加载，也能获取到所有分组路径（含空分组）
+  if (!allGroupPaths || allGroupPaths.length === 0) {
+    console.log('   📡 获取分组树信息（含空分组）...');
+    try {
+      const navResult = await fetchFormNavigation(authRef, appId);
+      if (navResult.allGroupPaths && navResult.allGroupPaths.length > 0) {
+        allGroupPaths = navResult.allGroupPaths;
+        console.log(`   ✅ 获取到 ${allGroupPaths.length} 个分组（含空分组）`);
+      } else {
+        console.log('   ⚠️ 未获取到分组信息');
+      }
+    } catch (error) {
+      console.log(`   ⚠️ 获取分组信息失败: ${error.message}`);
+    }
+  }
+
+  // 6. 补充获取流程Code（对于流程表单且没有processCode的）
   const hasProcessFormsWithoutCode = forms.some(f => f.type === '流程' && !f.processCode);
   if (hasProcessFormsWithoutCode) {
     console.log('\n🔍 检测到流程表单缺少流程Code，尝试通过Playwright补充获取...');
@@ -1544,7 +1682,15 @@ async function syncConfig(options = {}) {
     }
   }
   
-  // 7. 获取每个表单的组件ID
+  // 7. 创建所有分组目录（包括空分组）
+  // v3.13.0: 确保即使分组内没有表单，也能同步目录结构
+  // 仅当有API返回的分组信息时才创建
+  if (allGroupPaths && allGroupPaths.length > 0) {
+    console.log('\n📁 创建分组目录结构（含空分组）...');
+    createEmptyGroupDirectories(outputDir, allGroupPaths);
+  }
+
+  // 8. 获取每个表单的组件ID
   // 当 skipSchema=true 时跳过此步骤（由上层 sync_all_configs.js 统一获取，避免重复调用API）
   let successCount = 0;
   let failCount = 0;
@@ -1557,9 +1703,6 @@ async function syncConfig(options = {}) {
   // 移除 refreshLoginState() —— requestWithAutoLogin 已内置自动重登录机制，
   // 无需在每次同步前启动浏览器验证 Cookie，可节省 10-30 秒
   const freshAuthRef = authRef;
-  
-  // 【禁用分组】所有表单直接放在根目录
-  let groups = [];
   
   // 按顺序同步所有表单
   for (const form of forms) {
@@ -1579,33 +1722,33 @@ async function syncConfig(options = {}) {
       }
       
       // 确定表单目录 - v3.8.0: 优先按分组创建子目录
+      // v3.13.0: 支持多层次嵌套分组目录
       let formDir;
 
       // 优先使用指定的目录映射
       formDir = formDirs?.[form.name];
       if (!formDir) {
-        // v3.9.0: 如果有分组信息，优先在分组子目录中查找
+        // v3.13.0: 如果有分组信息，优先在嵌套分组子目录中查找
         if (form.module) {
-          // v3.12.1: 分组目录加「分组」后缀，与表单目录结构对齐
-          const groupDirName = `${form.module}「分组」`;
-          const groupDir = path.join(outputDir, groupDirName);
+          // v3.13.0: 使用 modulePathToDirPath 构建嵌套分组目录路径
+          // form.module 现在是全路径，如 "业务规则分组/1.主表操作主表"
+          const groupDir = modulePathToDirPath(outputDir, form.module);
           formDir = findFormDirectory(form.name, groupDir);
 
-          // v3.12.1: 向后兼容 - 如果带「分组」后缀的目录不存在，检查旧目录(不带后缀)是否存在
-          // 如果旧目录存在，自动重命名为新目录，复用旧目录里的所有完整文件
-          if (!formDir) {
+          // v3.13.0: 向后兼容 - 检查旧的一级分组目录（不带「分组」后缀或单层）
+          // 仅当 module 是单层路径（不含/）时，才检查旧目录
+          if (!formDir && !form.module.includes('/')) {
             const oldGroupDir = path.join(outputDir, form.module);
             if (fs.existsSync(oldGroupDir) && fs.statSync(oldGroupDir).isDirectory()) {
-              // 检查旧目录里是否有表单子目录（确认是分组目录而非表单目录）
               const oldSubItems = fs.readdirSync(oldGroupDir, { withFileTypes: true });
               const hasFormSubDir = oldSubItems.some(item => item.isDirectory() && item.name.includes('「'));
               if (hasFormSubDir) {
-                console.log(`   📁 发现旧分组目录，自动重命名: ${form.module} → ${groupDirName}`);
-                // 如果目标目录已存在，合并内容
-                if (fs.existsSync(groupDir)) {
+                const newGroupDir = modulePathToDirPath(outputDir, form.module);
+                console.log(`   📁 发现旧分组目录，自动重命名: ${form.module} → ${path.basename(newGroupDir)}`);
+                if (fs.existsSync(newGroupDir)) {
                   for (const oldSub of oldSubItems) {
                     const srcPath = path.join(oldGroupDir, oldSub.name);
-                    const destPath = path.join(groupDir, oldSub.name);
+                    const destPath = path.join(newGroupDir, oldSub.name);
                     if (!fs.existsSync(destPath)) {
                       fs.renameSync(srcPath, destPath);
                     } else {
@@ -1621,9 +1764,9 @@ async function syncConfig(options = {}) {
                   }
                   fs.rmSync(oldGroupDir, { recursive: true, force: true });
                 } else {
-                  fs.renameSync(oldGroupDir, groupDir);
+                  fs.renameSync(oldGroupDir, newGroupDir);
                 }
-                formDir = findFormDirectory(form.name, groupDir);
+                formDir = findFormDirectory(form.name, newGroupDir);
               }
             }
           }
@@ -1632,8 +1775,8 @@ async function syncConfig(options = {}) {
           if (!formDir) {
             const typeStr = form.type && form.type.includes('流程') ? '流程表单' : '普通表单';
             const folderName = `${form.name}「${typeStr}」`;
-            formDir = path.join(outputDir, groupDirName, folderName);
-            console.log(`   📁 创建表单目录: ${groupDirName}/${folderName}`);
+            formDir = path.join(groupDir, folderName);
+            console.log(`   📁 创建表单目录: ${form.module}（分组）/${folderName}`);
             if (!fs.existsSync(formDir)) {
               fs.mkdirSync(formDir, { recursive: true });
             }
@@ -1800,5 +1943,12 @@ module.exports = {
   parseAppIdFromConfig,
   parseFormsFromConfig,
   parseAppIdFromDeployInfo,
-  parseFormsFromDeployInfo
+  parseFormsFromDeployInfo,
+  // v3.13.0: 新增导出
+  buildGroupTree,
+  modulePathToDirPath,
+  ensureGroupDirExists,
+  createEmptyGroupDirectories,
+  createFormDirectory,
+  findFormDirectory
 };

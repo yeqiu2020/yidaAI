@@ -142,7 +142,7 @@ class ProjectGeneratorV2 {
     } else {
       // 默认模板
       template = `> 作者：叶秋
-> 联系方式：15270209736
+> 联系方式：
 > 来源：www.yidatrain.com
 
 【公式类型】：表单公式
@@ -179,7 +179,7 @@ class ProjectGeneratorV2 {
     } else {
       // 默认模板
       template = `> 作者：叶秋
-> 联系方式：15270209736
+> 联系方式：
 > 来源：www.yidatrain.com
 
 

@@ -35,6 +35,7 @@
 6. **`CycleContainer` 只能遍历「获取多条数据」(`GetBatchDataNode`) 的输出**（其 setter 明确要求前置 GetBatch），**不能遍历触发数据的子表行** → 子表累加**千万别用循环节点**，用 direct_form 子表更新即可自动逐行匹配（见下方黄金配方）。
 7. **`updateDataRules` 只在 setter 面板点「保存」后才写入 node props**；UI 选完未 commit 前仍是 `{}`。
 8. **【次级校验】新增/更新数据节点必须写入目标表单的完整字段谱 `inputs.childList` / `rules.childList` / `componentOptionMap`，否则设计器报「无效表单，请重新配置」**。
+   - ⚠️ **此条仅适用于 `AddDataNode` / `UpdateDataNode` / `DeleteDataNode`**，**不适用于 `InitiateApprovalNode`**（bundle 逆向确认：`InitiateApprovalSetter` 不读取 `inputs/rules`，它通过 API `getFormFieldsByFormUuid(formUuid, appType)` 异步加载字段，再调用 `transAssignmentsToActionRulesEditorRules(assignments)` 把扁平赋值转换为编辑器规则）。
    - 根因：`getFormSchema` 抓字段时若靠 layoutTypes 白名单递归，遇到不在名单里的容器（流程表单 `FormContainer`/子表等）就停止递归 → 只拿到外层包裹（无 fieldId）→ childList 为空。✅ 已修复：`integration-api.js` 的 `collectFields` 改为"只要带 `props.fieldId` 就收集、只要有 `children` 就递归"（不再靠容器名单白名单）。
    - ✅ create 脚本已加硬拦截：`getFormSchema` 抓到 0 字段直接 `EMPTY_FORM_SCHEMA` 报错退出，绝不静默发布空节点。
 9. **🔴【首要根因·必看】节点目标表单的「类型」必须匹配该节点 setter 的 `formTypes` 白名单，否则设计器报「表单不存在，唯一排查码 xxx / 无效表单，请重新配置」**。
@@ -84,13 +85,156 @@
     - **根因**：bundle `parseListFieldsToVars` 中 `formSuffix = "Object"===type ? "//" : "targetForm"===type ? "/" : ""`。direct_form 模式下目标表单是 `targetForm` 类型，formSuffix 是 `/`（单斜杠），不是 `//`。`handleDialogEnter` 的 value 转换只处理 `//`，不处理 `/`，所以单斜杠格式原样保留到 `value`。
     - ✅ 已修复：`buildFormulaFields()` 函数直接用原始公式作为 `__source` 和 `value`，只替换 `#{...}` 为字段名生成 `__display` 纯文本。
 
+17. **🔴 节点卡片/下拉框显示表单 UUID 而非表单名称 — viewJson 中表单名显示字段必须回填真实值**：
+    - **背景**：`integration-create.js` 初始化 viewJson 时，所有表单名显示字段（`initiateApprovalFormName`、`addDataFormName`、`updateFormName`、`dataFormName`、`cycleUpdateFormName`）都被硬编码为 `''`（空字符串），且 `formTitle` 和 `targetItem.formItem.title` 等显示字段也留空。导致：
+      - InitiateApprovalNode 卡片显示 UUID 而非表单名（`formTitle: ''`，description 回退到 `formUuid`）
+      - UpdateDataNode 的"更新主表"下拉框显示 UUID 而非表单名（缺少 `targetItem` 字段）
+      - GetSingleDataNode 的"从普通表单中获取"下拉框为空白（`targetItem.formItem.title: ''`）
+      - **但功能不受影响**：processJson 中 `formUuid`/`sourceId` 有值，执行引擎正常工作。
+    - **根因**：`create.js` 的 `buildViewJson`/`buildProcessJson` 调用中，`initiateApprovalFormName: ''`、`addDataFormName: ''`、`updateFormName: ''` 等全为硬编码空字符串——没有调用 `getFormName()` 获取真实表单名。
+    - **修复方案（2026-08-05）**：
+      1. `integration-api.js` 新增 `getFormInfo()` 和 `getFormName()` 函数（复用 `getFormAndAppInfo.json` 接口，取 `title.zh_CN`）
+      2. `integration-create.js` 在获取各目标表单 Schema 后同步调用 `getFormName()` 获取真实表单名变量
+      3. 将变量传递给 `buildViewJson`/`buildProcessJson`，替换硬编码空字符串
+      4. `integration-view-builder.js` 回填 `GetSingleDataNode.targetItem.formItem.title`、`InitiateApprovalNode.initiateApprovalRules.formTitle`、`UpdateDataNode.updateDataRules.targetItem`（含 `formItem.title`）
+      5. `integration-process-builder.js` 回填 `InitiateApprovalNode.formTitle`
+    - **检查清单**（下次创建新节点时逐项确认）：
+      - [ ] `initiateApprovalFormName` 是否从 `getFormName()` 获取并传递？
+      - [ ] `addDataFormName` 是否从 `getFormName()` 获取并传递？
+      - [ ] `updateFormName` 是否从 `getFormName()` 获取并传递？
+      - [ ] `dataFormName` 是否从 `getFormName()` 获取并传递？
+      - [ ] `cycleUpdateFormName` 是否从 `getFormName()` 获取并传递？
+      - [ ] viewJson 中 `GetSingleDataNode.targetItem.formItem.title` 是否回填？
+      - [ ] viewJson 中 `InitiateApprovalNode.initiateApprovalRules.formTitle` 是否回填？
+      - [ ] viewJson 中 `UpdateDataNode.updateDataRules.targetItem` 是否包含 `formItem.title`？
+      - [ ] processJson 中 `InitiateApprovalNode.formTitle` 是否回填？
+
+18. **🔴 更新数据节点赋值用 `processVar`（字段引用）而非 `column`（公式）做简单字段复制 — 区别决定公式编辑器是否报红**：
+    - **背景**：`--update-assignment` 的 `valueType` 参数有 `processVar` 和 `column` 两种：
+      - `processVar` = "引用触发表单某字段的值"（如单价→单价复制），执行引擎直接取该字段值注入
+      - `column` = "公式表达式"（如 `#{fieldA}+#{fieldB}`），执行引擎走公式解析器
+    - **事故**：第一次创建更新规则时，用了 `--update-assignment "numberField_me82yifi:column:numberField_lte16io5"`，`valueType=column` 表示这是公式，但 `numberField_lte16io5` 不是公式（缺少 `#{}` 包裹），公式编辑器把字段ID当字面量解析→显示红色不可识别。实际只需要简单复制，应使用 `processVar`。
+    - **正确用法**：
+      - 简单字段复制：`column:processVar:triggerFieldId`（如 `numberField_me82yifi:processVar:numberField_lte16io5`）
+      - 公式累加/计算：`column:column:#{目标/fieldId}+#{触发/fieldId}`（如 `numberField_me82yifi:column:#{FORM-xxx/fieldId}+#{fieldId}`）
+    - **判别规则**：需要计算（加减乘除）→ `column`（公式）；只是引用另一个字段的值 → `processVar`（字段引用）
+
+19. **🔴 获取单条/更新数据节点 `targetItem.formItem.formType` 必须与目标表单实际类型一致，否则UI下拉框显示空白**：
+    - **背景**：`GetSingleDataNode`、`UpdateDataNode`、`CycleContainer` 内 UpdateDataNode 的 `targetItem.formItem.formType` 原本硬编码为 `'receipt'`（普通表单）。当目标表单是**流程表单（process）**时，UI 下拉框按 `formType` 匹配不到表单，显示为空白。
+    - **但功能不受影响**：`sourceId` 指向真实表单 UUID，执行引擎按 ID 工作，不依赖 `formType` 字段。
+    - **根因**：view-builder 在构建 `targetItem` 时直接写死 `formType: 'receipt'`，没有从 API 获取真实表单类型。
+    - **修复方案（2026-08-05）**：
+      1. `integration-create.js` 用 `getFormInfo()` 获取 `dataFormUuid`、`updateFormUuid`、`cycleUpdateFormUuid` 的真实 `formType`
+      2. 将 `dataFormType`、`updateFormType`、`cycleUpdateFormType` 传递给 view-builder
+      3. view-builder 使用真实值替换硬编码 `'receipt'`，保留 `|| 'receipt'` 兜底
+    - **检查清单**：
+      - [ ] `dataFormType` 是否从 `getFormInfo()` 获取并传递？
+      - [ ] `updateFormType` 是否从 `getFormInfo()` 获取并传递？
+      - [ ] `cycleUpdateFormType` 是否从 `getFormInfo()` 获取并传递？
+      - [ ] `GetSingleDataNode.targetItem.formItem.formType` 是否使用真实值？
+      - [ ] `UpdateDataNode.updateDataRules.targetItem.formItem.formType` 是否使用真实值？
+      - [ ] `CycleContainer` 内 UpdateDataNode 的 `targetItem.formItem.formType` 是否使用真实值？
+
+20. **🔴 获取数据节点 `getData.originalType` 必须与目标表单实际类型一致，否则表单选择框为空**：
+    - **背景**：`GetSingleDataNode`/`GetBatchDataNode` 的 `getData.originalType` 原本硬编码为 `'form'`（普通表单）。当目标表单是**流程表单（process）**时，UI 表单选择器按 `originalType` 过滤表单列表——`originalType="form"` 只加载普通表单，流程表单不在列表里，所以选择框为空白。
+    - **但功能不受影响**：`sourceId` 有值，执行引擎按 UUID 工作，不依赖 `originalType`。
+    - **根因**：view-builder 和 process-builder 中 `dataOriginalType` 的计算只区分 `sub_table` 和 `form`，没有考虑 `process`。
+    - **修复方案（2026-08-05）**：
+      1. view-builder.js：`const dataOriginalType = isSubformSource ? 'sub_table' : (dataFormType === 'process' ? 'process' : 'form');`
+      2. process-builder.js：同上逻辑
+      3. process-builder.js 解构中补充 `dataFormType` 参数
+      4. create.js 的 `buildProcessJson` 调用中传递 `dataFormType`
+    - **originalType 合法值**（bundle 验证）：`form`(普通表单)、`process`(流程表单)、`process_form`、`node`(前置节点)、`association`(关联表单)、`sub_table`(子表)、`data_service`(数据服务)
+    - **v2.8.8 精确化（金标准验证）**：目标表单是流程表单时，`GetSingleDataNode` 用 `process_form`（单条），`GetBatchDataNode` 用 `process`（多条）。计算式：`sub_table | (dataFormType==='process' ? (multiple ? 'process' : 'process_form') : 'form')`。
+
+21. **🟢 CycleContainer 内 InitiateApprovalNode（v2.8.0 起为标准支持功能，格式已最终确认）**：
+    - **用途**：遍历子表行逐行在目标流程表单发起审批（如：提交一条带多条明细的单据，对每条明细各发起一条审批流程）。
+    - **CLI 参数**：`--cycle` + `--cycle-initiate-approval-form-uuid` + `--cycle-initiate-approval-assignment`（可多次）
+    - **viewJson 格式**（v2.8.0 设计器 setter tree 选择器逆向确认金标准）：
+      - `signAction='one_by_one'` 顶层字段（必须）
+      - `assignments[].value` = **`${cycleNodeId}.fieldId`** 格式（如 `${node_xxx}.textField_570rac0i`）—— setter tree 选择器中"当前循环执行的数据"展开后子选项的 value 就是此格式
+      - `assignments[].__display` = **源字段中文名**（如 `"任务名称"`）—— setter 在未加载 `getFormVariables.json` API 时用此字段显示，缺少则显示空白
+      - `initiator.type='form_field'` + `initiator.value=<真实 EmployeeField 字段ID>`（如 `employeeField_lus0jwc4`）—— ❌ 空值会导致设计器保存弹窗拦截；❌ `form_inst_creator` 能保存但设计器显示原始文本；✅ 真实 EmployeeField 设计器显示字段中文名（如"项目经理"）
+    - **❌ v2.6.0 格式错误**：`assignments[].value` = 裸 `cycleNodeId`（如 `node_bd984b2569e`）—— setter 全部显示"当前循环执行的数据"整体，不显示具体字段名
+    - **❌ v2.7.0 格式错误**：`assignments[].value` = `cycleNodeId//fieldId`（如 `node_xxx//textField_570rac0i`）—— setter 不识别此格式，保存后回退为空
+    - **✅ v2.8.0 正确格式**：`assignments[].value` = `${cycleNodeId}.fieldId`（如 `${node_xxx}.textField_570rac0i`）—— Playwright 逆向 setter tree 选择器确认
+    - **设计器面板**：v2.7.0 新增 `integration-designer-fix.js` 脚本修复首次点击渲染空白问题。v2.8.0 确认必须加 `--save` 参数触发工具栏保存（面板内"保存"只应用到本地画布，不触发 `saveProcess` API）。创建后执行：`node .agents/skills/integration/scripts/integration-designer-fix.js <appType> <processCode> --save`
+    - **历史**：v2.5.8~v2.5.9 曾误判为"宜搭前端框架限制"并加 CLI 硬拦截；v2.6.0 实测确认 viewJson 格式正确后面板可正常显示，v2.7.1 正式移除硬拦截恢复为标准功能；v2.8.0 最终确认 `assignments[].value` 的正确格式为 `${cycleNodeId}.fieldId`（经历了裸 cycleNodeId → cycleNodeId//fieldId → ${cycleNodeId}.fieldId 三轮试错），并发现缺少 `__display` 导致首次加载空白、面板保存不等于服务器保存三个问题叠加。
+
+23. **🔴🔴 发起审批节点主链/循环内两套 setter 期望格式（v2.8.0 最终确认 + 修复）**：
+    - **症状**：发起审批节点设计器面板字段设置右侧显示为空 / 选择发起人显示与预期不符。
+    - **v2.8.0 最终确认**：发起审批节点**分主链和循环内两套 setter 期望格式**，循环内 `assignments[].value` 格式经历了三轮试错才最终确认：
+      1. **主链发起审批 setter 期望格式**（金标准：手动配置的 LPROC-KX966O71UT383IQEK2A0QA0GA40335AB56HSM01）：
+         - 无 `signAction` 顶层字段
+         - `assignments[].value` = 裸字段 componentId
+         - `initiator.type='form_field_list'` + `initiator.value='["form_inst_creator"]'`
+         - setter UI "选择发起人"显示未选中是**宜搭正常 UI 行为**（不影响功能）
+      2. **循环内发起审批 setter 期望格式**（v2.8.0 设计器 setter tree 选择器逆向确认金标准）：
+         - `signAction='one_by_one'` 顶层字段（必须）
+         - `assignments[].value` = **`${cycleNodeId}.fieldId`** 格式（如 `${node_xxx}.textField_570rac0i`）
+           - ❌ v2.6.0 用裸 cycleNodeId → setter 全部显示"当前循环执行的数据"整体
+           - ❌ v2.7.0 用 cycleNodeId//fieldId → setter 不识别，保存后回退为空
+           - ✅ v2.8.0 用 ${cycleNodeId}.fieldId → setter 正确显示各字段名
+         - `assignments[].__display` = **源字段中文名**（如 `"任务名称"`）——缺少则首次加载显示空白
+         - `initiator.type='form_field'` + `initiator.value=<真实 EmployeeField 字段ID>`（如 `employeeField_lus0jwc4`）—— ❌ 空值会导致设计器保存弹窗拦截；❌ `form_inst_creator` 能保存但设计器显示原始文本；✅ 真实 EmployeeField 设计器显示字段中文名（如"项目经理"）
+    - **v2.8.0 修复动作**：
+      - `view-builder` 主链：**保留 v2.5.6 原始格式**（form_field_list+form_inst_creator，裸字段 ID，无 signAction）
+      - `view-builder` 循环内：升级为 v2.8.0 金标准格式（assignments[].value=`${cycleNodeId}.fieldId` + `__display`=源字段中文名, initiator=form_field+真实EmployeeField, signAction=one_by_one）
+      - `view-builder` 新增 `lookupFieldLabel(triggerFormSchema, fieldId)` 函数自动查找源字段中文名作为 `__display`
+      - `process-builder` 循环内 assignments 同步使用 `${cycleNodeId}.fieldId` 格式
+      - `create.js` subform 模式下强制 `dataQueryType='multiple'`（修复体检报 `RETRIEVE_EMPTY_CONDITION`）
+      - `create.js` `findSubmitterFieldId` 三级回退（v2.8.2）：①label含"提交"的EmployeeField → ②主表第一个EmployeeField → ③`form_inst_creator`（最后手段）
+      - `create.js` 新增 `--cycle-initiate-approval-initiator <fieldId>` CLI 参数支持手动指定发起人字段（v2.8.2）
+      - `integration-designer-fix.js` 保存流程改为 React `__reactEventHandlers$.onClick` 调用 + 每次保存后检查错误弹窗（v2.8.2）
+    - **⚠️ 面板保存 ≠ 服务器保存**：设计器面板内的"保存"按钮只应用到本地画布状态，必须点击页面顶部工具栏的 `simple-flow-canvas-save` 按钮才触发 `saveProcess` API 持久化到服务器。`integration-designer-fix.js --save` 会自动点击工具栏保存按钮。
+    - **v2.7.1 移除 CLI 硬拦截**：`--cycle` + `--cycle-initiate-approval-form-uuid` 组合已恢复为标准支持功能。view-builder 自动生成循环内正确格式，无需外部手动覆盖。创建后执行 `integration-designer-fix.js --save` 修复设计器面板首次渲染并持久化。
+- **v2.8.2 修复**：①initiator 为空→设计器弹窗拦截但 API 不报错→添加 fallback ②`form_inst_creator` 设计器显示原始文本→`findSubmitterFieldId` 增加二级回退（主表第一个 EmployeeField） ③保存流程改为 React onClick + 检查弹窗。详见硬规则 10/12。
+
+22. **🟢 流程表单自动降级（v2.6.0+，不再需要手动切换节点类型或指定发起人）**：
+    - **背景**：AddDataNode 只支持普通表单(receipt)，InitiateApprovalNode 只支持流程表单(process)。之前遇到类型不匹配时 `assertFormType` 直接 `process.exit(1)` 报错退出，需要用户手动改用正确的 CLI 参数并指定发起人 userId。
+    - **自动降级逻辑**（2026-08-06 新增）：
+      - `--add-data-form-uuid` 指向流程表单(process) → 自动切换为「发起审批」节点，`--add-data-assignment` 原样转为 `--initiate-approval-assignment`，发起人默认用**触发数据的提交人**（`form_inst_creator`，type=`form_field_list`，bundle 逆向确认）
+      - `--initiate-approval-form-uuid` 指向普通表单(receipt) → 自动切换为「新增数据」节点，`--initiate-approval-assignment` 原样转为 `--add-data-assignment`
+      - 降级时控制台输出 `⚠️ 自动降级:` 提示信息，包含目标表单名称和降级方向
+      - 降级后节点 ID 自动重新生成，processJson/viewJson 按新节点类型构建
+    - **发起人默认值**（bundle 逆向确认）：
+      - 默认使用触发数据提交人：`{ type: 'form_field_list', value: '["form_inst_creator"]' }`
+      - bundle 源码（InitiateApprovalSetter）Radio 选项：`select_user_list`=指定成员、`form_field_list`=表单成员字段
+      - 序列化代码：`value: type==='select_user_list' ? JSON.stringify(userArray) : JSON.stringify(fieldIdArray)`
+      - 执行引擎（processJson）：`"select_user"===type ? JSON.parse(value) : value`（非 select_user 类型直接用 value）
+      - `--initiate-approval-initiator-user` 仍可手动指定固定用户（type=`select_user`），但默认不再需要
+    - **验证器修复**（同期）：`integration-validate.js` 在 processJson 为空回退 viewJson 时，新增 `GetSingleDataNode/GetBatchDataNode`（`getData`）、`DeleteDataNode`（`deleteData`）、`InitiateApprovalNode`（`initiateApprovalRules`）的 props 展平逻辑，修复了 `RETRIEVE_EMPTY_SOURCE` 误报。
+
+24. **🔴🔴 删除目标表单子表行的两种获取模式（v2.8.8 最终确认，以设计器手工配置 viewJson 为金标准）**：
+    - **症状**：创建"删除目标表单子表行"逻辑流后，设计器里「获取多条数据」节点显示「从数据节点中获取」而非期望的「从子表中获取」。
+    - **根因（v2.8.8 真实根因，已修复）**：cascade（5 节点）模式下节点3（GetBatchDataNode）的 `originalType` 错误地写成 `"node"`（因 sourceId 指向上游节点）。**事实**：手工配置金标准显示节点3 的 `originalType` 应当是 **`"sub_table"`**——即便 `sourceId` 指向上游节点，只要 `subSourceId` 指定目标子表且需要从该节点的子表取行，`originalType` 就必须是 `"sub_table"`。`originalType` 是设计器区分"从子表中获取"vs"从数据节点中获取"UI 的**根本字段**。
+    - **手工配置 viewJson 金标准**（截图确认，三件套）：
+      ```
+      originalType="sub_table"
+      sourceId=上游节点ID（如 "node_xxx"）  // 数据节点=获取单条数据
+      subSourceId=目标子表字段ID             // 子表=产品规格
+      filterType="condition"
+      condition={仅子表字段条件（如规格=触发.规格），不需主表名称条件}
+      ```
+    - **v2.8.8 修复**：`integration-view-builder.js` chain mode 第 487 行 + `integration-process-builder.js` 第 612 行：`originalType: 'node'` → `originalType: 'sub_table'`。
+    - **错误推断教训**：不要从代码字段名（如 `sourceId=节点`）或 viewJson 字面值（如 `subSourceId=子表`）去**推断** `originalType`。**必须以设计器手工配置的 viewJson 为金标准**——创建一条手工流程 → 导出 viewJson → 字段逐一对照，才能确定正确组合。
+    - **三种"子表"路径的完整区分**：
+      - **模式 A：sub_table 直接获取（4 节点）**：`originalType="sub_table"` + `sourceId=#{目标表单}` + `subSourceId=目标子表`（无前置获取单条节点），用于"子表条件字段值全局唯一"场景
+      - **模式 B：cascade 从上游节点取子表（5 节点，v2.8.8 修正）**：`originalType="sub_table"` + `sourceId=上游节点ID` + `subSourceId=目标子表` + 前置"获取单条(主表按主字段定位)"节点
+      - **`subform` 触发数据子表**：`originalType="sub_table"` + `sourceId=#{触发表单}` + `subSourceId=触发子表`（通过 `--data-source-type subform --data-sub-field-id`）
+    - **v2.8.7 修复保留**：模式 A（`--data-sub-source-id` 单独使用）原 cando 未在 view-builder 应用，已 v2.8.7 + v2.8.8 双层修复
+
 ---
 
 ## 2. ★★★ 黄金配方：direct_form 直接更新（已上线验证，覆盖 90% 同步场景）
 
-> **⚠️ 方案选择铁律**：数据同步场景默认用 direct_form（直接更新），3 节点搞定。
-> 只有"触发表子表各行→各自对应的目标表主表记录"才需要循环容器（5 节点）。
-> 详见 SKILL.md 方案选择决策树。**历史上曾有 AI 把"采购入库同步库存"误用循环容器，实际只需 direct_form 直接更新。**
+> **⚠️ 方案选择铁律（判别标准=动作类型，不是数据拓扑）**：
+> 数据同步/累加/upsert（更新或新增另一张表的数据）**一律 direct_form（直接更新），3 节点搞定**——
+> 无论触发数据来自主表字段还是子表明细行（含"子表明细→目标主表记录"，如采购入库.入库明细→库存信息主表，引擎自动逐行迭代匹配，已实际验证）。
+> 循环容器（--cycle）**仅用于对「获取多条数据」的每条结果逐条执行非更新类动作**（**消息通知/连接器调用/发起审批**等），它不是数据同步的备选方案。
+> **"发起审批" ≠ "新增数据"**：发起审批是创建流程实例（审批流程），不是更新/新增数据记录，必须用循环容器+发起审批节点（InitiateApprovalNode）。
+> 详见 SKILL.md 方案选择决策树。**历史上同一根因两次把"采购入库同步库存"误建成 5 节点循环流，实际只需 direct_form 直接更新；已验证成功配置见 `docs/采购入库同步库存-集成自动化配置指南.md`。**
+> **第三次事故（v2.8.1修复）**：另一个 AI 把"任务分派子表→任务执行发起审批"误用 direct_form 更新数据节点，根因是 5.1 只提"消息通知、连接器调用"未明确提"发起审批"。
 
 ### 2a. 主表直接更新（最常用，如：审批通过后同步更新目标表）
 
@@ -321,7 +465,6 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-A-XXX
   --approval-actions agree \
   --get-self \
   --initiate-approval-form-uuid FORM-PROCESS-B-XXX \
-  --initiate-approval-initiator-user "01376266634908:张三" \
   --initiate-approval-assignment "textField_b1:processVar:textField_a1" \
   --publish
 ```
@@ -329,5 +472,8 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-A-XXX
 ### 注意事项
 
 - 目标表单必须是流程表单（formType=process），普通表单请使用 `--add-data-form-uuid`
-- `--initiate-approval-initiator-user` 必须提供，格式为 `userId[:name]`
+- 发起人默认使用触发数据提交人 `form_inst_creator`（bundle 逆向确认，无需手动指定）
 - 字段赋值格式与 `--add-data-assignment` 相同
+- **viewJson 结构**：详见 [canonical-node-shapes.md](canonical-node-shapes.md) 的 InitiateApprovalNode 章节
+- **⚠️ 重要**：`initiateApprovalRules` **不需要** `inputs.childList` 和 `rules.rules`（bundle 确认 `InitiateApprovalSetter` 不读取这些字段，它通过 API 异步加载字段）
+- 如需手动指定发起人用户，使用 `--initiate-approval-initiator-user "userId:name"`（type=`select_user_list`）

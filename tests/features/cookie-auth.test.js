@@ -16,6 +16,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
+// 【测试隔离】屏蔽本机真实全局 Cookie（~/.yida-ai-helper），保证用例只依赖临时目录内的文件
+process.env.YIDA_HELPER_HOME = path.join(__dirname, '..', '..', 'temp-file', 'test-no-global-cookie');
+
 const {
   loadCookieData,
   extractInfoFromCookies,

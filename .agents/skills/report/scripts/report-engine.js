@@ -64,7 +64,11 @@ function genFieldId(componentName) {
 function loadCookieData(projectRoot) {
   const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
   const root = projectRoot || PROJECT_ROOT;
-  const cookieFile = path.join(root, '.cookies.json');
+  // 阶段二改造：Cookie 优先全局，兼容项目根
+  const os = require('os');
+  const globalCookieFile = path.join(os.homedir(), '.yida-ai-helper', '.cookies.json');
+  const rootCookieFile = path.join(root, '.cookies.json');
+  const cookieFile = fs.existsSync(globalCookieFile) ? globalCookieFile : rootCookieFile;
 
   if (!fs.existsSync(cookieFile)) {
     console.error('[report] 未找到登录态文件:', cookieFile);

@@ -2,6 +2,10 @@ node_modules/
 .cookies.json
 temp-cookies*.json
 *.bak
+
+# npm pack 产物与内部审计文档（含脱敏前原始敏感值，禁止入库）
+*.tgz
+敏感信息审计清单.md
 *.log
 debug-*.html
 debug-*.png
@@ -43,6 +47,16 @@ deploy-*.json
 !/lib/
 !/scripts/
 !/tests/
+!/bin/
+!/templates/
 !/本地操作页面/
 !/★宜搭场景案例库/
 !/★宜搭开发参考文档/
+
+# npm 发布相关
+.npmignore
+.github/
+
+# 环境变量
+.env
+.env.*

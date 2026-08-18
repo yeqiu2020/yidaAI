@@ -223,7 +223,7 @@ AI：调用 Skill 工具 -> feedback-collector  ← 正确！先加载skill
 **注意：请根据实际项目路径调整命令**
 
 ```bash
-node .agents/skills/feedback-collector/scripts/submit-feedback.js \
+yida-helper run feedback-collector/scripts/submit-feedback.js \
   --sender "[用户姓名]" \
   --phone "[用户手机号]" \
   --type "[bug/feature/requirement/question/review]" \
@@ -330,7 +330,7 @@ node .agents/skills/feedback-collector/scripts/submit-feedback.js \
 **使用示例**：
 
 ```bash
-node .agents/skills/feedback-collector/scripts/submit-feedback.js \
+yida-helper run feedback-collector/scripts/submit-feedback.js \
   --sender "张三" \
   --phone "13800138000" \
   --type "feature" \
