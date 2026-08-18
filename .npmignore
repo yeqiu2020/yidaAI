@@ -1,0 +1,65 @@
+# npm 发布时忽略的文件
+# 发布包只包含 package.json files 字段中列出的目录
+
+# 测试
+tests/
+.agents/skills/integration/scripts/integration-builder.test.js
+.agents/skills/form_creator/tests/
+
+# 缓存
+.cache/
+.pytest_cache/
+.playwright-cli/
+
+# 本地操作页面（用户 init 生成）
+本地操作页面/
+
+# 案例库
+★宜搭场景案例库/
+★宜搭开发参考文档/
+
+# 进销存项目
+进销存6/
+进销存7/
+
+# 临时文件
+temp-file/
+_env_check_tmp.ps1
+
+# 临时测试产物
+.agents/skills/integration/scripts/*.png
+
+# 运行时产物
+**/node_modules/
+**/.form-counter
+**/storageState.json
+**/.cache/
+
+# IDE / 编辑器
+.vscode/
+.cursor/
+.trae/
+.codebuddy/
+.idea/
+
+# Git
+.github/
+.gitignore
+.gitattributes
+
+# 文档（内部文档不发布）
+GitHub发布与命令行安装改造方案.md
+01环境初始化.md
+02应用初始化.md
+03常用提示词.md
+AGENTS.md
+CLAUDE.md
+组织及应用信息.md
+阶段四至六全面验收沟通记录.md
+从V2x迁移到V3x命令行模式.md
+
+# 旧 skills 目录（已被 .agents/skills/ 替代）
+skills/
+
+# 临时项目目录
+test-copy-project/
