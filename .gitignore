@@ -39,6 +39,7 @@ deploy-*.json
 /*/
 !/.agents/
 !/.cursor/
+!/.github/
 !/.cursor/rules/
 !/.figma/
 !/.idea/
