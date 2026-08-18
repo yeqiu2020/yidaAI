@@ -42,7 +42,6 @@ deploy-*.json
 !/.github/
 !/.cursor/rules/
 !/.figma/
-!/.idea/
 !/.trae/
 !/.vscode/
 !/lib/
@@ -51,8 +50,16 @@ deploy-*.json
 !/bin/
 !/templates/
 !/本地操作页面/
-!/★宜搭场景案例库/
-!/★宜搭开发参考文档/
+
+# 内部工作资料（仅本地保留，不入库）
+/.idea/
+/★宜搭场景案例库/
+/★宜搭开发参考文档/
+/01环境初始化.md
+/02应用初始化.md
+/03常用提示词.md
+/阶段*.md
+/GitHub发布与命令行安装改造方案.md
 
 # npm 发布相关（.npmignore 与 .github/ 必须入库：发布流水线依赖）
 
