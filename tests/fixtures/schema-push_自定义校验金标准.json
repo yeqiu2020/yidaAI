@@ -1,0 +1,14 @@
+{
+  "param": {
+    "compiled": "function main(){\n    \n    'use strict';\n\nvar __compiledFunc__ = function validateRule(value) {\n  if (!value) return true;\n  return value.indexOf('测试') === -1; // 备注不能包含\"测试\"\n};\n    return __compiledFunc__.apply(this, arguments);\n  }",
+    "source": "function validateRule(value) {\n  if (!value) return true;\n  return value.indexOf('测试') === -1;  // 备注不能包含\"测试\"\n}",
+    "type": "js",
+    "error": {}
+  },
+  "type": "customValidate",
+  "message": {
+    "en_US": "",
+    "zh_CN": "测试稀里哗啦",
+    "type": "i18n"
+  }
+}
