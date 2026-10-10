@@ -1,6 +1,11 @@
 node_modules/
 .cookies.json
 temp-cookies*.json
+# 多环境 cookie 凭证变体（cookies.json / cookies-<环境>.json 等）
+cookies*.json
+# 环境变量文件（密钥类）
+.env
+.env.*
 *.bak
 *.log
 debug-*.html
@@ -29,6 +34,13 @@ temp-file/
 # 部署运维信息
 deploy-*.json
 .temp_*/
+
+# 操作系统与工具缓存杂物（任意层级）
+.DS_Store
+Thumbs.db
+desktop.ini
+.pytest_cache/
+logs/
 
 # 应用案例/场景/参考文档（不需要同步到 GitHub）
 # 白名单模式：忽略根目录所有文件夹，只放行系统目录
