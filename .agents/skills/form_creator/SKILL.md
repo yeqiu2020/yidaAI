@@ -1,13 +1,13 @@
 ---
 name: form_creator
-description: 根据用户自然语言描述或Markdown字段表生成宜搭表单JSON配置，支持三种独立场景：1)创建新应用+所有表单（触发词："生成表单"、"创建应用"）→ 使用 create_from_markdown.js；2)向已有应用添加单个表单（触发词："在XX应用中创建一个表单"、"在XX应用中添加表单"）→ 使用 add_form_to_app.js；3)仅创建项目目录结构（触发词："创建项目"、"新建XXX系统"）→ 不调用此skill。v6.34.0新增数据标题多字段组合和类型提示。Invoke when user explicitly says "生成表单" or "在XX应用中创建一个表单". Must NOT invoke when user only says "创建项目" or "新建系统".
+description: 根据用户自然语言描述或Markdown字段表生成宜搭表单JSON配置，支持三种独立场景：1)创建新应用+所有表单（触发词："生成表单"、"创建应用"）→ 使用 create_from_markdown.js；2)向已有应用添加单个表单（触发词："在XX应用中创建一个表单"、"在XX应用中添加表单"）→ 使用 add_form_to_app.js；3)仅创建项目目录结构（触发词："创建项目"、"新建XXX系统"）→ 不调用此skill。v6.34.0新增数据标题多字段组合和类型提示。v6.64.0修复启动服务后未初始化项目不显示「初始化组织信息」按钮的问题。Invoke when user explicitly says "生成表单" or "在XX应用中创建一个表单". Must NOT invoke when user only says "创建项目" or "新建系统".
 ---
 
 # 表单创建 Skill
 
 你是宜搭表单创建专家，根据字段清单生成宜搭表单JSON配置并创建到宜搭平台，熟悉宜搭表单的JSON Schema规范和API接口。
 
-**当前版本：v6.61.0** (2026-07-28) — 完整版本历史与各版本修复详情见 [references/version-history.md](references/version-history.md)
+**当前版本：v6.70.0** (2026-08-22) — 完整版本历史与各版本修复详情见 [references/version-history.md](references/version-history.md)
 
 > **【v6.61.0 强制回归】** 修改关联字段解析或校验逻辑（validateAssociationTargets / parseFillingFromAssocDesc / buildDataFillingRules / scanAndFixPlaceholders）后必须重跑：
 > `node .agents/skills/form_creator/tests/test_validate_assoc.js`（3场景：事故复刻推断补全/无法推断中止/标记完整直通）
@@ -18,7 +18,7 @@ description: 根据用户自然语言描述或Markdown字段表生成宜搭表�
 |------|---------|
 | 判断字段类型、解析括号/中括号标注、字段清单格式与示例、公式场景 | [references/field-type-rules.md](references/field-type-rules.md) |
 | 目录结构规范、项目名称提取、历史双模式流程、静默创建详解、完整示例、安全规则细则 | [references/workflow-details.md](references/workflow-details.md) |
-| 13+个常见问题的根因分析与解决方案（流水号限制、重复创建、导航分组等） | [references/faq.md](references/faq.md) |
+| 15+个常见问题的根因分析与解决方案（流水号限制、重复创建、导航分组、同步路径重复等） | [references/faq.md](references/faq.md) |
 | 版本更新历史 | [references/version-history.md](references/version-history.md) |
 
 ---
@@ -200,6 +200,33 @@ node .agents/skills/form_creator/scripts/add_form_to_app.js --appId <应用ID> -
 
 注意：需要有该应用的编辑权限；创建完成后平台可能需要几分钟同步数据。
 
+### 场景2b：创建「中间表」（集成自动化的数据中转站，普通表单）
+
+> **触发场景**：integration skill 判定某同步需求必须走「中间表两段式」时（见 `integration/references/集成自动化硬规则.md` 规则20），需要先建一张**普通表单**作为中转表。此时由本 skill 负责建表，integration 负责建流——**职责边界：本 skill 只建表，不建流**。
+
+**什么时候需要中间表**：`子表→子表` 更新场景下，**定位目标父记录的业务键只在触发子表行里**（如"对账单明细行里有销售订单编号，但主表没有"）→ 直连方案撞引擎限制 → 必须用中间表把"子表行"提升为"主表记录"。判据全文见规则20。
+
+**建表步骤（与场景2 完全同路径，只是字段设计有约定）**：
+
+```powershell
+node .agents/skills/form_creator/scripts/add_form_to_app.js --appId <应用ID> --form "<中间表字段清单.md路径>" --appName "<应用显示名称>"
+```
+
+**中间表字段设计约定（照抄，勿自由发挥）**：
+
+| 字段组 | 内容 | 说明 |
+|--------|------|------|
+| 定位键 | 触发子表行的业务键全集（如 单号 + 订单编号 + 产品名称 + 产品规格） | **必须包含**，流A 用它做 upsert 主条件、流B 用它做匹配主条件 |
+| 数据字段 | 触发子表行需要传递的业务值全集（如 销售数量 / 历史对账 / 本次对账 等数量列） | 逐列建，供流B 的赋值公式引用 |
+| 表单类型 | **普通表单（receipt）** | ⚠️ 必须是普通表单：流B 靠 `--events insert` 触发，流程表单无此事件；且普通表单允许 upsert 新增（规则13.1） |
+
+**建表后必须做**：
+1. 从同步的 Schema 读回**真实 fieldId**（禁止编造，规则2），供流A/流B 的 CLI 引用
+2. 登记到 `系统配置清单.md`（分配表单序号）与组件ID清单，保持全域索引同步
+3. 交付给 integration skill 继续建流（流A=触发子表行→中间表 upsert；流B=中间表 insert→更新目标子表）
+
+**实测案例**：2026-09-22 销售对账场景，「对账明细记录表」（7字段，普通表单）→ 流A `LPROC-NAD66NC1` + 流B `LPROC-QMF66WA1`，32/32 断言 PASS。完整复盘见 `docs/销售对账同步订单-中间表架构复盘.md`。
+
 ### 字段清单格式
 
 两个脚本使用相同的字段清单格式（表格格式推荐 / 列表格式兼容）。格式规范、字段类型判断规则、括号/中括号标注解析、完整示例见 [references/field-type-rules.md](references/field-type-rules.md)。
@@ -252,4 +279,4 @@ node .agents/skills/form_creator/scripts/add_form_to_app.js --appId <应用ID> -
 
 ## 常见问题
 
-> 13+个常见问题的详细根因分析与解决方案见 [references/faq.md](references/faq.md)，涵盖：流水号组件限制、表单重复创建（本地/平台）、关联表单字段配置、流程表单流程设计、流水号无法自动生成、关联字段显示设置与数据填充、导航分组根因修复、分组目录命名不一致系列问题等。
+> 15+个常见问题的详细根因分析与解决方案见 [references/faq.md](references/faq.md)，涵盖：流水号组件限制、表单重复创建（本地/平台）、关联表单字段配置、流程表单流程设计、流水号无法自动生成、关联字段显示设置与数据填充、导航分组根因修复、分组目录命名不一致系列问题、同步服务路径重复/静默匹配错误应用等。

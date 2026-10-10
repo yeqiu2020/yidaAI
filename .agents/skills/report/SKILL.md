@@ -21,12 +21,13 @@ description: "宜搭报表制作技能。通过自包含的报表引擎直接调
 9. **🔴 创建报表前必须检查已有数据集** — 多表场景下，必须先读取 `数据集配置.md`，检查是否已有可用的 cubeCode。如果已有且状态为"✅"，直接复用，**禁止重复创建数据集**。只有当已有 cubeCode 状态为"⚠️ 已失效"或不存在时，才调用 `dataset` skill
 10. **🔴 禁止重复创建同名报表配置** — 创建报表前，必须检查 `06数据报表` 目录是否已有同名配置文件。如果已有，**在原文件基础上修改**（规则3），不创建新文件。如果需求不同，使用不同的报表名称
 11. **🔴 报表验证失败后禁止创建新版本** — 当 Playwright 验证失败时，修改原配置文件并重新创建（会生成新 reportId），**禁止创建"v2/v3/v4"等新版本文件**。旧的失败报表应通知用户在宜搭平台删除
+12. **🔴 服务端聚合优先（统计类需求硬规范）** — 统计聚合（求和/计数/均值/分组统计）一律优先在服务端完成：报表统计走本 Skill 的报表引擎（aggregateType/报表聚合函数），跨表加工汇总走 `data-prep`（数据准备）。**自定义页面/JS 代码中禁止一次性拉取全量数据后在前端 reduce/filter 自行聚合**（分页展示场景除外——每页只取当前页数据展示属于分页，不算聚合）。反例：用 searchFormDatas 拉全量记录再在循环里累加总金额 → 数据量大时超时/截断且结果不可信，必须改走服务端聚合
 
 ---
 
 # 宜搭报表制作技能
 
-> 当前版本：v1.9.0（版本历史与历史教训全量复盘见 [references/report-lessons-and-history.md](references/report-lessons-and-history.md)）
+> 当前版本：v1.11.0（版本历史与历史教训全量复盘见 [references/report-lessons-and-history.md](references/report-lessons-and-history.md)）
 
 ## 📚 参考文件索引（按需加载）
 
@@ -255,7 +256,17 @@ node .agents/skills/report/scripts/create-report.js <appType> "<报表名称>" <
 
 #### 关于更新报表
 
-⚠️ **当前限制**：报表引擎 **不支持直接修改已有报表**，仅支持：①创建新报表（`create-report.js`）；②向已有报表追加图表（`append-chart.js <appType> <reportId> <配置JSON>`）。
+⚠️ **当前限制**：报表引擎 **不支持直接修改已有报表**，仅支持：①创建新报表（`create-report.js`）；②向已有报表追加图表（`append-chart.js`，v1.11.0 补齐 CLI 入口）。
+
+**追加图表用法**（P2-1 实测）：
+
+```bash
+node .agents/skills/report/scripts/append-chart.js <appType> <reportId> <图表配置JSON>
+```
+
+- ⚠️ **图表配置 JSON 必须是裸数组**（`[{type, title, cubeCode, xField, yField, ...}]`），不是 `{charts:[...]}` 包装格式——与创建配置的顶层格式不同
+- 追加实现：读取已有报表 Schema → 追加图表节点（自动布局 Y 位置）→ 增量保存，**不影响既有图表**
+- 多次追加可叠加；追加后建议回读核对图表数（`getFormSchema.json` 数 componentName）
 
 **如需修改已有报表**：在宜搭平台后台手动修改；或修改本地配置JSON文件（`06数据报表/`目录下），删除旧报表，使用相同名称重新创建（会生成新的 reportId）。
 
@@ -450,7 +461,7 @@ node .agents/skills/report/scripts/create-report.js <appType> "<报表名称>" <
 
 - ❌ **禁止在报表配置中手动填写 measureCode**：报表引擎会自动查询视图表的 measureMapping 并将 columnName 转换为 measureCode（Step 2.5），配置文件中继续使用原始表单字段名即可
 - ❌ **禁止编造 cubeCode**：cubeCode来源有两种——①从formUuid转换（连字符→下划线）；②从数据集获取（VIEW_xxx/PREP_xxx），必须从创建成功的数据集中获取，严禁编造
-- ❌ **禁止前端聚合**：所有聚合统计必须通过报表API由服务端完成
+- ❌ **禁止前端聚合**：所有聚合统计必须通过报表API由服务端完成；自定义页面/JS 代码中同样禁止拉全量数据后在前端 reduce/filter 聚合（分页展示场景除外，见专属硬规则 12）
 - ❌ **禁止混用表单公式和报表公式**：两套函数体系完全不同
 - ❌ **禁止忘记 _value 后缀**：SelectField/RadioField/MultiSelectField/CheckboxField 必须加
 - ❌ **禁止拆分DateField**：日期字段直接使用原始fieldCode

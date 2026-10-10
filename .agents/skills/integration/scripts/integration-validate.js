@@ -62,6 +62,54 @@ function detectPlaceholder(value) {
   return null;
 }
 
+// detectVarLiteralMisuse：反向保护——valueType=processVar（应引用流程变量/字段）但值却是业务字面量
+// （如"已完成"、纯中文短语），说明把字面量错标成了变量引用（v2.8.17 单冒号坑的兜底门禁）
+const HAN_LITERAL = /\p{Script=Han}/u;
+function detectVarLiteralMisuse(valueType, value) {
+  if (valueType !== 'processVar') { return null; }
+  if (typeof value !== 'string' || !value) { return null; }
+  const trimmed = value.trim();
+  // 引用格式（字段ID/系统字段/${node}.fieldId 变量）不含纯业务中文；出现中文短语=类型标反
+  if (HAN_LITERAL.test(trimmed)) {
+    return `条件 "${value}" 的 valueType=processVar（应引用变量/字段），但值含有中文业务字面量；` +
+      '疑似把字面量错标成了变量引用，应把 valueType 改为 literal，或确认引用的是真实字段/变量';
+  }
+  return null;
+}
+
+// ==================== 显示名体检（v2.8.18）====================
+// saveProcess 不校验"展示名"，若 label/description 残留 FORM- UUID 或占位名
+// （如"未知"），设计器卡片会显示表单 UUID / 发起人「未知」而非真实名称。
+// 门禁在保存/发布前提前拦截，避免把"能跑但显示难看"的字段压进线上。
+
+// 1) 节点描述含表单 UUID：bps/BuildProcess 的 `在 [FORM-XXX] 中...` 说明表单名回退成了 UUID
+const FORM_UUID_IN_DISPLAY = /FORM-[A-Z0-9]+/;
+
+// 2) 发起人 label 校验：select_user 的 value JSON 里 label 应为真实姓名，
+//    出现"未知"/空/等于 id 都说明展示名缺失（点进 setter 才会重新解析出姓名）
+//    返回 { code, level, message } 或 null（无问题）
+function analyzeInitiatorLabel(initiator) {
+  if (!initiator || initiator.type !== 'select_user') { return null; }
+  let parsed = null;
+  if (typeof initiator.value === 'string') {
+    if (!initiator.value) { return null; }
+    try { parsed = JSON.parse(initiator.value); } catch (e) { return null; }
+  } else if (typeof initiator.value === 'object') {
+    parsed = initiator.value;
+  }
+  if (!parsed || !parsed.id) { return null; }
+  const label = parsed.label;
+  if (!label || label === '未知') {
+    return { code: 'DISPLAY_INITIATOR_LABEL', level: 'error',
+      message: `发起人 label 显示为 "${label || '（空）'}"（设计器会显示「未知」），请填入真实姓名（id=${parsed.id}）` };
+  }
+  if (label === parsed.id) {
+    return { code: 'DISPLAY_INITIATOR_LABEL_ID', level: 'warning',
+      message: `发起人 label 退回到用户ID（${label}），设计器会显示一长串数字而非姓名，请填入真实姓名` };
+  }
+  return null;
+}
+
 // ==================== 校验核心 ====================
 
 function pickName(name) {
@@ -140,6 +188,11 @@ function validateProcessJson(processJson, options) {
         if (hit) {
           addIssue(errors, node, 'PLACEHOLDER_LITERAL', `${where}：${hit}`);
         }
+      } else {
+        const misuse = detectVarLiteralMisuse(rule.valueType, rule.value);
+        if (misuse) {
+          addIssue(errors, node, 'LITERAL_AS_VAR', `${where}：${misuse}`);
+        }
       }
       // 为空/不为空类操作符不需要比较值
       const noValueOp = /null|empty/i.test(String(rule.opCode || rule.op || ''));
@@ -164,6 +217,11 @@ function validateProcessJson(processJson, options) {
         if (hit) {
           addIssue(errors, node, 'PLACEHOLDER_LITERAL', `${where}：${hit}`);
         }
+      } else {
+        const misuse = detectVarLiteralMisuse(assignment.valueType, assignment.value);
+        if (misuse) {
+          addIssue(errors, node, 'LITERAL_AS_VAR', `${where}：${misuse}`);
+        }
       }
       checkFieldInSchema(node, formUuid, assignment.column, where);
     }
@@ -181,6 +239,24 @@ function validateProcessJson(processJson, options) {
 
   for (const node of nodes) {
     const props = node.props || {};
+
+    // 通用显示名体检：节点描述/展示区残留表单 UUID（表单名回退成 UUID）
+    // 注意：initiateApproval 的 node.description='请设置发起审批'，真实描述在 props.description，
+    // 故两处都必须各自独立检测，不能用 `||` 短路。
+    const displayTexts = [node.description, props.description, node.name].filter((v) => typeof v === 'string');
+    for (const t of displayTexts) {
+      const m = t.match(FORM_UUID_IN_DISPLAY);
+      if (m) {
+        addIssue(errors, node, 'DISPLAY_FORM_NAME_AS_UUID',
+          `节点描述/名称含表单 UUID（${m[0]}），设计器会显示 UUID 而非表单名，请回填真实表单名`);
+        break;
+      }
+    }
+    // 通用发起人 label 体检（select_user 全部节点，含发起审批/循环内发起审批）
+    const initiatorProbe = analyzeInitiatorLabel(props.initiator);
+    if (initiatorProbe) {
+      addIssue(initiatorProbe.level === 'error' ? errors : warnings, node, initiatorProbe.code, initiatorProbe.message);
+    }
 
     switch (node.type) {
       case 'dataRetrieve': {
@@ -355,6 +431,9 @@ async function runCli(args) {
     const content = await getProcess(authRef, { appType, processCode });
     processJson = content.json && typeof content.json === 'object' && Array.isArray(content.json.nodes) ? content.json : {};
     // Fallback: if processJson has no nodes, build from viewJson schema.children
+    // v2.8.22: 递归展平所有嵌套子节点（含条件分支容器 ConditionContainer 的 children）。
+    //   此前只映射顶层 schema.children，条件分支内被引用的获取节点输出（如 ${node}.processInstanceId）
+    //   因嵌套在 ConditionNode 内部而不可见，导致 RETRIEVE_DANGLING 误报"数据流断链"。
     if (!Array.isArray(processJson.nodes) || processJson.nodes.length === 0) {
       if (content.schema && Array.isArray(content.schema.children)) {
         const typeMap = {
@@ -362,10 +441,13 @@ async function runCli(args) {
           GetSingleDataNode: 'dataRetrieve', GetMultipleDataNode: 'dataRetrieve',
           UpdateDataNode: 'dataUpdate', DeleteDataNode: 'dataDelete',
           ScriptNode: 'CodeExecutor', ConditionNode: 'route',
+          ConditionContainer: 'route', ParallelNode: 'route', CycleContainer: 'route',
           ConnectorNode: 'httpConnector', SendMessageNode: 'sendMessage', EndNode: 'finish',
+          InitiateApprovalNode: 'initiateApproval',
         };
-        processJson = {
-          nodes: content.schema.children.map((child) => {
+        const flattenComponents = (components, acc) => {
+          for (const child of components || []) {
+            if (!child || typeof child !== 'object') { continue; }
             const props = child.props || {};
             let flatProps = { ...props };
             if (child.componentName === 'UpdateDataNode' && props.updateDataRules) {
@@ -376,14 +458,35 @@ async function runCli(args) {
               flatProps = { ...props, ...props.addDataRules };
               delete flatProps.addDataRules;
             }
-            return {
+            // GetSingleDataNode/GetBatchDataNode: sourceId/condition 等嵌套在 getData 下
+            if ((child.componentName === 'GetSingleDataNode' || child.componentName === 'GetBatchDataNode') && props.getData) {
+              flatProps = { ...props, ...props.getData };
+              delete flatProps.getData;
+            }
+            // DeleteDataNode: sourceId/type 嵌套在 deleteData 下
+            if (child.componentName === 'DeleteDataNode' && props.deleteData) {
+              flatProps = { ...props, ...props.deleteData };
+              delete flatProps.deleteData;
+            }
+            // InitiateApprovalNode: assignments/initiator 嵌套在 initiateApprovalRules 下
+            if (child.componentName === 'InitiateApprovalNode' && props.initiateApprovalRules) {
+              flatProps = { ...props, ...props.initiateApprovalRules };
+              delete flatProps.initiateApprovalRules;
+            }
+            acc.push({
               type: typeMap[child.componentName] || child.componentName,
               nodeId: child.id,
               name: props.name || props.nodeName || '',
               props: flatProps,
-            };
-          }),
+            });
+            if (Array.isArray(child.children) && child.children.length > 0) {
+              flattenComponents(child.children, acc);
+            }
+          }
         };
+        const fallbackNodes = [];
+        flattenComponents(content.schema.children, fallbackNodes);
+        processJson = { nodes: fallbackNodes };
       }
     }
     source = `${appType}/${processCode}（线上回读）`;

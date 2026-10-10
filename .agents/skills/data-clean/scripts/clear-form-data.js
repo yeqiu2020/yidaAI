@@ -55,7 +55,12 @@ const querystring = require('querystring');
 // Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
 const coreUtils = require('../../../../lib/core/utils');
 
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+// v3.0.2 多项目隔离：PROJECT_ROOT 优先取 YIDA_PROJECT_ROOT（sync_server 注入的目标项目），
+// Cookie 等数据必须跟随目标项目而不是脚本宿主项目
+const SCRIPT_HOST_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const PROJECT_ROOT = (process.env.YIDA_PROJECT_ROOT && fs.existsSync(process.env.YIDA_PROJECT_ROOT))
+  ? process.env.YIDA_PROJECT_ROOT
+  : SCRIPT_HOST_ROOT;
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
 
 /**
@@ -104,9 +109,11 @@ function postRequest(hostname, path, params, cookies, csrfToken) {
     };
 
     const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try {
           const json = JSON.parse(data);
           resolve(json);
@@ -150,9 +157,11 @@ function getRequest(hostname, reqPath, cookies, csrfToken) {
     };
 
     const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try {
           const json = JSON.parse(data);
           resolve(json);

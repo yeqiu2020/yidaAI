@@ -1,11 +1,32 @@
-﻿﻿/**
+/**
  * 统一同步所有配置
- * 版本: 2.9.1
- * 更新日期: 2026-05-17
+ * 版本: 2.11.0
+ * 更新日期: 2026-08-22
  *
  * 更新内容:
+ * - v2.11.0: 【硬防线】目标目录为项目根时拒绝执行（--allow-root 可显式豁免）
+ *            根因：2026-08-21 与 08-22 两次"分组平铺到项目根"事故。
+ *            项目根残留了「课程录制」的系统配置清单.md 后，任何一次
+ *            `node sync_all_configs.js <项目根>`（单参数）调用都会静默从残留清单
+ *            读出课程录制的 appId，把 45 个表单的分组目录平铺到项目根。
+ *            HTTP 端点早有 v3.0.4 同源防线，CLI 入口此前无保护。
+ *
+ * - v2.10.2: 【修复】cleanupEmptyGroups 误删 API 中的空分组
+ *            问题：cleanupEmptyGroups 只根据 forms 数组判断保留哪些分组，
+ *                 但空分组没有表单，不在 forms 中，导致被误删。
+ *            修复：1. 从 sync_config.js 导入 buildGroupTree
+ *                  2. 在 cleanupEmptyGroups 前调用导航 API 获取空分组路径
+ *                  3. 将空分组路径传入 cleanupEmptyGroups 防止被误删
+ *
+ * - v2.10.1: 【新增】支持多层次嵌套分组目录
+ *            问题：sync_config.js v3.13.0 支持了多层次分组（分组内有分组），
+ *                 但 sync_all_configs.js 的查找和创建逻辑未同步更新。
+ *            修复：1. 新增 modulePathToDirPath 函数，将全路径转为嵌套目录路径
+ *                  2. findFormDirectory 支持嵌套分组路径查找
+ *                  3. 表单目录创建时使用嵌套分组路径
+ *                  4. 表单重命名/移动逻辑使用嵌套分组路径
+ *
  * - v2.9.1: 调用sync_config.js v3.7.1+，确保新建应用也能获取流程Code
- *          - 同步时自动补充获取流程表单的流程Code
  * - v2.9.0: 系统配置清单表格添加"流程Code"列
  *          - 调用sync_config.js v3.7.0+生成包含流程Code的系统配置清单
  *          - 流程表单自动获取并写入流程Code
@@ -84,6 +105,9 @@ const {
   cleanupEmptyGroups,
   cleanupOrphanRootFormDirs,
 } = require('../../../../lib/sync-server/form-scanner');
+
+// v2.10.2: 引入 sync_config.js 的 buildGroupTree 函数，用于获取 API 中的空分组路径
+const { buildGroupTree } = require('./sync_config.js');
 
 /**
  * 清理 Schema，转换为 nodeSchema 格式（与 sync-schema.js 保持一致）
@@ -188,7 +212,7 @@ function parseAppIdFromConfig(configPath) {
   
   const content = fs.readFileSync(configPath, 'utf-8');
   // 兼容多种格式：应用编码、应用ID，以及带转义符的格式
-  const appIdMatch = content.match(/\|\s*\*\*(?:应用编码|应用ID)\*\*\s*\|\s*`?(APP[_\\]*[A-Z0-9_\\]+)`?\s*\|/);
+  const appIdMatch = content.match(/\|\s*(?:\*\*)?(?:应用编码|应用ID)(?:\*\*)?\s*\|\s*`?(APP[_\\]*[A-Z0-9_\\]+)`?\s*\|/);
   if (appIdMatch) {
     // 去除可能的转义符
     return appIdMatch[1].replace(/\\/g, '');
@@ -232,22 +256,37 @@ function parseFormsFromConfig(configPath) {
 }
 
 /**
+ * 将分组的全路径转换为带「分组」后缀的目录路径
+ * v2.10.1: 新增，支持多层次嵌套
+ * 例: "业务规则分组/1.主表操作主表" → "业务规则分组「分组」/1.主表操作主表「分组」"
+ */
+function modulePathToDirPath(baseDir, modulePath) {
+  if (!modulePath) return baseDir;
+  const parts = modulePath.split('/');
+  let currentDir = baseDir;
+  for (const part of parts) {
+    currentDir = path.join(currentDir, `${part}「分组」`);
+  }
+  return currentDir;
+}
+
+/**
  * 查找表单目录
- * v2.10.0: 恢复分组目录查找功能，与 sync_config.js v3.8.0+ 对齐
+ * v2.10.1: 支持多层次嵌套分组路径
  * 优先在分组子目录中查找（如果有 module 信息），然后在根目录查找
  * @param {string} formName - 表单名称
  * @param {string} baseDir - 基础目录
  * @param {string} formType - 表单类型（普通表单/流程表单）
- * @param {string|null} module - 所属分组名称（可选）
+ * @param {string|null} module - 所属分组全路径（可选，如"业务规则分组/1.主表操作主表"）
  * @returns {string|null} 表单目录路径
  */
 function findFormDirectory(formName, baseDir, formType = '普通表单', module = null) {
   const expectedFolderName = `${formName}「${formType}」`;
 
-  // 1. 如果有分组信息，优先在带「分组」后缀的子目录中查找
+  // 1. 如果有分组信息，优先在嵌套分组子目录中查找
   if (module) {
-    const groupDirName = `${module}「分组」`;
-    const groupDir = path.join(baseDir, groupDirName);
+    // v2.10.1: 使用 modulePathToDirPath 构建嵌套分组目录路径
+    const groupDir = modulePathToDirPath(baseDir, module);
     if (fs.existsSync(groupDir)) {
       // 精确匹配
       const groupFormPath = path.join(groupDir, expectedFolderName);
@@ -265,11 +304,14 @@ function findFormDirectory(formName, baseDir, formType = '普通表单', module 
         }
       } catch (_) {} // 有意忽略：目录扫描失败时返回 null，调用方有 fallback
     }
-    const oldGroupDir = path.join(baseDir, module);
-    if (fs.existsSync(oldGroupDir)) {
-      const groupFormPath = path.join(oldGroupDir, expectedFolderName);
-      if (fs.existsSync(groupFormPath)) {
-        return groupFormPath;
+    // 向后兼容：旧版单层分组目录（不带「分组」后缀）
+    if (!module.includes('/')) {
+      const oldGroupDir = path.join(baseDir, module);
+      if (fs.existsSync(oldGroupDir)) {
+        const groupFormPath = path.join(oldGroupDir, expectedFolderName);
+        if (fs.existsSync(groupFormPath)) {
+          return groupFormPath;
+        }
       }
     }
   }
@@ -706,19 +748,26 @@ function updateOrgInfoPrototypeUrl(projectRoot) {
  * 主函数
  */
 async function main() {
-  const args = process.argv.slice(2);
-  
+  // v2.11.0: --allow-root 从位置参数中剔除，避免被误当成 appId/appName
+  const { splitAllowRootFlag, assertNotProjectRoot } = require('../../../../lib/sync-server/guard-root');
+  const { args, allowRoot } = splitAllowRootFlag(process.argv.slice(2));
+
   if (args.length < 1) {
-    console.log('用法: node sync_all_configs.js <项目目录> [应用ID] [应用名称]');
+    console.log('用法: node sync_all_configs.js <项目目录> [应用ID] [应用名称] [--allow-root]');
     console.log('示例: node sync_all_configs.js "../../../进销存管理"');
     console.log('');
     console.log('说明:');
     console.log('  - 从系统配置清单读取应用ID和表单UUID');
     console.log('  - 如果提供了应用ID参数，则优先使用参数值');
+    console.log('  - 目标目录为项目根（含 组织及应用信息.md）时会拒绝执行，需 --allow-root 显式豁免');
     process.exit(1);
   }
-  
-  const projectRoot = path.resolve(args[0]);
+
+  // v2.11.0 硬防线（共享模块 lib/sync-server/guard-root.js，与其他同步脚本同源）：
+  // 防的是单参数调用 + 项目根残留系统配置清单.md → 静默读出错误 appId →
+  // 整个应用的表单分组平铺到项目根（2026-08-21/08-22 两次事故根因）。
+  const projectRoot = assertNotProjectRoot(args[0], { allowRoot, scriptName: 'sync_all_configs.js' });
+
   const configPath = path.join(projectRoot, '系统配置清单.md');
   
   // 如果项目目录不存在，自动创建
@@ -751,7 +800,24 @@ async function main() {
   
   // 初始化登录态（与 sync_config.js 使用同一 API 调用方式）
   console.log('🔑 检查登录态...');
-  let cookieData = loadCookieData();
+  // v3.0.7 多项目隔离：从目标应用目录向上定位含 .cookies.json/组织及应用信息.md 的「项目根」，
+  // 显式传给 loadCookieData。否则跨项目操作（脚本在 V2.0.30、目标应用在 V2.0.29）时，
+  // findProjectRoot() 会回溯 __dirname 读到宿主项目的 Cookie，串组织。
+  let cookieProjectRoot = projectRoot;
+  {
+    let cur = projectRoot;
+    for (let i = 0; i < 4 && cur; i++) {
+      if (fs.existsSync(path.join(cur, '.cookies.json')) ||
+          fs.existsSync(path.join(cur, '组织及应用信息.md'))) {
+        cookieProjectRoot = cur;
+        break;
+      }
+      const parent = path.dirname(cur);
+      if (parent === cur) break;
+      cur = parent;
+    }
+  }
+  let cookieData = loadCookieData(cookieProjectRoot);
   if (!cookieData) {
     console.error('❌ 未找到登录态，请先运行登录脚本或通过服务端触发登录');
     process.exit(1);
@@ -788,6 +854,10 @@ async function main() {
           encoding: 'utf-8',
           stdio: 'inherit',
           timeout: 300_000,
+          // v3.0.7 多项目隔离：子脚本 sync_config.js 内 loadCookieData→findProjectRoot
+          // 依赖 YIDA_PROJECT_ROOT，不传则回溯 __dirname 读到宿主项目 Cookie
+          cwd: cookieProjectRoot,
+          env: { ...process.env, YIDA_PROJECT_ROOT: cookieProjectRoot },
         }
       );
       console.log('✅ 系统配置清单同步完成');
@@ -874,11 +944,12 @@ async function main() {
     }
 
     // v2.11.0: UUID 命中但目录名（改名）或所属分组变化 → 重命名/移动目录，避免残留旧目录
+    // v2.10.1: 支持多层次嵌套分组路径
     if (formDir && matchedLocal) {
       const targetTypeStr = formType.includes('流程') ? '流程表单' : '普通表单';
       const targetFolderName = `${formName}「${targetTypeStr}」`;
       const targetDir = form.module
-        ? path.join(projectRoot, `${form.module}「分组」`, targetFolderName)
+        ? path.join(modulePathToDirPath(projectRoot, form.module), targetFolderName)
         : path.join(projectRoot, targetFolderName);
       if (path.resolve(formDir) !== path.resolve(targetDir)) {
         try {
@@ -912,11 +983,11 @@ async function main() {
       actualFormType = typeStr;
       const folderName = `${formName}「${typeStr}」`;
       
-      // v2.10.1: 有分组信息时创建到带「分组」后缀的子目录，与 sync_config.js v3.12.1 逻辑一致
+      // v2.10.1: 有分组信息时创建到嵌套分组子目录，支持多层次分组
       if (form.module) {
-        const groupDirName = `${form.module}「分组」`;
-        formDir = path.join(projectRoot, groupDirName, folderName);
-        console.log(`     📁 创建表单目录：${groupDirName}/${folderName}`);
+        const groupDir = modulePathToDirPath(projectRoot, form.module);
+        formDir = path.join(groupDir, folderName);
+        console.log(`     📁 创建表单目录：${form.module}（分组）/${folderName}`);
       } else {
         formDir = path.join(projectRoot, folderName);
         console.log(`     📁 创建表单目录：${folderName}`);
@@ -991,7 +1062,25 @@ async function main() {
   console.log('\n[步骤2-D] 清理空分组目录...');
   console.log('------------------------------------------------------------');
   try {
-    cleanupEmptyGroups(projectRoot, forms);
+    // v2.10.2: 先获取 API 中的空分组路径，防止被误删
+    let navGroupPaths = [];
+    try {
+      const navResult = await requestWithAutoLogin((auth) => {
+        return getRequest(
+          auth.baseUrl,
+          `/dingtalk/web/${appId}/query/formnav/getFormNavigationListByOrder.json?_api=Nav.queryList&_mock=false`,
+          { _csrf_token: auth.csrfToken, _locale_time_zone_offset: 28800000 },
+          auth.cookies
+        );
+      }, authRef);
+      if (navResult?.success && Array.isArray(navResult.content)) {
+        const { allGroupPaths } = buildGroupTree(navResult.content);
+        navGroupPaths = allGroupPaths || [];
+      }
+    } catch (_) {
+      // 获取分组路径失败时，使用空数组（不会保留空分组，但不会阻塞流程）
+    }
+    cleanupEmptyGroups(projectRoot, forms, navGroupPaths);
   } catch (error) {
     console.log(`⚠️  清理空分组失败: ${error.message}`);
   }
@@ -1016,6 +1105,9 @@ async function main() {
           encoding: 'utf-8',
           stdio: 'inherit',
           timeout: 60_000,
+          // v3.0.7 多项目隔离：生成器内项目根定位跟随目标项目
+          cwd: cookieProjectRoot,
+          env: { ...process.env, YIDA_PROJECT_ROOT: cookieProjectRoot },
         }
       );
       console.log('✅ 原型页面生成完成');

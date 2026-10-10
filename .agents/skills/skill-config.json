@@ -3,7 +3,7 @@
   "_description": "本文件用于配置Skill的全局行为和启用/禁用状态",
   "_dualSource_comment": "双源维护约定：各技能 SKILL.md 的 frontmatter description 是运行时权威面（Agent 实际据此触发），本文件 skills[].description 是索引面（供检索/生成 README 能力表）；修改任一侧描述时必须同步修改另一侧，保持两者一致，禁止只改 config 不改 frontmatter（否则触发词不生效）",
   "version": "2.0.0",
-  "lastUpdated": "2026-07-31",
+  "lastUpdated": "2026-10-01",
   "disabledSkills": [],
   "_exemptedSkills_comment": "豁免登记的目录：不进入 skills 数组，但必须写明豁免理由。校验脚本 scripts/validate-skill-config.js 以此为唯一事实源做反向校验（含 SKILL.md 的目录要么登记、要么在此豁免，否则报错）",
   "exemptedSkills": [
@@ -27,8 +27,16 @@
       "path": ".agents/skills/report",
       "version": "1.5.1",
       "category": "report",
-      "tags": ["宜搭", "报表", "统计图表", "数据可视化", "报表创建", "数据集"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "报表",
+        "统计图表",
+        "数据可视化",
+        "报表创建",
+        "数据集"
+      ],
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "dataset",
@@ -36,8 +44,15 @@
       "path": ".agents/skills/dataset",
       "version": "1.1.0",
       "category": "dataset",
-      "tags": ["宜搭", "数据集", "视图表", "多表关联", "cubeCode"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "数据集",
+        "视图表",
+        "多表关联",
+        "cubeCode"
+      ],
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "data-prep",
@@ -45,8 +60,16 @@
       "path": ".agents/skills/data-prep",
       "version": "1.1.0",
       "category": "dataset",
-      "tags": ["宜搭", "数据准备", "ETL", "数据加工", "数据流", "cubeCode"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "数据准备",
+        "ETL",
+        "数据加工",
+        "数据流",
+        "cubeCode"
+      ],
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "form-settings",
@@ -54,8 +77,15 @@
       "path": ".agents/skills/form-settings",
       "version": "2.0.0",
       "category": "form-configuration",
-      "tags": ["宜搭", "表单设置", "数据标题", "复制流程", "表单配置"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "表单设置",
+        "数据标题",
+        "复制流程",
+        "表单配置"
+      ],
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "flow-to-form",
@@ -63,15 +93,17 @@
       "path": ".agents/skills/flow-to-form",
       "version": "1.0.2",
       "category": "form-generation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "form-to-prototype",
       "description": "根据字段清单自动生成HTML原型页面。当用户说'生成原型'、'创建HTML原型'、'表单原型'、'预览表单界面'、'生成界面原型'时触发此skill。模拟宜搭表单界面风格，支持字段ID显示和点击复制、同步配置等功能。",
       "path": ".agents/skills/form-to-prototype",
-      "version": "2.8.0",
+      "version": "2.41.0",
       "category": "prototype-generation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "project-creator",
@@ -79,7 +111,8 @@
       "path": ".agents/skills/project-creator",
       "version": "2.2.0",
       "category": "project-creation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "form_creator",
@@ -87,7 +120,8 @@
       "path": ".agents/skills/form_creator",
       "version": "6.23.0",
       "category": "form-generation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "architect",
@@ -95,19 +129,34 @@
       "path": ".agents/skills/architect",
       "version": "1.5.0",
       "category": "低代码开发",
-      "tags": ["宜搭", "低代码", "表单设计", "业务流程", "系统架构"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "低代码",
+        "表单设计",
+        "业务流程",
+        "系统架构"
+      ],
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "code-expert",
       "description": "宜搭低代码平台代码开发专家。当用户说'写代码'、'生成代码'、'表单动作代码'、'字段校验代码'、'跨表单代码'、'自定义页面代码'、'集成自动化代码'时触发。生成表单动作代码、字段校验规则、自动化脚本、自定义页面代码。注意：仅当用户明确要求编写宜搭JS代码时触发，讨论代码概念或查看代码时不触发。",
       "path": ".agents/skills/code-expert",
-      "version": "2.7.0",
+      "version": "2.14.0",
       "author": "叶秋",
       "contact": "15270209736",
       "source": "www.yidatrain.com",
-      "tags": ["宜搭", "低代码", "JavaScript", "表单开发", "流程自动化", "代码生成"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "低代码",
+        "JavaScript",
+        "表单开发",
+        "流程自动化",
+        "代码生成"
+      ],
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "prompt-assistant",
@@ -115,8 +164,15 @@
       "path": ".agents/skills/prompt-assistant",
       "version": "2.7.0",
       "category": "prompt-generation",
-      "tags": ["宜搭", "提示词", "公式", "代码", "模板"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "提示词",
+        "公式",
+        "代码",
+        "模板"
+      ],
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "formula-generator",
@@ -126,8 +182,14 @@
       "author": "叶秋",
       "contact": "15270209736",
       "source": "www.yidatrain.com",
-      "tags": ["宜搭", "公式", "计算", "marks"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "公式",
+        "计算",
+        "marks"
+      ],
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "api-client",
@@ -135,8 +197,15 @@
       "path": ".agents/skills/api-client",
       "version": "1.1.0",
       "category": "api-integration",
-      "tags": ["宜搭", "API", "登录", "应用创建", "表单创建"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "API",
+        "登录",
+        "应用创建",
+        "表单创建"
+      ],
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "feedback-collector",
@@ -144,7 +213,8 @@
       "path": ".agents/skills/feedback-collector",
       "version": "1.2.3",
       "category": "feedback",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "form_designer",
@@ -152,7 +222,8 @@
       "path": ".agents/skills/form_designer",
       "version": "2.2.1",
       "category": "form-generation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "js-action-tester",
@@ -160,7 +231,8 @@
       "path": ".agents/skills/js-action-tester",
       "version": "1.0.77",
       "category": "testing",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "org-init",
@@ -168,7 +240,8 @@
       "path": ".agents/skills/org-init",
       "version": "1.4.0",
       "category": "configuration",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "simulated-login",
@@ -176,7 +249,8 @@
       "path": ".agents/skills/simulated-login",
       "version": "1.3.1",
       "category": "authentication",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "skill-creator",
@@ -184,15 +258,17 @@
       "path": ".agents/skills/skill-creator",
       "version": "1.0.0",
       "category": "skill-development",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "config-sync",
       "description": "宜搭应用配置同步工具。当用户说'同步配置'、'同步表单列表'、'获取组件ID'、'同步应用ID'时触发。从宜搭平台获取应用ID、表单UUID、流程Code以及表单内组件ID，自动生成系统配置清单和组件ID清单。注意：本Skill只同步配置信息（ID、UUID），不同步业务规则。说'同步规则'时触发 rule-sync，说'一站式同步'时触发 project-sync。",
       "path": ".agents/skills/config-sync",
-      "version": "3.13.1",
+      "version": "3.21.0",
       "category": "configuration",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "data-tester",
@@ -200,7 +276,8 @@
       "path": ".agents/skills/data-tester",
       "version": "3.1.0",
       "category": "testing",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "get-schema",
@@ -211,7 +288,8 @@
       "contact": "15270209736",
       "source": "www.yidatrain.com",
       "category": "configuration",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "project-sync",
@@ -219,7 +297,8 @@
       "path": ".agents/skills/project-sync",
       "version": "1.0.0",
       "category": "configuration",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "rule-sync",
@@ -227,7 +306,8 @@
       "path": ".agents/skills/rule-sync",
       "version": "1.0.1",
       "category": "configuration",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "system-map",
@@ -235,15 +315,17 @@
       "path": ".agents/skills/system-map",
       "version": "4.0.0",
       "category": "documentation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "server-manager",
       "description": "宜搭服务管理器 - 一键启动和管理宜搭开发所需的本地服务。当用户需要启动宜搭原型页面访问服务、启动同步配置服务、检查服务状态、或遇到'同步服务未启动'、'同步配置按钮不能用'、'无法访问原型页面'等问题时，立即调用此skill。适用于所有宜搭应用的原型页面预览和配置同步场景。触发词：'启动宜搭服务'、'启动同步服务'、'启动HTTP服务'、'服务没启动'、'同步配置失败'、'启动原型页面服务'。",
       "path": ".agents/skills/server-manager",
-      "version": "2.2.0",
+      "version": "2.2.2",
       "category": "server-management",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "flow-settings",
@@ -251,8 +333,15 @@
       "path": ".agents/skills/flow-settings",
       "version": "2.3.0",
       "category": "flow-configuration",
-      "tags": ["宜搭", "流程配置", "自动审批", "流程设置", "批量配置"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "流程配置",
+        "自动审批",
+        "流程设置",
+        "批量配置"
+      ],
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "data-clean",
@@ -260,15 +349,17 @@
       "path": ".agents/skills/data-clean",
       "version": "1.0.0",
       "category": "data-management",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "integration",
-      "description": "宜搭集成自动化（逻辑流）管理工具。当用户说'集成自动化'、'创建自动化'、'逻辑流'、'创建逻辑流'、'自动化规则'、'表单触发'、'消息通知'、'连接器调用'、'获取自身'、'发起审批'、'体检逻辑流'、'检查自动化配置'时触发。通过API创建、修改、查询、启停集成自动化，支持表单事件触发、获取自身、获取单条/多条数据、新增数据、发起审批、连接器调用、消息通知等节点。自带保存前体检门禁（拦截占位符/空壳节点/空公式/断链），并可审计任意已有逻辑流（含其他AI/设计器创建的）。禁止手写 processJson/viewJson 或直调 saveProcess 接口。",
+      "description": "宜搭集成自动化（逻辑流）管理工具。当用户说'集成自动化'、'自动化'、'自动化规则'、'创建自动化'、'逻辑流'、'创建逻辑流'、'体检逻辑流'、'检查自动化配置'、'表单触发'、'消息通知'、'连接器调用'、'获取自身'、'发起审批'时触发。通过API创建、修改、查询、启停集成自动化，支持表单事件触发、获取自身、获取单条/多条数据、新增数据、发起审批、连接器调用、消息通知等节点。自带保存前体检门禁（拦截占位符/空壳节点/空公式/断链），并可审计任意已有逻辑流（含其他AI/设计器创建的）。🔴 与 business-rule（业务关联规则）严格区分：说'业务规则'、'业务关联规则'（表单事件/流程节点提交规则里的跨表增删改）时触发 business-rule，不要触发本Skill；同一场景两类机制并存会双重执行。禁止手写 processJson/viewJson 或直调 saveProcess 接口。",
       "path": ".agents/skills/integration",
       "version": "2.5.0",
       "category": "automation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "excel-to-form",
@@ -276,7 +367,8 @@
       "path": ".agents/skills/excel-to-form",
       "version": "1.4.0",
       "category": "form-generation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "system-troubleshooter",
@@ -284,7 +376,8 @@
       "path": ".agents/skills/system-troubleshooter",
       "version": "1.0.0",
       "category": "troubleshooting",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "playwright-cli",
@@ -292,7 +385,8 @@
       "path": ".agents/skills/playwright-cli",
       "version": "1.0.0",
       "category": "browser-automation",
-      "enabled": true
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "custom-page",
@@ -300,17 +394,35 @@
       "path": ".agents/skills/custom-page",
       "version": "1.0.0",
       "category": "custom-page",
-      "tags": ["宜搭", "自定义页面", "JSX", "renderJsx", "页面代码", "页面交互"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "自定义页面",
+        "JSX",
+        "renderJsx",
+        "页面代码",
+        "页面交互"
+      ],
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "business-rule",
-      "description": "宜搭表单业务关联规则（跨表高级函数）配置技能。当用户说'业务关联规则'、'表单事件公式执行'、'高级函数'、'INSERT'、'UPDATE'、'DELETE'、'UPSERT'、'跨表增删改'、'提交后改其他表'、'单据提交联动'时触发。使用 INSERT/UPDATE/DELETE/UPSERT 实现跨表新增/更新/删除。注意：区别于 integration（集成自动化/逻辑流）与 formula-generator（字段公式），本Skill专指表单设置→表单事件→公式执行里的业务关联规则高级函数。",
+      "description": "宜搭表单业务关联规则（跨表高级函数）配置技能。当用户说'业务关联规则'、'业务规则'、'表单事件公式执行'、'高级函数'、'INSERT'、'UPDATE'、'DELETE'、'UPSERT'、'跨表增删改'、'提交后改其他表'、'单据提交联动'时触发。使用 INSERT/UPDATE/DELETE/UPSERT 实现跨表新增/更新/删除。流程表单作为触发表单完全支持（走流程设计→全局设置→节点提交规则，节点类型选'结束'+节点动作'同意'，即审批通过后触发）。注意：与 integration（集成自动化/逻辑流）严格区分，同一触发场景二者互斥、并存会双重执行；说'集成自动化'、'自动化'、'自动化规则'、'逻辑流'时触发 integration，说'写字段公式'时触发 formula-generator，说'同步/导出规则'时触发 rule-sync。",
       "path": ".agents/skills/business-rule",
       "version": "3.0.1",
       "category": "form-configuration",
-      "tags": ["宜搭", "业务关联规则", "高级函数", "跨表", "INSERT", "UPSERT", "表单事件"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "业务关联规则",
+        "业务规则",
+        "高级函数",
+        "跨表",
+        "INSERT",
+        "UPSERT",
+        "表单事件"
+      ],
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     },
     {
       "name": "auth-plus",
@@ -318,8 +430,15 @@
       "path": ".agents/skills/auth-plus",
       "version": "1.0.0",
       "category": "authentication",
-      "tags": ["宜搭", "登录", "认证", "CDP", "Cookie"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "登录",
+        "认证",
+        "CDP",
+        "Cookie"
+      ],
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "connector",
@@ -327,8 +446,15 @@
       "path": ".agents/skills/connector",
       "version": "1.0.0",
       "category": "api-integration",
-      "tags": ["宜搭", "连接器", "HTTP", "外部接口", "鉴权"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "连接器",
+        "HTTP",
+        "外部接口",
+        "鉴权"
+      ],
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "data-backup",
@@ -336,8 +462,15 @@
       "path": ".agents/skills/data-backup",
       "version": "1.0.0",
       "category": "data-management",
-      "tags": ["宜搭", "数据备份", "导出数据", "JSON", "Excel"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "数据备份",
+        "导出数据",
+        "JSON",
+        "Excel"
+      ],
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "er-diagram",
@@ -345,8 +478,15 @@
       "path": ".agents/skills/er-diagram",
       "version": "1.0.0",
       "category": "documentation",
-      "tags": ["宜搭", "ER图", "表单关系", "mermaid", "数据架构"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "ER图",
+        "表单关系",
+        "mermaid",
+        "数据架构"
+      ],
+      "enabled": true,
+      "verifyStatus": "offline-unit"
     },
     {
       "name": "publish-guard",
@@ -354,8 +494,15 @@
       "path": ".agents/skills/publish-guard",
       "version": "1.0.0",
       "category": "custom-page",
-      "tags": ["宜搭", "自定义页面", "发布", "守卫", "diff"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "自定义页面",
+        "发布",
+        "守卫",
+        "diff"
+      ],
+      "enabled": true,
+      "verifyStatus": "opt-in"
     },
     {
       "name": "server-security",
@@ -363,8 +510,46 @@
       "path": ".agents/skills/server-security",
       "version": "1.0.0",
       "category": "server-management",
-      "tags": ["宜搭", "本地服务", "安全加固", "CORS", "token"],
-      "enabled": true
+      "tags": [
+        "宜搭",
+        "本地服务",
+        "安全加固",
+        "CORS",
+        "token"
+      ],
+      "enabled": true,
+      "verifyStatus": "opt-in"
+    },
+    {
+      "name": "yida-consultant",
+      "description": "宜搭问题诊断与修复闭环专家（大管家）。仅当用户同时给出宜搭上下文（宜搭、表单、公式、组件ID、JS代码、业务规则、集成自动化、连接器、流程、数据提交等）和诊断意图（为什么不生效、报错什么原因、保存成功但不执行、计算结果不对、哪里错了、对不对）时触发。接收宜搭相关问题，综合各 Skill 知识进行诊断分析，给出根因和修复方案（含正确写法）。必要时调用其他 Skill 验证。经用户同意后可调用执行型 Skill 修复。注意：不接管\"写公式\"、\"创建表单\"、\"配置集成自动化\"等执行型任务——这些交给对应执行型 Skill。",
+      "path": ".agents/skills/yida-consultant",
+      "version": "1.0.2",
+      "category": "troubleshooting",
+      "tags": [
+        "诊断",
+        "问题排查",
+        "宜搭咨询"
+      ],
+      "enabled": true,
+      "verifyStatus": "offline-unit"
+    },
+    {
+      "name": "cool-card",
+      "description": "宜搭酷卡片（发送卡片/更新卡片节点）自动化构建技能。在指定应用中创建含「发送卡片」节点的集成自动化并验证卡片送达。🟢 首选：scripts/card-flow-cli.js 全 API 路线（克隆金标准流程→saveProcess→publish，一条命令建卡片流程）；浏览器自动化（弹层放置协议）作为备选与修改既有流程的手段。支持交互卡片和置顶卡片两种类型，支持发送到人和发送到群。当用户说\"做酷卡片\"、\"发卡片\"、\"卡片自动化\"、\"发送卡片给XX\"、\"卡片推送\"、\"订阅卡片\"等时触发。🔴 结构铁律：processJson 的 sendCard 节点 props 是 cardRules 22 键直接平铺（OpenYida 包裹形式报解析异常）；前置条件：酷应用须发布到自建酷应用中心+用户在钉钉群内启用。必读 references/全链路实操手册.md。",
+      "path": ".agents/skills/cool-card",
+      "version": "2.0.0",
+      "category": "integration",
+      "tags": [
+        "宜搭",
+        "酷卡片",
+        "发送卡片",
+        "卡片自动化",
+        "集成自动化",
+        "消息推送"
+      ],
+      "enabled": true,
+      "verifyStatus": "real-e2e"
     }
   ],
   "_disambiguationGroups_comment": "易混技能消歧组（集中负信号）。由 scripts/generate-skill-index.js 渲染为 README 《易混技能消歧表》。when=用户意图，use=应触发技能，not=易被误触发但不该用的技能",
@@ -372,67 +557,171 @@
     {
       "topic": "公式 / 代码 / 提示词 / 规则",
       "rules": [
-        { "when": "写字段公式、报表公式、计算公式", "use": "formula-generator", "not": "code-expert / prompt-assistant" },
-        { "when": "写 JS 动作、字段校验、自动化脚本、自定义页面代码", "use": "code-expert", "not": "formula-generator / prompt-assistant" },
-        { "when": "只要生成规范提示词文件、不要直接出成品", "use": "prompt-assistant", "not": "code-expert / formula-generator" },
-        { "when": "跨表增删改（INSERT/UPDATE/DELETE/UPSERT）、单据提交后改其他表", "use": "business-rule", "not": "integration / formula-generator" },
-        { "when": "逻辑流、消息通知、定时触发、连接器调用等自动化", "use": "integration", "not": "business-rule" }
+        {
+          "when": "写字段公式、报表公式、计算公式",
+          "use": "formula-generator",
+          "not": "code-expert / prompt-assistant"
+        },
+        {
+          "when": "写 JS 动作、字段校验、自动化脚本、自定义页面代码",
+          "use": "code-expert",
+          "not": "formula-generator / prompt-assistant"
+        },
+        {
+          "when": "只要生成规范提示词文件、不要直接出成品",
+          "use": "prompt-assistant",
+          "not": "code-expert / formula-generator"
+        },
+        {
+          "when": "业务规则、业务关联规则（表单事件/流程节点提交规则里的跨表增删改 INSERT/UPDATE/DELETE/UPSERT、单据提交后改其他表）",
+          "use": "business-rule",
+          "not": "integration / formula-generator"
+        },
+        {
+          "when": "集成自动化、自动化、自动化规则（画布式逻辑流：消息通知、定时触发、连接器调用等）",
+          "use": "integration",
+          "not": "business-rule"
+        }
       ]
     },
     {
       "topic": "建项目 / 设计表单 / 生成表单",
       "rules": [
-        { "when": "创建项目、新建 XX 系统（只建目录结构、不建表单）", "use": "project-creator", "not": "form_creator" },
-        { "when": "在某目录下设计表单字段（只改本地文档、不调用宜搭）", "use": "form_designer", "not": "form_creator" },
-        { "when": "生成表单、创建应用（真正生成宜搭表单并部署）", "use": "form_creator", "not": "form_designer / project-creator" }
+        {
+          "when": "创建项目、新建 XX 系统（只建目录结构、不建表单）",
+          "use": "project-creator",
+          "not": "form_creator"
+        },
+        {
+          "when": "在某目录下设计表单字段（只改本地文档、不调用宜搭）",
+          "use": "form_designer",
+          "not": "form_creator"
+        },
+        {
+          "when": "生成表单、创建应用（真正生成宜搭表单并部署）",
+          "use": "form_creator",
+          "not": "form_designer / project-creator"
+        }
       ]
     },
     {
       "topic": "测试 / 清空数据",
       "rules": [
-        { "when": "测试表单、生成测试数据、批量插入数据、验证公式/校验规则", "use": "data-tester", "not": "js-action-tester / data-clean" },
-        { "when": "测试表单内 JS 动作代码、字段联动代码", "use": "js-action-tester", "not": "data-tester" },
-        { "when": "清空数据、删除数据、批量删除（保留表结构）", "use": "data-clean", "not": "data-tester" }
+        {
+          "when": "测试表单、生成测试数据、批量插入数据、验证公式/校验规则",
+          "use": "data-tester",
+          "not": "js-action-tester / data-clean"
+        },
+        {
+          "when": "测试表单内 JS 动作代码、字段联动代码",
+          "use": "js-action-tester",
+          "not": "data-tester"
+        },
+        {
+          "when": "清空数据、删除数据、批量删除（保留表结构）",
+          "use": "data-clean",
+          "not": "data-tester"
+        }
       ]
     },
     {
       "topic": "同步类（拉取宜搭→本地）",
       "rules": [
-        { "when": "同步配置：应用ID、表单UUID、组件ID", "use": "config-sync", "not": "rule-sync / get-schema" },
-        { "when": "同步表单 Schema 结构、导出表单 JSON", "use": "get-schema", "not": "config-sync" },
-        { "when": "同步业务规则（公式/联动/校验/动作代码，只读）", "use": "rule-sync", "not": "config-sync" },
-        { "when": "一站式/一键/完整同步整个项目", "use": "project-sync", "not": "config-sync / rule-sync / get-schema" }
+        {
+          "when": "同步配置：应用ID、表单UUID、组件ID",
+          "use": "config-sync",
+          "not": "rule-sync / get-schema"
+        },
+        {
+          "when": "同步表单 Schema 结构、导出表单 JSON",
+          "use": "get-schema",
+          "not": "config-sync"
+        },
+        {
+          "when": "同步业务规则（公式/联动/校验/动作代码，只读）",
+          "use": "rule-sync",
+          "not": "config-sync"
+        },
+        {
+          "when": "一站式/一键/完整同步整个项目",
+          "use": "project-sync",
+          "not": "config-sync / rule-sync / get-schema"
+        }
       ]
     },
     {
       "topic": "报表 / 数据集 / 数据准备",
       "rules": [
-        { "when": "创建报表、图表、数据看板（可视化展示）", "use": "report", "not": "dataset / data-prep" },
-        { "when": "创建视图表、多表联合查询、把多表合成一表", "use": "dataset", "not": "data-prep / report" },
-        { "when": "可视化 ETL、数据加工/清洗/聚合、数据流", "use": "data-prep", "not": "dataset" }
+        {
+          "when": "创建报表、图表、数据看板（可视化展示）",
+          "use": "report",
+          "not": "dataset / data-prep"
+        },
+        {
+          "when": "创建视图表、多表联合查询、把多表合成一表",
+          "use": "dataset",
+          "not": "data-prep / report"
+        },
+        {
+          "when": "可视化 ETL、数据加工/清洗/聚合、数据流",
+          "use": "data-prep",
+          "not": "dataset"
+        }
       ]
     },
     {
       "topic": "原型 / 自定义页面",
       "rules": [
-        { "when": "生成 HTML 原型、预览界面（不写真实页面代码）", "use": "form-to-prototype", "not": "custom-page" },
-        { "when": "写真实自定义页面 JSX 代码并发布到宜搭", "use": "custom-page", "not": "form-to-prototype" }
+        {
+          "when": "生成 HTML 原型、预览界面（不写真实页面代码）",
+          "use": "form-to-prototype",
+          "not": "custom-page"
+        },
+        {
+          "when": "写真实自定义页面 JSX 代码并发布到宜搭",
+          "use": "custom-page",
+          "not": "form-to-prototype"
+        }
       ]
     },
     {
       "topic": "需求输入→字段清单",
       "rules": [
-        { "when": "上传流程图/思维导图截图转字段清单", "use": "flow-to-form", "not": "excel-to-form / architect" },
-        { "when": "把 Excel 表格转字段清单 + 规则清单", "use": "excel-to-form", "not": "flow-to-form" },
-        { "when": "模糊业务需求要梳理成架构/字段/自动化规则", "use": "architect", "not": "flow-to-form / excel-to-form" }
+        {
+          "when": "上传流程图/思维导图截图转字段清单",
+          "use": "flow-to-form",
+          "not": "excel-to-form / architect"
+        },
+        {
+          "when": "把 Excel 表格转字段清单 + 规则清单",
+          "use": "excel-to-form",
+          "not": "flow-to-form"
+        },
+        {
+          "when": "模糊业务需求要梳理成架构/字段/自动化规则",
+          "use": "architect",
+          "not": "flow-to-form / excel-to-form"
+        }
       ]
     },
     {
       "topic": "登录 / 认证",
       "rules": [
-        { "when": "登录宜搭、获取/刷新登录态、Cookie失效重新认证（默认多策略：CDP/环境变量/二维码/Playwright降级）", "use": "auth-plus", "not": "simulated-login / api-client" },
-        { "when": "明确要求可视化浏览器登录流程（看到浏览器操作、点击'立即登录'、手动选择组织）", "use": "simulated-login", "not": "auth-plus / api-client" },
-        { "when": "仅程序化调用宜搭API（静默登录仅作为API调用的前置能力，不以登录为目的）", "use": "api-client", "not": "auth-plus / simulated-login" }
+        {
+          "when": "登录宜搭、获取/刷新登录态、Cookie失效重新认证（默认多策略：CDP/环境变量/二维码/Playwright降级）",
+          "use": "auth-plus",
+          "not": "simulated-login / api-client"
+        },
+        {
+          "when": "明确要求可视化浏览器登录流程（看到浏览器操作、点击'立即登录'、手动选择组织）",
+          "use": "simulated-login",
+          "not": "auth-plus / api-client"
+        },
+        {
+          "when": "仅程序化调用宜搭API（静默登录仅作为API调用的前置能力，不以登录为目的）",
+          "use": "api-client",
+          "not": "auth-plus / simulated-login"
+        }
       ]
     }
   ],
@@ -440,5 +729,6 @@
     "autoUpdateVersion": true,
     "defaultOutputBasePath": "03项目交付物",
     "caseLibraryPath": "02宜搭场景案例库"
-  }
+  },
+  "_verifyStatus_comment": "验证状态（P0-7，2026-09-28）：real-e2e=真实环境验证 / offline-unit=离线或单元验证 / opt-in=选择性验证（候选轨、部分能力待回归或特定场景触发） / deprecated=已废弃。新增 Skill 必须同时登记 verifyStatus，未登记视为未验证。全量依据与证据位置见 docs/Skill验证状态清单.md；豁免目录（hello-world-custom/skill-self-improve/knowledge-base）不适用四分类，理由见 exemptedSkills。"
 }

@@ -6,10 +6,11 @@ const { loadCookieData, resolveBaseUrl } = coreUtils;
 const { appendGateBypassAudit } = require('../../../../lib/core/gate-audit');
 const { triggerLogin } = require(path.resolve(__dirname, '../../api-client/scripts/api_client'));
 const { generateNodeId } = require('./integration-node-ids');
-const { getFormSchema, getFormType, createLogicflow, saveProcess } = require('./integration-api');
-const { mapEventTypes, buildProcessJson, resolveConnectorMode } = require('./integration-process-builder');
+const { getFormSchema, getFormType, getFormName, createLogicflow, saveProcess } = require('./integration-api');
+const { mapEventTypes, buildProcessJson, resolveConnectorMode, buildExistenceBranchCondition } = require('./integration-process-builder');
 const { buildViewJson } = require('./integration-view-builder');
 const { validateProcessJson, formatReport } = require('./integration-validate');
+const { loadSpecArgs } = require('./integration-spec');
 
 function parseFlag(args, flagName) {
   const index = args.indexOf(flagName);
@@ -39,6 +40,23 @@ function parseAssignments(args, flagName) {
     }
   }
   return assignments;
+}
+
+/**
+ * 从条件段的 parts 中容错提取 valueType。
+ * 兼容某几个参数的两种写法：
+ *   - 单冒号：...:opCode:valueType     （valueType 取 parts[5]）
+ *   - 双冒号：...:opCode::valueType     （valueType 取 parts[6]，parts[5] 为空）
+ * 修复 v2.8.17 单冒号坑：`Contain::literal` 双冒号时若只读 parts[5] 会取到空串
+ * 再回退成默认 processVar，导致"已完成"这类字面量被误当变量引用。
+ * 注意：update-condition 系列（7 段，含 opValue=parts[5]）不适用本函数，
+ * 其 valueType 固定为 parts[6]；本函数仅用于 6 段式条件（data/trigger/branch）。
+ */
+function pickValueType(parts) {
+  for (let i = 5; i <= 6; i++) {
+    if (parts[i] && parts[i].trim() !== '') return parts[i].trim();
+  }
+  return '';
 }
 
 function buildSelectUserInitiator(rawValue) {
@@ -89,7 +107,7 @@ async function run(args) {
     console.error('  --add-data-type <type>             新增条数: single(默认)/batch(多条,需--add-data-source-id)');
     console.error('  --add-data-source-id <id>          批量新增数据源（触发子表字段ID或get表示前置获取节点）');
     console.error('  --initiate-approval-form-uuid <uuid>  发起审批目标流程表单');
-    console.error('  --initiate-approval-initiator-user <userId[:name]>  发起审批的发起人');
+    console.error('  --initiate-approval-initiator-user <userId[:name]>  发起审批的发起人（缺省=当前登录用户/开发者）');
     console.error('  --initiate-approval-assignment <assign>  发起审批字段赋值（可多次）');
     console.error('  --update-form-uuid <uuid>          更新数据目标表单');
     console.error('  --update-condition <cond>          更新数据主条件（可多次）');
@@ -207,11 +225,58 @@ async function run(args) {
 
   // 获取数据节点参数
   const dataFormUuid = getSelf ? formUuid : (parseFlag(subArgs, '--data-form-uuid') || null);
-  const dataQueryType = parseFlag(subArgs, '--data-query-type') || 'single';
-  const dataQuantity = parseInt(parseFlag(subArgs, '--data-quantity') || '100', 10);
   // 数据来源类型：form(默认,从指定表单查询) 或 subform(从触发数据子表获取)
   const dataSourceType = parseFlag(subArgs, '--data-source-type') || 'form';
   const dataSubFieldId = parseFlag(subArgs, '--data-sub-field-id') || '';
+  // subform 模式下从触发子表获取数据，本质是获取多行，强制 dataQueryType=multiple
+  const dataQueryType = dataSourceType === 'subform'
+    ? 'multiple'
+    : (parseFlag(subArgs, '--data-query-type') || 'single');
+  const dataQuantity = parseInt(parseFlag(subArgs, '--data-quantity') || '100', 10);
+  // v2.8.5: 级联子表删除——获取目标表单子表数据
+  const dataSubSourceId = parseFlag(subArgs, '--data-sub-source-id') || '';
+  const dataSubConditions = [];
+  for (let index = 0; index < subArgs.length; index++) {
+    if (subArgs[index] === '--data-sub-condition' && subArgs[index + 1]) {
+      const parts = subArgs[index + 1].split(':');
+      if (parts.length >= 3) {
+        dataSubConditions.push({
+          bFieldId: parts[0],
+          bFieldName: parts[1],
+          aFieldId: parts[2],
+          componentType: parts[3] || 'TextField',
+          opCode: parts[4] || 'Equal',
+          valueType: pickValueType(parts) || 'processVar',
+        });
+      }
+      index++;
+    }
+  }
+  // 链式获取模式：有子表来源+子表条件时启用 5 节点 cascade
+  const isChainMode = dataSubSourceId !== '' && dataSubConditions.length > 0;
+  // v2.8.7: 目标表单子表直接获取模式——有 --data-sub-source-id 但无 --data-sub-condition 时，
+  // 获取节点直接从【目标表单】的子表获取（originalType=sub_table, sourceId=#{目标表单}, subSourceId=目标子表）
+  // 区别于 subform（触发数据子表）与 chain（先取主表再取子表）
+  const isSubFormTarget = dataSubSourceId !== '' && dataSubConditions.length === 0;
+
+  // 删除子表条件
+  const deleteSubConditions = [];
+  for (let index = 0; index < subArgs.length; index++) {
+    if (subArgs[index] === '--delete-sub-condition' && subArgs[index + 1]) {
+      const parts = subArgs[index + 1].split(':');
+      if (parts.length >= 3) {
+        deleteSubConditions.push({
+          bFieldId: parts[0],
+          bFieldName: parts[1],
+          aFieldId: parts[2],
+          componentType: parts[3] || 'TextField',
+          opCode: parts[4] || 'Equal',
+          valueType: pickValueType(parts) || 'processVar',
+        });
+      }
+      index++;
+    }
+  }
 
   const dataConditions = [];
   if (getSelf) {
@@ -234,7 +299,7 @@ async function run(args) {
           aFieldId: parts[2],
           componentType: parts[3] || 'TextField',
           opCode: parts[4] || 'Contain',
-          valueType: parts[5] || 'processVar',
+          valueType: pickValueType(parts) || 'processVar',
         });
       }
       index++;
@@ -254,7 +319,7 @@ async function run(args) {
           opCode: parts[2],
           value: parts[3],
           componentType: parts[4] || 'TextField',
-          valueType: parts[5] || 'literal',
+          valueType: pickValueType(parts) || 'literal',
         });
       }
       index++;
@@ -280,15 +345,12 @@ async function run(args) {
 
   // 发起审批节点参数
   const initiateApprovalFormUuid = parseFlag(subArgs, '--initiate-approval-form-uuid') || null;
-  const initiateApprovalInitiator = buildSelectUserInitiator(
+  let initiateApprovalInitiator = buildSelectUserInitiator(
     parseFlag(subArgs, '--initiate-approval-initiator-user') || ''
   );
   const initiateApprovalAssignments = parseAssignments(subArgs, '--initiate-approval-assignment');
 
-  if (initiateApprovalFormUuid && !initiateApprovalInitiator) {
-    console.error('错误: 发起审批节点必须提供 --initiate-approval-initiator-user userId[:name]');
-    process.exit(1);
-  }
+  // 发起人允许缺省：登录态加载后默认使用当前登录用户（开发者），见下方 authRef 构建处
 
   // 更新数据节点参数（direct_form 已上线验证；node 模式需前置获取节点）
   const updateFormUuid = parseFlag(subArgs, '--update-form-uuid') || null;
@@ -328,8 +390,17 @@ async function run(args) {
   // 场景：遍历触发子表行，逐行 UPSERT 目标表单记录
   const cycleUpdateFormUuid = parseFlag(subArgs, '--cycle-update-form-uuid') || null;
   const cycleUpdateConditions = parseUpdateConditionList('--cycle-update-condition');
-  const cycleUpdateAssignments = parseAssignments(subArgs, '--cycle-update-assignment');
+  const cycleUpdateAssignments = parseAssignments(subArgs, '--cycle-assignment');
   const cycleUpdateNoneOperation = (parseFlag(subArgs, '--cycle-update-none-operation') || 'ignored') === 'add' ? 'add' : 'ignored';
+
+  // 循环体内发起审批节点参数（用于 --cycle + --cycle-initiate-approval-form-uuid 组合）
+  // 场景：遍历触发子表行，逐行向目标流程表单发起审批
+  // 参数格式：--cycle-initiate-approval-assignment "目标字段ID:processVar:源字段ID"（两个冒号，规则11）
+  const cycleInitiateApprovalFormUuid = parseFlag(subArgs, '--cycle-initiate-approval-form-uuid') || null;
+  let cycleInitiateApprovalInitiator = buildSelectUserInitiator(
+    parseFlag(subArgs, '--cycle-initiate-approval-initiator-user') || ''
+  );
+  const cycleInitiateApprovalAssignments = parseAssignments(subArgs, '--cycle-initiate-approval-assignment');
 
   // 删除数据节点参数（官方语义：删除前必须先用获取数据节点拿到数据）
   const hasDeleteDataNode = hasFlag(subArgs, '--delete-data');
@@ -376,7 +447,7 @@ async function run(args) {
           opCode: parts[2],
           value: parts[3],
           componentType: parts[4] || 'TextField',
-          valueType: parts[5] || 'literal',
+          valueType: pickValueType(parts) || 'literal',
         });
       }
       index++;
@@ -392,6 +463,30 @@ async function run(args) {
     valueType: branchValueType,
   } : null;
   const hasConditionNode = branchConditions.length > 0 || Boolean(branchCondition);
+
+  // v2.8.13: 条件分支upsert模式——获取单条→条件判断→[有值:更新 / 没有值:发起审批]
+  // 自动生成 HasValue 条件（检查获取数据节点的匹配字段是否有值），无需手动传 --branch-* 参数
+  const conditionalUpsert = hasFlag(subArgs, '--conditional-upsert');
+  if (conditionalUpsert) {
+    if (!dataFormUuid || dataQueryType !== 'single') {
+      console.error('错误: --conditional-upsert 需要前置获取单条数据节点，请同时提供 --data-form-uuid 和 --data-query-type single');
+      process.exit(1);
+    }
+    if (!initiateApprovalFormUuid) {
+      console.error('错误: --conditional-upsert 需要发起审批节点（无数据时新建），请提供 --initiate-approval-form-uuid');
+      process.exit(1);
+    }
+    if (!updateFormUuid) {
+      console.error('错误: --conditional-upsert 需要更新数据节点（有数据时更新），请提供 --update-form-uuid');
+      process.exit(1);
+    }
+    if (dataConditions.length === 0) {
+      console.error('错误: --conditional-upsert 需要至少一个 --data-condition（用于确定条件分支的检查字段）');
+      process.exit(1);
+    }
+  }
+  // conditionalUpsert 模式下强制启用条件分支
+  const finalHasConditionNode = hasConditionNode || conditionalUpsert;
 
   // 连接器调用节点参数
   const connectorIdArg = parseFlag(subArgs, '--connector-id') || null;
@@ -446,9 +541,10 @@ async function run(args) {
 
   const hasMessageNode = receiverUserIds.length > 0 || userFields.length > 0;
 
-  // 循环容器（CycleContainer）：以前置获取多条节点为数据源，循环体为消息通知节点或更新数据节点
+  // 循环容器（CycleContainer）：以前置获取多条节点为数据源，循环体为消息通知/更新数据/发起审批节点
   const hasCycleNode = hasFlag(subArgs, '--cycle');
   const hasCycleUpdateNode = Boolean(cycleUpdateFormUuid);
+  const hasCycleInitiateApprovalNode = Boolean(cycleInitiateApprovalFormUuid);
   if (hasCycleNode) {
     if (dataSourceType === 'subform') {
       if (!dataSubFieldId) {
@@ -459,8 +555,8 @@ async function run(args) {
       console.error('错误: --cycle 需要前置获取多条数据节点，请同时提供 --data-form-uuid 和 --data-query-type multiple');
       process.exit(1);
     }
-    if (!hasMessageNode && !hasCycleUpdateNode) {
-      console.error('错误: --cycle 的循环体需要消息通知节点或更新数据节点，请提供 --receivers/--user-fields 或 --cycle-update-form-uuid');
+    if (!hasMessageNode && !hasCycleUpdateNode && !hasCycleInitiateApprovalNode) {
+      console.error('错误: --cycle 的循环体需要消息通知节点、更新数据节点或发起审批节点，请提供 --receivers/--user-fields 或 --cycle-update-form-uuid 或 --cycle-initiate-approval-form-uuid');
       process.exit(1);
     }
   }
@@ -475,17 +571,42 @@ async function run(args) {
   const triggerNodeId = generateNodeId();
   // subform 模式下即使没有 dataFormUuid 也需要创建 GetBatchDataNode 从触发子表获取数据
   const dataNodeId = (dataFormUuid || dataSourceType === 'subform') ? generateNodeId() : null;
+  // v2.8.13: conditionalUpsert 模式自动生成条件分支「有值」——字段引用获取数据节点输出
+  // 格式 ${dataNodeId}.fieldId（setter tree 选择器子选项 value 格式，同硬规则10）
+  // ⚠️ 操作符必须用 ExistValue(有值)/NotExistValue(没有值)——条件分支(route/BranchSetter)专用枚举，
+  //    HasValue/NoValue 是触发条件用枚举，用于条件分支会导致后端 buildValue 报"公式构造失败，未包含公式"（v2.8.15 修复）
+  // v2.8.21 根因修复：判断"数据是否存在"必须用「获取数据节点的实例ID」而非业务匹配字段。
+  //   业务字段（如名称）可能为空但记录已存在，用业务字段做 ExistValue 判断会把"已存在"误判为"不存在"。
+  // v2.8.23 字段名纠正：实例ID 变量引用键是 `${node}.pid`，不是 `${node}.processInstanceId`。
+  //   用户手工配置金标准（见 temp-file/csa66_golden.json 条件规则）确认设计器变量树中
+  //   "获取单条数据.实例ID" 的 id = `${node}.pid`。用 `.processInstanceId` 会导致设计器
+  //   无法解析出节点变量，把引用显示为固定的"实例ID"字段名（用户实测踩坑）。
+  // v2.8.26 定论（推翻 v2.8.25 的 `.proc_inst_id`）：条件分支引用「获取数据节点输出」的实例ID，键必须是 `.pid`。
+  //   证据：用户手工配置金标准 temp-file/csa66_golden.json 条件规则 id=`${node_8d3181987be}.pid` + extValue="value"
+  //   + valueType="literal" + opCode=ExistValue + op=有值，该流保存成功且能正确解析（下拉选中、不标红）。
+  //   ⚠️ `.proc_inst_id` 是「数据节点自身的表单筛选字段」（dataNode/getConfig.json），不是「条件分支引用节点输出」的键——
+  //   v2.8.25 误读该上下文导致错改成 `.proc_inst_id`，反而标红。条件分支节点输出实例ID的键固定是 `.pid`。
+  //   🔴 另一个关键：该条件规则必须带 `${}` 包裹（`${node}.pid`），并把 extValue 设为 "value"（buildConditionNodeProps 已处理）——
+  //   旧产品 extValue="literal" 会被设计器当"固定字面量"而非"节点变量引用"，同样导致标红、下拉不选中（v2.8.24 修正）。
+  if (conditionalUpsert && branchConditions.length === 0 && !branchCondition) {
+    // v2.8.27 修复：fieldId 必须是字面量 `${nodeId}.pid`（带 ${} 包裹），详见
+    //   integration-process-builder.js buildExistenceBranchCondition 注释（历史事故 v2.8.23~v2.8.26）。
+    branchConditions.push(buildExistenceBranchCondition(dataNodeId));
+  }
+  // v2.8.5: 链式获取模式第二个获取节点
+  const dataNode2Id = isChainMode ? generateNodeId() : null;
   const addDataNodeId = addDataFormUuid ? generateNodeId() : null;
   const initiateApprovalNodeId = initiateApprovalFormUuid ? generateNodeId() : null;
   const updateDataNodeId = updateFormUuid ? generateNodeId() : null;
   const deleteDataNodeId = hasDeleteDataNode ? generateNodeId() : null;
   const scriptNodeId = hasScriptNode ? generateNodeId() : null;
   const connectorCallNodeId = hasConnectorCallNode ? generateNodeId() : null;
-  const conditionNodeId = hasConditionNode ? generateNodeId() : null;
+  const conditionNodeId = finalHasConditionNode ? generateNodeId() : null;
   // 条件分支子节点ID（不入 nodeIds 序列，经 options 传入两个 builder 保证 process/view 一致）
-  const conditionBranchIds = hasConditionNode ? { yes: generateNodeId(), fallback: generateNodeId() } : null;
+  const conditionBranchIds = finalHasConditionNode ? { yes: generateNodeId(), fallback: generateNodeId() } : null;
   const cycleNodeId = hasCycleNode ? generateNodeId() : null;
   const cycleUpdateDataNodeId = hasCycleUpdateNode ? generateNodeId() : null;
+  const cycleInitiateApprovalNodeId = hasCycleInitiateApprovalNode ? generateNodeId() : null;
   const messageNodeId = hasMessageNode ? generateNodeId() : null;
   const endNodeId = generateNodeId();
 
@@ -548,7 +669,7 @@ async function run(args) {
   if (hasScriptNode) {
     console.error('脚本节点: 是 (输出变量 ' + scriptOutputs.length + ' 个)');
   }
-  if (hasConditionNode) {
+  if (finalHasConditionNode) {
     if (branchConditions.length > 0) {
       console.error('条件分支: ' + branchConditions.length + ' 条条件 (' + branchLogic.toUpperCase() + ')');
     } else {
@@ -593,6 +714,32 @@ async function run(args) {
     baseUrl: resolveBaseUrl(cookieData),
     cookieData,
   };
+
+  // 【默认发起人·禁止询问】未显式指定 --initiate-approval-initiator-user 时，
+  // 默认使用 .cookies.json 的当前登录用户（开发者本人）作为发起审批发起人
+  if (initiateApprovalFormUuid && !initiateApprovalInitiator) {
+    const loginUserId = cookieData.user_id || (cookieData.login_user && cookieData.login_user.userId) || '';
+    const loginUserName = (cookieData.login_user && cookieData.login_user.userName) || loginUserId;
+    if (loginUserId) {
+      initiateApprovalInitiator = buildSelectUserInitiator(`${loginUserId}:${loginUserName}`);
+      console.error(`ℹ️  【默认发起人】未指定发起人，已默认使用当前登录用户「${loginUserName}」作为发起审批发起人`);
+    } else {
+      console.error('错误: .cookies.json 中无当前登录用户信息，请显式提供 --initiate-approval-initiator-user userId[:name]');
+      process.exit(1);
+    }
+  }
+  // 【默认发起人·循环内】同上逻辑，未显式指定 --cycle-initiate-approval-initiator-user 时默认当前登录用户
+  if (cycleInitiateApprovalFormUuid && !cycleInitiateApprovalInitiator) {
+    const loginUserId = cookieData.user_id || (cookieData.login_user && cookieData.login_user.userId) || '';
+    const loginUserName = (cookieData.login_user && cookieData.login_user.userName) || loginUserId;
+    if (loginUserId) {
+      cycleInitiateApprovalInitiator = buildSelectUserInitiator(`${loginUserId}:${loginUserName}`);
+      console.error(`ℹ️  【默认发起人·循环】未指定发起人，已默认使用当前登录用户「${loginUserName}」作为循环内发起审批发起人`);
+    } else {
+      console.error('错误: .cookies.json 中无当前登录用户信息，请显式提供 --cycle-initiate-approval-initiator-user userId[:name]');
+      process.exit(1);
+    }
+  }
   console.error('登录成功: ' + authRef.baseUrl);
 
   // Step 2: 新建逻辑流绑定（新建模式）
@@ -612,6 +759,7 @@ async function run(args) {
   // 构建 processJson 节点 ID 列表（顺序：trigger, dataRetrieve, addData, initiateApproval, updateData, deleteData, script, connector, condition, cycle, message, end）
   const processNodeIds = [triggerNodeId];
   if (dataNodeId) { processNodeIds.push(dataNodeId); }
+  if (dataNode2Id) { processNodeIds.push(dataNode2Id); }
   if (addDataNodeId) { processNodeIds.push(addDataNodeId); }
   if (initiateApprovalNodeId) { processNodeIds.push(initiateApprovalNodeId); }
   if (updateDataNodeId) { processNodeIds.push(updateDataNodeId); }
@@ -620,12 +768,14 @@ async function run(args) {
   if (connectorCallNodeId) { processNodeIds.push(connectorCallNodeId); }
   if (conditionNodeId) { processNodeIds.push(conditionNodeId); }
   if (cycleNodeId) { processNodeIds.push(cycleNodeId); }
+  if (cycleInitiateApprovalNodeId) { processNodeIds.push(cycleInitiateApprovalNodeId); }
   if (messageNodeId) { processNodeIds.push(messageNodeId); }
   processNodeIds.push(endNodeId);
 
   // viewJson 节点 ID 列表（canvasId 开头）
   const viewNodeIds = [canvasId, triggerNodeId];
   if (dataNodeId) { viewNodeIds.push(dataNodeId); }
+  if (dataNode2Id) { viewNodeIds.push(dataNode2Id); }
   if (addDataNodeId) { viewNodeIds.push(addDataNodeId); }
   if (initiateApprovalNodeId) { viewNodeIds.push(initiateApprovalNodeId); }
   if (updateDataNodeId) { viewNodeIds.push(updateDataNodeId); }
@@ -634,6 +784,7 @@ async function run(args) {
   if (connectorCallNodeId) { viewNodeIds.push(connectorCallNodeId); }
   if (conditionNodeId) { viewNodeIds.push(conditionNodeId); }
   if (cycleNodeId) { viewNodeIds.push(cycleNodeId); }
+  if (cycleInitiateApprovalNodeId) { viewNodeIds.push(cycleInitiateApprovalNodeId); }
   if (messageNodeId) { viewNodeIds.push(messageNodeId); }
   viewNodeIds.push(endNodeId);
 
@@ -669,6 +820,56 @@ async function run(args) {
     }
   }
 
+  // ════════════════════════════════════════════════════════════════════════
+  // 【硬规则第15条】触发表单类型自动检测与事件修正
+  // 流程表单仅支持 processFinish/activityTask 事件，不支持 insert/update/delete
+  // 当触发表单是流程表单时，自动修正事件类型为 processFinish + agree
+  // ════════════════════════════════════════════════════════════════════════
+  let triggerFormType = null;
+  try {
+    stepLog('检测触发表单类型');
+    triggerFormType = await getFormType(authRef, { appType, formUuid: formUuid.toString() });
+    console.error(`触发表单类型: ${triggerFormType}`);
+  } catch (e) {
+    console.error(`⚠️ 无法确认触发表单类型：${e.message}，跳过自动检测`);
+  }
+
+  if (triggerFormType === 'process') {
+    // 流程表单触发事件语义（黄金标准对齐）：
+    // - insert（新增/提交）在流程表单上表现为「流程结束」→ 自动映射为 processFinish + agree
+    // - update（编辑）/ delete（删除）在流程表单上仍为独立数据操作事件，显式指定时予以保留
+    //   （黄金标准 formEventType=["delete"]，参考流「主表操作主表1-删除同步目标表单1」LPROC-76E66）
+    const explicitEvents = subArgs.includes('--events');
+
+    if (!explicitEvents) {
+      // 未显式指定 --events（默认 insert）→ 自动设为 processFinish + agree（禁止确认，直接执行）
+      if (formEventTypes.length === 0 || (formEventTypes.length === 1 && formEventTypes[0] === 'insert')) {
+        console.error('');
+        console.error('════════════════════════════════════════════════════════════════════════');
+        console.error('⚠️  【自动设置】触发表单是「流程表单」，已自动设置触发事件为 processFinish + agree');
+        console.error('════════════════════════════════════════════════════════════════════════');
+        console.error('');
+        formEventTypes.splice(0, formEventTypes.length, 'processFinish');
+        if (!approvalActions.includes('agree')) {
+          approvalActions.unshift('agree');
+        }
+      }
+    } else if (formEventTypes.includes('insert')) {
+      // 显式指定了 insert → 将 insert 映射为 processFinish + agree（流程表单 submit=流程完成）
+      console.error('');
+      console.error('════════════════════════════════════════════════════════════════════════');
+      console.error('⚠️  【自动修正】触发表单是「流程表单」，insert(新增/提交) 已映射为 processFinish + agree');
+      console.error('════════════════════════════════════════════════════════════════════════');
+      console.error('');
+      const idx = formEventTypes.indexOf('insert');
+      formEventTypes.splice(idx, 1, 'processFinish');
+      if (!approvalActions.includes('agree')) {
+        approvalActions.unshift('agree');
+      }
+    }
+    // 显式指定 update / delete 等其他事件时保留原事件（无需审批动作）
+  }
+
   await assertFormType(
     '新增数据',
     addDataFormUuid,
@@ -680,6 +881,12 @@ async function run(args) {
     initiateApprovalFormUuid,
     'process',
     '普通表单不能用「发起审批」节点，请改用「新增数据(AddDataNode)」节点（--add-data-form-uuid）。'
+  );
+  await assertFormType(
+    '循环内发起审批',
+    cycleInitiateApprovalFormUuid,
+    'process',
+    '普通表单不能用「发起审批」节点，请改用「新增数据(AddDataNode)」节点（--cycle-update-form-uuid）。'
   );
 
   // 获取目标表单 Schema（用于 viewJson 的 inputs/rules 字段）
@@ -733,6 +940,21 @@ async function run(args) {
     }
   }
 
+  // v2.8.6: 获取数据节点的目标表单 Schema 和类型（用于 viewJson 的 rulesFilter/outputs/targetItem/originalType）
+  let dataFormSchema = [];
+  let dataFormType = 'receipt';
+  if (dataFormUuid) {
+    try {
+      stepLog('获取数据节点目标表单Schema');
+      dataFormSchema = await getFormSchema(authRef, { appType, formUuid: dataFormUuid.toString() });
+      console.error('获取Schema成功: ' + dataFormSchema.length + ' 个字段');
+      dataFormType = await getFormType(authRef, { appType, formUuid: dataFormUuid.toString() });
+      console.error('表单类型: ' + dataFormType);
+    } catch (error) {
+      console.error('获取Schema失败: ' + error.message + '（继续执行）');
+    }
+  }
+
   // 获取循环体内更新数据的目标表单 Schema
   let cycleUpdateFormSchema = [];
   // 触发表单 Schema（用于 __display 中将触发字段ID替换为字段名称）
@@ -773,6 +995,17 @@ async function run(args) {
     }
   }
 
+  // 循环内发起审批需要触发表单 Schema 来构建 assignments __display（源字段中文名，硬规则10）
+  if (cycleInitiateApprovalFormUuid && triggerFormSchema.length === 0) {
+    try {
+      stepLog('获取触发表单Schema（循环发起审批）');
+      triggerFormSchema = await getFormSchema(authRef, { appType, formUuid: formUuid.toString() });
+      console.error('触发表单Schema成功: ' + triggerFormSchema.length + ' 个字段');
+    } catch (error) {
+      console.error('触发表单Schema失败: ' + error.message + '（继续执行）');
+    }
+  }
+
   // 批量新增数据源：'get' 表示前置获取节点（取其画布 id），否则为触发表子表字段ID
   let addDataSourceId = addDataSourceIdRaw;
   if (addDataSourceIdRaw === 'get') {
@@ -797,6 +1030,26 @@ async function run(args) {
     }
   }
 
+  // == 获取各目标表单的展示名称（用于节点卡片/下拉框回显表单名，而非 UUID） ==
+  // 复用 getFormSchema 已拿到的表单，借此修复 v2.8.17 前卡片显示表单ID而非名称的缺陷
+  async function fetchFormName(formUuid) {
+    if (!formUuid) return '';
+    try {
+      return await getFormName(authRef, { appType, formUuid: formUuid.toString() });
+    } catch (error) {
+      console.error('获取表单名称失败: ' + error.message + '（继续执行）');
+      return '';
+    }
+  }
+  const [addDataFormName, initiateApprovalFormName, updateFormName, dataFormName, cycleUpdateFormName, cycleInitiateApprovalFormName] = await Promise.all([
+    fetchFormName(addDataFormUuid),
+    fetchFormName(initiateApprovalFormUuid),
+    fetchFormName(updateFormUuid),
+    fetchFormName(dataFormUuid),
+    fetchFormName(cycleUpdateFormUuid),
+    fetchFormName(cycleInitiateApprovalFormUuid),
+  ]);
+
   // 构建 processJson 和 viewJson
   const processJson = buildProcessJson({
     processCode, formUuid, appType, formEventTypes,
@@ -806,57 +1059,71 @@ async function run(args) {
     addDataAssignments,
     addDataInsertType, addDataSubFormUuid, addDataType, addDataSourceId,
     initiateApprovalFormUuid: initiateApprovalFormUuid || undefined,
-    initiateApprovalFormName: '',
+    initiateApprovalFormName,
     initiateApprovalInitiator: initiateApprovalInitiator || undefined,
     initiateApprovalAssignments,
     dataFormUuid: dataFormUuid || undefined,
     dataConditions, dataQueryType, dataQuantity,
+    dataFormType, dataFormName,
     hasMessageNode, approvalActions, approvalNodeIds,
     triggerRecursively, triggerConditions, triggerLogic,
     updateFormUuid: updateFormUuid || undefined,
     updateConditions, updateAssignments,
     updateType, updateSourceId, updateSubSourceId, updateSubConditions, updateNoneOperation,
-    hasDeleteDataNode, deleteSubSourceId,
+    hasDeleteDataNode, deleteSubSourceId, deleteSubConditions,
+    isChainMode, dataSubSourceId, dataSubConditions, dataNode2Id, isSubFormTarget,
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
-    hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
+    hasConditionNode: finalHasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
     dataSourceType, dataSubFieldId,
     cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments, cycleUpdateNoneOperation, cycleUpdateDataNodeId,
+    cycleInitiateApprovalFormUuid: cycleInitiateApprovalFormUuid || undefined,
+    cycleInitiateApprovalInitiator: cycleInitiateApprovalInitiator || undefined,
+    cycleInitiateApprovalAssignments,
+    cycleInitiateApprovalNodeId,
     connectorId: connectorIdArg, actionId: actionIdArg,
     connectorAssignments, connectorDescription: connectorNameArg || undefined,
     connectorMode: connectorModeArg, connectionId: connectionIdArg,
+    conditionalUpsert,
   });
 
   const viewJson = buildViewJson({
     processCode, formUuid, formEventTypes, notificationTitle, notificationContent,
     toUsers, userFields, appType, nodeIds: viewNodeIds,
     addDataFormUuid: addDataFormUuid || undefined,
-    addDataAssignments, addDataFormSchema, addDataFormName: '',
+    addDataAssignments, addDataFormSchema, addDataFormName,
     addDataInsertType, addDataSubFormUuid, addDataType, addDataSourceId,
     initiateApprovalFormUuid: initiateApprovalFormUuid || undefined,
-    initiateApprovalFormName: '',
+    initiateApprovalFormName,
     initiateApprovalInitiator: initiateApprovalInitiator || undefined,
     initiateApprovalAssignments,
     dataFormUuid: dataFormUuid || undefined,
     dataConditions, dataQueryType, dataQuantity,
+    dataFormSchema, dataFormType, dataFormName,
     hasMessageNode, approvalActions, approvalNodeIds,
     triggerRecursively, triggerConditions, triggerLogic,
     updateFormUuid: updateFormUuid || undefined,
-    updateConditions, updateAssignments, updateFormSchema, updateFormName: '',
+    updateConditions, updateAssignments, updateFormSchema, updateFormName,
     updateType, updateSourceId, updateSubSourceId, updateSubConditions, updateNoneOperation,
-    hasDeleteDataNode, deleteSubSourceId,
+    hasDeleteDataNode, deleteSubSourceId, deleteSubConditions,
+    isChainMode, dataSubSourceId, dataSubConditions, dataNode2Id, isSubFormTarget,
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
-    hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
+    hasConditionNode: finalHasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
     dataSourceType, dataSubFieldId,
     cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments, cycleUpdateNoneOperation, cycleUpdateDataNodeId,
     cycleUpdateFormSchema,
+    cycleInitiateApprovalFormUuid: cycleInitiateApprovalFormUuid || undefined,
+    cycleInitiateApprovalInitiator: cycleInitiateApprovalInitiator || undefined,
+    cycleInitiateApprovalAssignments,
+    cycleInitiateApprovalNodeId,
     triggerFormSchema,
     connectorId: connectorIdArg, actionId: actionIdArg,
     connectorAssignments, connectorName: connectorNameArg,
     connectorDisplayName: connectorDisplayNameArg,
     connectorIcon: connectorIconArg, connectorInputs: connectorInputsJson,
     connectorMode: connectorModeArg, connectionId: connectionIdArg,
+    conditionalUpsert,
   });
 
   // Step: 保存前体检（门禁）—— saveProcess 不校验 props 完整性，半成品也能保存成功，必须在这里拦住
@@ -950,7 +1217,8 @@ async function run(args) {
   }));
 }
 
-const args = process.argv.slice(2);
+// 【v2.9.0 P4-2】--spec 声明式规格：翻译为既有 CLI 参数后走原有构建链（体检门禁/Schema 校验全部保留）
+const args = loadSpecArgs(process.argv.slice(2));
 run(args).catch((err) => {
   console.error('执行异常: ' + err.message);
   console.log(JSON.stringify({ success: false, error: err.message }));

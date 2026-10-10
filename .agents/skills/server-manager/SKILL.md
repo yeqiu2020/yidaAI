@@ -12,6 +12,7 @@ description: 宜搭服务管理器，一键启动和管理宜搭开发所需的�
 ### 专属硬规则
 1. **禁止手动npx http-server启动** — 必须通过本Skill的管理脚本启动
 2. **管理HTTP静态服务8080和同步配置服务3457** — 两个端口固定，不可更改
+3. **【v3.0.0 多组织并存】所有 URL 中的项目目录段必须自动提取当前项目根目录名（即当前工作目录路径的最后一段，如 `d:\宜搭AI助手直播\宜搭AI助手V2.0.23` → `宜搭AI助手V2.0.23`），直接填入 URL，严禁输出 `{项目目录名}` 占位符让用户手动替换**
 
 ---
 
@@ -33,22 +34,44 @@ description: 宜搭服务管理器，一键启动和管理宜搭开发所需的�
 
 ### 第2步：执行对应命令
 
-使用 `server_manager.js` 脚本执行操作：
+**【v3.3.0 强制】启动服务必须走『前台 8080 + start-sync』两段式流程**（通过 integrated_code_mode 的 `Exec` 调用 `tools.run_command` 执行，**禁用普通 Shell 后台启动**）。
 
-```bash
-# 启动所有服务（默认）
-node .agents/skills/server-manager/scripts/server_manager.js start
+> 原因：`open_preview` 预览框要求 `command_id` 对应一个**正在运行（Running）**的 `web_server` 类型命令；`server_manager.js start` 是 daemon 化启动（脚本退出，命令 Exited），永远无法生成预览框。
 
-# 检查服务状态
-node .agents/skills/server-manager/scripts/server_manager.js status
+**步骤A — 前台启动 8080 静态服务**（在 Exec 中执行 `tools.run_command`）：
 
-# 停止所有服务
-node .agents/skills/server-manager/scripts/server_manager.js stop
-
-# 重启服务
-node .agents/skills/server-manager/scripts/server_manager.js restart
+```js
+const r = await tools.run_command({
+  command: 'node .agents/skills/server-manager/scripts/_builtin_server.js "D:\\宜搭AI助手直播" 8080',
+  blocking: false,              // 必须 false：web 服务器长驻
+  command_type: 'web_server',   // 必须 web_server：让 IDE 识别为本地服务器
+  target_terminal: 'new',
+  requires_approval: false,
+  wait_ms_before_async: 2500,
+  cwd: 'D:\\宜搭AI助手直播\\宜搭AI助手V2.0.32'
+});
+// r.status 应为 Running，r.command_id 记下来 → 第4步 open_preview 必须用它
 ```
 
+**步骤B — 启动同步配置服务**（短命令，3457 已运行会自动复用，不会触碰 8080）：
+
+```bash
+node .agents/skills/server-manager/scripts/server_manager.js start-sync
+```
+
+**若 8080 被旧的后台服务占用**，先执行清理再走步骤A：
+
+```bash
+node .agents/skills/server-manager/scripts/server_manager.js stop
+```
+
+其他操作（检查状态/停止/重启）仍用普通命令：
+
+```bash
+node .agents/skills/server-manager/scripts/server_manager.js status
+node .agents/skills/server-manager/scripts/server_manager.js stop
+# 重启 = stop 后走步骤A + 步骤B
+```
 ### 第3步：解析脚本输出
 
 根据脚本返回的结果判断：
@@ -56,20 +79,19 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 - 服务是否已在运行
 - 是否有错误发生
 
-### 第4步：打开首页
+### 第4步：打开首页（生成预览框）
 
 服务启动成功后，**必须执行以下操作**：
 
-1. **调用 OpenPreview 工具打开首页**：
-   - 使用 OpenPreview 工具，preview_url 设为 `http://127.0.0.1:8080/本地操作页面/index.html`
-   - command_id 设为启动服务命令的 ID
-2. **处理 OpenPreview 可能的报错**：
-   - OpenPreview 可能返回 `net::ERR_ABORTED` 错误——这是 Trae IDE 内置浏览器预览机制的限制，不代表服务未启动
-   - 如果遇到此错误，**忽略错误**，直接告知用户访问地址即可
-3. **告知用户访问地址**：
-   - 如果 OpenPreview 成功 → 告知用户页面已打开
-   - 如果 OpenPreview 报错 → 告知用户直接在浏览器中访问 `http://127.0.0.1:8080/本地操作页面/index.html`
-
+1. **【首选】调用 open_preview 生成预览框**（在 Exec 中执行 `tools.open_preview`）：
+   - `preview_url` **只能设为** `http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html`（⚠️ 严禁打开 `http://127.0.0.1:8080/` 组织门户首页，无实际意义）
+   - `command_id` **必须用第2步步骤A返回的、状态为 Running 的 command_id**（这是成败关键：传已退出命令的 ID 会超时）
+   - 成功标志：返回 `success: true`，对话中渲染出可点击的预览框，点击即跳转 Trae 内部浏览器
+2. **失败处理（最多重试 1 次）**：OpenPreview 可能返回 `net::ERR_ABORTED` 或 `IDE Command timeout`——这是 Trae IDE 预览/命令通道的间歇性故障，不代表服务未启动；重试 1 次仍失败立即切换兜底，禁止反复重试
+3. **【兜底】内置浏览器直接打开**（在 Exec 中执行）：
+   - `await tools.browser_navigate({url: 'http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html'})`（URL 中文路径建议用编码形式）
+   - 兜底也超时则输出完整 URL 文字，并说明服务已正常运行
+4. **【强制】严禁调用外部浏览器**：禁止 `start http://...`、`Start-Process http://...` 等打开系统默认浏览器的命令
 ### 第5步：向用户报告结果
 
 使用结构化格式展示结果：
@@ -86,7 +108,7 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 
 ## 访问地址
 
-- **本地操作页面**: http://127.0.0.1:8080/本地操作页面/index.html
+- [🏠 打开本地操作页面](http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html)（页面已通过内置浏览器自动打开，此链接仅作备份）
 
 ## 使用说明
 
@@ -98,7 +120,7 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 ## 三、输出规范
 
 1. **必须展示服务状态表格**：包含服务名称、端口、运行状态
-2. **必须提供访问地址**：给出可点击的 `http://127.0.0.1:8080/本地操作页面/index.html` 链接
+2. **必须用内部浏览器打开页面**：优先调用 OpenPreview 生成预览框（点击即跳转内部浏览器）；OpenPreview 不可用时通过 Exec 调用 `browser_navigate` 兜底；同时输出完整 URL 文字备份；严禁调用外部浏览器（禁止 `start http://...` / `Start-Process http://...` 等命令）
 3. **必须说明使用方式**：提醒用户不要使用 file:// 打开页面
 4. **错误时必须说明原因**：如果启动失败，说明具体原因和解决方法
 
@@ -109,6 +131,7 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 - ❌ 禁止为每个应用单独启动 HTTP 服务（所有应用共享同一个 8080 端口服务）
 - ❌ 禁止修改同步服务的端口（原型页面中的 `SYNC_SERVICE_URL` 固定为 3457）
 - ❌ **禁止手动使用 `npx http-server` 启动服务**（必须使用 `server_manager.js` 统一管理）
+- ❌ **禁止打开 `http://127.0.0.1:8080/` 组织门户首页**（无实际意义，必须打开 `/{项目目录名}/本地操作页面/index.html`）
 
 ## 五、常见问题与解决方案
 
@@ -151,7 +174,7 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 2. 如服务未运行，启动服务：`node server_manager.js start`
 3. **统一使用 8080 端口**，不要尝试其他端口
 4. 清除浏览器缓存后刷新页面：`Ctrl+F5`
-5. 确保访问地址正确：`http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/index.html`
+5. 确保访问地址正确：`http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/index.html`
 
 ### 问题3：同步服务端口被占用
 
@@ -164,11 +187,169 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 2. 如服务已在运行，无需重复启动
 3. 如需重启，先停止再启动：`node server_manager.js restart`
 
+### 问题5：切换项目后服务残留，同步/页面指向旧项目目录
+
+> **v3.0.0 多组织并存模式已彻底解决此问题**：全局服务以 `staticRoot`（公共父目录）为根启动，URL 首段即项目目录名，各项目互不干扰，切换项目无需重启服务。
+
+**现象（仅旧版 v2.x 单项目模式适用）**：用户在 A 项目（如 V2.0.22）启动过服务，之后切到 B 项目（如 V2.0.23）开发，忘记重启服务。浏览器打开门户页面时，页面内容和"同步到本地"都指向 **旧项目 A 的目录**，新项目 B 下找不到同步出来的文件夹。
+
+**根因（旧版）**：HTTP(8080) 与同步服务(3457) 是全局端口，由**第一次启动它们的项目目录**持有。页面/同步接口通过 `process.cwd()` 定位项目目录，进程 cwd = 旧项目 A，所以数据全部写入 A。
+
+**识别方法**：
+1. 检查端口归属：`Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -in 8080, 3457 }`
+2. 查看占用进程的工作目录（`sync_server.js` / `http-server` 的启动路径）
+3. 打开门户页面后看企业名称后是否显示**当前服务目录徽标**（v1.7.0 起，如 `云途数字技术 宜搭AI助手V2.0.23`）——若徽标目录 ≠ 当前项目目录，说明服务残留
+
+**解决方案**：
+1. **（v3.0.0 推荐）门户页面一键重启**：打开 `http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html`，点击组织头部的「🔄 重启服务」按钮，服务将自动重启全局服务（通过 `/restart-service` 接口触发 `server_manager.js restart`，重启后页面自动刷新）。**前提**：当前 8080/3457 由最新版 sync_server（v2.9.0+）提供；若是旧版本服务，需先用方案 2 重启一次。
+2. 停止旧项目服务：`node server_manager.js stop`（在旧项目目录执行）或清理占用端口进程
+3. 在**当前项目目录**重新启动：`node server_manager.js start`
+4. 重新打开门户页面确认目录徽标正确
+5. 已同步到错误目录的数据，将文件夹移动到当前项目根目录即可
+
+**注意**：
+- 门户页面「重启服务」按钮 = `POST /restart-service`，sync_server 收到后 spawn 独立 `server_manager.js restart` 进程并自动退出，由新进程接管端口
+- 重启后前端逻辑：轮询 `/health` 恢复 → 延迟 3 秒 → 刷新页面；`loadOrgInfo` 失败自动重试 3 次（v1.7.1）
+- Trae 终端环境下子进程会被终端 Job Object 清理，`server_manager.js start` 启动的服务可能在终端关闭后消失。**根治方案见「问题9」**（用任务计划程序拉起，完全脱离 Trae）。⚠️ 旧的「用 autostart-on 比手动建计划任务更简单」说法已过时——autostart-on 只覆盖"开机"场景，**不解决"本次会话内关 Trae"**；且两者功能重叠，二选一即可。
+- **autostart-on 前置条件（v3.0.1）**：项目根目录必须存在 `启动宜搭服务.bat` 源文件，否则报「未找到 启动宜搭服务.bat」。该 bat 需 **GBK 编码**（中文路径乱码），内容为：
+  ```
+  @echo off
+  chcp 65001 >nul 2>&1
+  cd /d "D:\项目根目录"
+  start /min "" node ".agents\skills\server-manager\scripts\server_manager.js" start
+  ```
+  源文件不存在时，先用 PowerShell 以 GBK 编码创建（`[System.IO.File]::WriteAllText($batPath, $content, [System.Text.Encoding]::GetEncoding('GBK'))`），再执行 autostart-on
+- **取消开机自启**：`node .agents/skills/server-manager/scripts/server_manager.js autostart-off`
+
+### 问题6：同步把表单分组平铺到了项目根目录（应用名这一层丢失）
+
+> **v3.0.4 已在 sync_server.js 侧加拦截修复**：同步目标目录必须叠加应用名。
+
+**现象**：点击某应用的「同步到本地」后，本该出现在 `项目根/{应用名}/` 下的表单分组目录（如 `公式`、`业务规则「分组」`、`发起审批「分组」` 及表单目录），被**平铺写到了项目根目录**（与 `本地操作页面`、`lib`、`.agents` 平级），且没有生成同级 `应用名` 目录。
+
+**根因**：同步服务（3457）进程的 `STATIC_ROOT`（= `process.cwd()`）与多项目静态服务根（8080，=公共父目录）曾不一致；同步目标本应为 `项目根/{应用名}`，当应用名未参与目标路径时，内容被直接写入项目根。这是历史遗留 + 同步目标定位缺少强校验共同导致。
+
+**识别方法**：打开本地操作页面 / 直接在命令行列出项目根目录，若出现成批的 `xxx「分组」`/`xxx「表单」` 目录且没有对应 `应用名` 上级目录，即为平铺。
+
+**解决方案**：
+1. sync_server v3.0.4 起，`/sync-app-to-local`、`/sync-app-to-local-stream`、`/sync-config` 三个同步接口均校验目标目录 = `项目根/{应用名}`；若应用名为空或目标回退到项目根，会直接返回错误并拦截，**不再静默平铺**。
+2. 已平铺到项目根的孤儿目录不会自动归位：如需归位，手动移动到 `项目根/{应用名}/` 下即可；不需要可直接删除。
+
+### 问题7：前台启动 8080 报 MODULE_NOT FOUND: _builtin_server.js（v3.3.1 实测踩坑）
+
+**现象**：按 v3.3.0 步骤A执行 `node .agents/skills/server-manager/scripts/_builtin_server.js "D:\宜搭AI助手直播" 8080`，报 `Error: Cannot find module '..._builtin_server.js'`，run_command 状态为 Exited。
+
+**根因**：`_builtin_server.js` 是**临时文件**——仅当 staticRoot（公共父目录）下找不到 http-server 时，`server_manager.js start` 才调用 `ensureBuiltinServerScript()` 生成它；而 `stopAll()` 停止服务时会**主动 unlink 删除该文件**（server_manager.js 第 598-600 行）。因此：
+- 首次全新环境 / 刚执行过 `stop` → 文件不存在 → 步骤A直接失败
+- 本项目 http-server 装在**项目目录**内而 staticRoot 是**公共父目录**，检测路径不匹配，start 永远走"内置静态服务器"分支（会生成文件）
+
+**解决方案（实测可行，两段式前置补丁）**：
+1. 先跑一次 `node .agents/skills/server-manager/scripts/server_manager.js start` —— 生成 `_builtin_server.js` 并后台启动 8080+3457
+2. **不要跑 `stop`**（会删文件）—— 直接 `taskkill /PID <8080的PID> /F /T` 只杀 HTTP 进程（3457 保留，无需 start-sync）
+3. 再执行 v3.3.0 步骤A前台 run_command 启动 `_builtin_server.js`（此时文件存在，状态 Running）
+4. open_preview 用新的 command_id 打开预览框
+
+**教训**：Skill 文档引用的脚本若由运行时生成，必须在文档中注明其生成/销毁时机；`stop` 删除临时文件的设计与 v3.3.0 前台启动流程存在脱节。
+
+### 问题8：Background 模式启动 8080/3457 的**正确姿势**（v3.4.0 实测确认）
+
+**⚠️ 核心约束：`STATIC_ROOT = process.cwd()`。启动 cwd 决定一切。**
+
+| 服务 | 启动 cwd | 说明 |
+|------|---------|------|
+| 8080 `_builtin_server.js` | **任意**（建议 staticRoot） | staticRoot 由**第 1 个位置参数显式传入**，不受 cwd 影响 |
+| 3457 `sync_server.js` | **必须是 staticRoot（公共父目录）** | `STATIC_ROOT = process.cwd()`，cwd 错则 `/org-info`、同步定位全错 |
+
+**正确启动命令（Background 模式，脱离终端也不掉）**：
+
+```
+# 8080 —— 第1参数显式传 staticRoot
+cd "<staticRoot>" && node "<项目根>/.agents/skills/server-manager/scripts/_builtin_server.js" "<staticRoot>" 8080
+
+# 3457 —— cwd 必须是 staticRoot
+cd "<staticRoot>" && node "<项目根>/.agents/skills/form_creator/scripts/sync_server.js"
+```
+
+**为什么不用 `server_manager.js start`**：该命令用 `spawn(detached:true, stdio:'ignore') + unref()` 起子进程，
+在本 Agent 宿主里**会话一结束子进程即被回收**（Job Object 清理）。表现为脚本自报
+「🎉 所有服务已就绪！」但 `status` 立刻变两个 🔴。改用 Background 模式直接跑两个脚本反而稳定。
+
+**⚠️ 若误用「项目根」作为 3457 的 cwd**，会触发连锁故障：
+`STATIC_ROOT` 错位 → `path.join(staticRoot, '{项目名}')` 多套一层 →
+`resolveProjectDir` 报「传入的 projectDir 无效」并回退 referer → **可能同步到错误项目**。
+（该误导性日志已于 sync_server v3.0.9 修复：`resolveProjectDir` 补
+`hasOrgConfig(staticRoot)` 兜底；但**启动 cwd 仍必须正确**，修复只是容错而非替代。）
+
+**验证三连（缺一不可）**：
+```bash
+netstat -ano | grep LISTENING | grep -E ":8080|:3457"        # ① 端口真的在监听
+curl -s --noproxy '*' http://127.0.0.1:3457/health           # ② 直连拿 version/staticRoot/cwd
+curl -s --noproxy '*' -o /dev/null -w "%{http_code}" "<门户URL>"  # ③ 门户页 200
+```
+
+**⚠️ 必须加 `--noproxy '*'`**：本机存在 HTTP 代理时会拦截 127.0.0.1，
+不绕过则 curl 返回 `upstream connect failed: 由于目标计算机积极拒绝`（**假失败**），
+容易被误判为"服务未启动"。8080 则返回 502（也是代理产生的，非服务本身故障）。
+
+**教训**：脚本自报的成功 ≠ 服务存活。**必须 netstat + 直连 HTTP 双重证实，且显式 bypass 代理。**
+
+### 问题9：关 Trae 服务就掉——Job Object 病根只能用「计划任务」根治（v3.5.0 实测根治）
+
+**现象**：用户每次「启动宜搭服务」都成功，但只要关闭 Trae 重新登录，8080/3457 就消失，必须再启动一次，反复循环。
+
+**根因（问题8 已诊断但未根治）**：Trae 终端创建的进程属于该终端的 **Job Object**。`server_manager.js start` 用的是 `spawn(detached:true, stdio:'ignore') + unref()`（server_manager.js 第 407-434 行），`detached` 只让子进程脱离 node 父进程，**并未脱离终端的 Job Object**。因此无论 `start`（daemon 化）、问题7 的「前台 run_command」、还是问题8 的「Background 模式」，只要**启动方在 Trae 内**，Trae 关闭 → Job Object 销毁 → 8080/3457 一起被杀。
+
+> ⚠️ **问题8 的 Background 模式治标不治本**：它让服务在"本次会话内"更稳定，但仍在 Agent 宿主的 Job Object 内。实测：`start` 自报「🎉 所有服务已就绪！」，会话结束 `status` 却两个 🔴。
+
+**根治方案（唯一根治：让启动方脱离 Trae）——任务计划程序**：
+
+```powershell
+$taskName = 'YidaServiceStart'
+$scriptPath = '<项目根>\.agents\skills\server-manager\scripts\server_manager.js'
+$nodeExe = '<node.exe 绝对路径>'   # 例 C:\Users\Administrator\.trae-cn\binaries\node\versions\22.22.2\node.exe
+
+# ① 注册：开机触发（ONSTART），/F 覆盖同名任务
+schtasks /Create /TN $taskName /TR "`"$nodeExe`" `"$scriptPath`" start" /SC ONSTART /RU "$env:USERNAME" /RL LIMITED /F
+
+# ② 立即触发一次（此刻由 Task Scheduler 拉起，不受 Trae 控制）
+schtasks /Run /TN $taskName
+```
+
+**关键点**：
+1. 计划任务由 Windows Task Scheduler 执行，**不继承任何终端的 Job Object**，因此关 Trae 不影响服务。
+2. **无需指定 `/TR` 的工作目录**：`server_manager.js` 的 `CONFIG.projectRoot` 会向上查找 `.agents`（第 58-64 行），不依赖 cwd；`staticRoot = dirname(projectRoot)`，均自动推导。
+3. **必须在 Trae 内先杀掉占用端口的孤儿进程**，否则 `start` 会走「端口已被全局服务占用，复用」分支（第 395-398 行）**直接复用那个会死的进程**，等于没换：
+   ```powershell
+   taskkill /PID <8080的PID> /F /T    # 8080 先杀
+   # 3457 若显示🟢但可能是残留，也可一并 taskkill 后让计划任务重新拉起两个端口
+   ```
+4. **验证父子进程已脱离**（父进程为空 = 独立）：
+   ```powershell
+   Get-NetTCPConnection -State Listen -LocalPort 8080,3457 | ForEach-Object {
+     $p = Get-Process -Id $_.OwningProcess; $pp = Get-CimInstance Win32_Process -Filter "ProcessId=$($p.ParentProcessId)"
+     "端口 $($_.LocalPort) PID=$($_.OwningProcess) 父PID=$($p.ParentProcessId) 父进程=$($pp.Name)"
+   }
+   ```
+   父PID/父进程为空 → 已脱离 Trae，成功。
+5. **验证任务本身**：`(Get-ScheduledTask -TaskName 'YidaServiceStart').State` 应为 `Ready`；`LastTaskResult` = `0` 表示上次运行成功。
+
+**日常维护命令**：
+```powershell
+schtasks /Run /TN YidaServiceStart                          # 手动拉起（服务挂了随时用）
+schtasks /Query /TN YidaServiceStart                          # 查看状态
+schtasks /Delete /TN YidaServiceStart /F                      # 删除任务
+```
+
+**与开机自启（autostart-on）的关系**：两者功能重叠，**二选一，不要并存**（否则开机重复启动两次）。推荐计划任务：既能开机自启，又能**手动触发**立即拉起，覆盖了 autostart-on 只覆盖"开机"的场景缺口。已有 autostart-on 快捷方式时需先 `autostart-off` 删除。
+
+**教训**：病根在「启动方是谁」而非「前台/后台」。任何在 Trae 终端内启动的 node 进程都受 Job Object 管控，改启动参数（detached/unref/Background）无法根治；必须换启动方到 Trae 之外。
+
 ## 六、检查清单
 
 执行前确认：
 - [ ] 已确定用户需要的操作（启动/停止/重启/检查）
-- [ ] 项目根目录路径正确（`d:\宜搭AI编程\宜搭AI助手V1.6.1`）
+- [ ] 项目根目录路径正确（`d:\宜搭AI助手直播\宜搭AI助手V2.0.22`）
+- [ ] 【v3.6.0·P5-3】可选统一预检：`node .agents/skills/server-manager/scripts/agent_capabilities.js` 一条命令输出 JSON 摘要（Skill 概况/登录态/8080+3457 服务状态/配置可读性），登录态失效时退出码 1
 
 执行后确认：
 - [ ] 脚本执行完成并返回结果
@@ -178,14 +359,26 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 
 ## 七、版本更新记录
 
-### v2.3.0 (2026-06-11)
-- **新增第4步**：服务启动后必须调用OpenPreview打开首页
-- **处理OpenPreview报错**：明确`net::ERR_ABORTED`的处理方式，忽略错误
-- **修复**：避免启动后忘记打开首页的问题
+### v3.6.0 (2026-09-28)
+- **新增**：统一环境预检脚本 `scripts/agent_capabilities.js`（P5-3，对齐 OpenYida agent-capabilities 模式）——一条命令输出机器可读 JSON 摘要：Skill 概况（含 verifyStatus 分布）、.cookies.json 存在性与登录态探测（GET getAppList 轻量接口，失效退出码 1）、8080/3457 服务健康、关键配置文件可读性；检查清单已接入。轻量摘要为主，完整诊断按需。
 
-### v2.2.0 (2026-05-09)
-- HTTP服务器添加缓存禁用：http-server启动命令添加`-c-1`标志
-- 内置备用服务器添加`Cache-Control: no-cache, no-store, must-revalidate`响应头
+### v3.5.0 (2026-09-28)
+- **新增**：问题9「关 Trae 服务就掉——Job Object 病根只能用计划任务根治」。实测根治：用
+  `schtasks /Create /SC ONSTART` + `schtasks /Run` 由 Task Scheduler 拉起服务，完全脱离 Trae 的 Job Object，
+  关 Trae 不再掉线，且支持手动触发立即拉起。
+- **修正（推翻 v3.4.0 药方）**：问题8 的 Background 模式仍跑在 Agent 宿主的 Job Object 内，治标不治本；
+  问题5 中「autostart-on 比手动建计划任务更简单」的旧结论已作废（autostart-on 只覆盖开机场景，
+  不解决本次会话内关 Trae，且与计划任务功能重叠需二选一）。
+- **明确**：病根在「启动方是谁」而非前台/后台；任何 Trae 内启动的 node 进程都受 Job Object 管控，
+  detached/unref/Background 均无法根治，必须换启动方到 Trae 之外。
+
+### v3.4.0 (2026-09-22)
+- **新增**：问题8「Background 模式启动 8080/3457 的正确姿势」——`STATIC_ROOT = process.cwd()`，
+  3457 的 cwd 必须是 staticRoot；给出 Background 模式双脚本启动命令（比 `server_manager.js start` 更稳，
+  后者 detached 子进程会被宿主回收）。
+- **新增**：验证三连（netstat + 直连 health + 门户 200）与 **`--noproxy '*'` 强制要求**
+  （本机 HTTP 代理会拦截 127.0.0.1 造成假失败）。
+- **联动**：sync_server v3.0.9 修复 `resolveProjectDir` 单项目模式误报「projectDir 无效」并回退误定位。
 
 ## 八、快速参考
 
@@ -193,10 +386,14 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 
 | 操作 | 命令 |
 |------|------|
-| 启动服务 | `node .agents/skills/server-manager/scripts/server_manager.js start` |
+| 启动服务（完整两段式） | 按第2步：run_command 前台启动 8080（web_server）→ `server_manager.js start-sync` |
+| 仅启动同步服务 | `node .agents/skills/server-manager/scripts/server_manager.js start-sync` |
 | 停止服务 | `node .agents/skills/server-manager/scripts/server_manager.js stop` |
 | 检查状态 | `node .agents/skills/server-manager/scripts/server_manager.js status` |
-| 重启服务 | `node .agents/skills/server-manager/scripts/server_manager.js restart` |
+| 注册开机自启 | `node .agents/skills/server-manager/scripts/server_manager.js autostart-on` |
+| 取消开机自启 | `node .agents/skills/server-manager/scripts/server_manager.js autostart-off` |
+| 手动拉起服务（脱离 Trae，推荐） | `schtasks /Run /TN YidaServiceStart` |
+| 删除计划任务 | `schtasks /Delete /TN YidaServiceStart /F` |
 
 ### 服务配置
 
@@ -208,9 +405,9 @@ node .agents/skills/server-manager/scripts/server_manager.js restart
 ### 访问路径示例
 
 ```
-http://127.0.0.1:8080/本地操作页面/index.html
-http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/index.html
-http://127.0.0.1:8080/{应用名}/01需求梳理/原型页面/templates/list.html?form={表单名}
+http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html
+http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/index.html
+http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/templates/list.html?form={表单名}
 ```
 
 详细文档请参考【Skill定义与内容规范.md】

@@ -193,9 +193,11 @@ function sendCDPCommand(ws, method, params = {}) {
 function getCDPTargets() {
   return new Promise((resolve, reject) => {
     const req = http.get(`http://${CDP_HOST}:${CDP_PORT}/json`, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try {
           const targets = JSON.parse(data);
           resolve(targets);

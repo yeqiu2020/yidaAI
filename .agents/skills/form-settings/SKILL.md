@@ -12,12 +12,13 @@ description: 当用户说"设置数据标题"、"表单设置"、"配置表单"�
 ### 专属硬规则
 1. **禁止删除原有配置只修改指定项** — 所有设置操作先获取当前完整配置，只修改指定项
 2. **权限设置使用saveOrUpdatePermit API** — 不是updateFormSchemaInfo
+3. **【强制·v2.1.0】配置保存后必须回读验证** — 每次设置操作完成后，必须用 `get-settings` 命令重新拉取配置，核对本次修改项（如 customTitle/displayTitle/reStart 等）的回读值与写入值一致；**回读不一致时明确报错并说明差异**，禁止只凭保存接口返回 success 就汇报「配置已生效/已设置成功」（依据：OpenYida Changelog 2026.9.21 原义——保存后读取实际保存结果，未确认生效时明确报错）
 
 ---
 
 # Form Settings - 宜搭表单设置工具
 
-版本：v2.0.0
+版本：v2.1.0（保存后回读验证）
 
 ## 一、角色定义
 
@@ -66,11 +67,25 @@ node scripts/form-settings.js [命令] --app <appType> --form <formUuid> [选项
 - `list-permissions`：列出所有可配置权限
 - `list-settings`：列出所有可配置项
 
-### 第5步：输出执行结果
+### 第5步：回读验证（强制·v2.1.0）
+
+配置保存后必须立即回读核对，不得只依赖保存接口的成功响应：
+
+```bash
+# 重新拉取当前配置，核对本次修改的配置项与写入值一致
+node scripts/form-settings.js get-settings --app APP_XXX --form FORM-XXX
+```
+
+- **核对项**：本次修改的每个 key（如 customTitle / displayTitle / reStart / showPrint / 权限项等）回读值 = 写入值
+- **不一致时按失败处理**：向用户明确报错并说明差异，重新配置或排查后再次回读，直到一致
+- 未回读一致前，**严禁**汇报「配置已生效/已设置成功」，只能汇报「已提交配置，待回读确认」
+
+### 第6步：输出执行结果
 
 向用户报告执行结果：
 - 修改的配置项
 - 修改前后的值
+- 回读验证结果（一致/不一致及处理）
 - 操作是否成功
 
 ## 三、输出规范
@@ -160,3 +175,8 @@ node scripts/form-settings.js list-permit-groups --app APP_XXX --form FORM-XXX
 | OPERATE_BATCH_DELETE | 批量删除 |
 
 详细API接口说明请参考脚本源码 `scripts/form-settings.js`
+
+## 七、版本历史
+
+- v2.1.0 (2026-09-28): 新增专属硬规则3「配置保存后必须回读验证」+ 执行流程新增「第5步：回读验证」——保存后必须用 `get-settings` 重新拉取配置核对写入值生效，不一致按失败处理，未回读一致严禁汇报已生效。依据：OpenYida 借鉴改造清单 P0-5（官方 Changelog 2026.9.21「导航设置保存后再次核实」原义）
+- v2.0.0: 初始版本——数据标题/复制流程/权限/通用设置，权限设置使用 saveOrUpdatePermit API

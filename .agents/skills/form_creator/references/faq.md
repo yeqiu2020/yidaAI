@@ -651,3 +651,115 @@ v6.47.0 只修复了 `findFormDirectory` 函数（让它不跳过带编号目录
 4. **回归测试常驻**：`tests/test_validate_assoc.js` 固化了3个场景（事故复刻推断补全/无法推断中止/标记完整直通），修改 `create_from_markdown.js` 的关联字段解析/校验逻辑后必须重跑：`node .agents/skills/form_creator/tests/test_validate_assoc.js`
 
 ---
+
+### 问题15：同步服务路径重复「系统配置清单不存在」+ 静默匹配错误应用（sync_server v3.0.5/v3.0.6修复）
+
+#### 问题描述（v2.0.30真实事故）
+原型页面点击「同步表单字段」报错：
+```
+同步失败：系统配置清单不存在: D:\宜搭AI助手直播\宜搭AI助手V2.0.30\宜搭AI助手V2.0.30\系统配置清单.md
+```
+路径中项目目录名「宜搭AI助手V2.0.30」重复拼接了一段。
+
+#### 根因（三层叠加）
+1. **前端 projectDir 误传项目根目录名**：多项目布局下（静态服务根=`D:\宜搭AI助手直播`，URL=`/{项目名}/{应用名}/...`），`app.js` 的 `getAppDirFromUrl()` 用 URL 编码段（`%E8%BF%9B...`）直接与解码字面量 `'01需求梳理'` 比较，永远不相等，走了单项目布局分支，把 URL 首段（项目根目录名）当 projectDir 发送
+2. **服务端相对路径二次拼接**：`dir-ops.js` 的 `findProjectDir` 对相对 projectDir 返回未 resolve 的相对值，子进程以它为 cwd 再 `path.resolve`，拼出 `...\宜搭AI助手V2.0.30\宜搭AI助手V2.0.30` 重复路径
+3. **兜底静默匹配错误应用**（v3.0.5 修复路径重复后暴露）：projectDir 误传项目根目录名时，命中"直接传项目名→项目根"兜底，读项目根残留的系统配置清单（如"课程录制"），**不报错但同步到错误应用**，比报错更隐蔽
+
+#### 修复方案
+- **v3.0.5**：
+  - `app.js`（含 `prototype_generator.js` 模板）：pathname 各段先 `decodePart()` 再与 `'01需求梳理'` 比较，多项目布局正确取第二段（应用目录名）
+  - `dir-ops.js`：`findProjectDir` 一律返回 `path.resolve` 绝对路径；`findDirByFileUrl` 逐级累积取「最深」匹配目录（旧逻辑 i=1 命中项目根即返回，/app-info 返回错误应用名）
+- **v3.0.6**：`findProjectDir` projectDir 解析命中后，若 `pageUrl`（浏览器实际页面地址，比 projectDir 可靠）解析出 resolved 之下更深的应用目录（`startsWith(resolved + path.sep)`），以 pageUrl 为准并打黄色日志。浏览器缓存旧版 app.js 发错 projectDir 也能正确兜底
+
+#### 预防措施
+1. **URL 段比较必须先解码**：任何用 `location.pathname.split('/')` 的段与中文/字面量比较前，必须 `decodeURIComponent`（本项目用 `decodePart`）
+2. **跨进程传路径必须 resolve 成绝对路径**：返回给子进程当 cwd 使用的路径，禁止相对值
+3. **pageUrl 是目录消歧的最高依据**：projectDir/referer 都可能被缓存或代理篡改，浏览器实际页面地址最可信；命中结果与 pageUrl 推导冲突时优先 pageUrl 并留日志
+4. **多项目布局识别标志**：`pathParts.length >= 3 && decodePart(pathParts[2]) === '01需求梳理'` → 应用目录名是第2段；否则是第1段
+
+#### 事故溯源时间线（v6.69.0 考古结论，跨 V2.0.23~V2.0.30 版本目录取证）
+| 时间 | 版本 | 事件 | 性质 |
+|------|------|------|------|
+| ≤08-17 | V2.0.23/24 | 单项目布局（URL=/应用名/...），取第一段=应用名，正确；`findProjectDir` 相对路径返回 bug 此时已存在但无害（executeSync 未注入 cwd，子进程继承 staticRoot 单次解析） | ✅ 正常期 |
+| 08-18 | V2.0.25 / v3.0.0 | **架构变更**：HTTP 根上移到静态父目录，URL 变 `/{项目名}/{应用名}/...`，sync_server cwd=staticRoot | 🟡 环境改变 |
+| 08-18 | v6.66.0 | `findDirByFileUrl` 逐级累积"命中即返回"（取首个=项目根，非最深） | 🔴 雷1埋下 |
+| 08-18 | v6.68.0 | ① app.js 模板新增 `getAppDirFromUrl()`，第二条件写成 `pathParts[2] === decodePart('01%E9...')`（编码段 vs 解码字面量恒假）→ 多项目布局下永远走单项目分支，把项目根目录名当 projectDir 发送；② executeSync 为修 Cookie 串项目注入 `cwd: projectRoot`，激活沉睡的相对路径 bug → 子进程 cwd 与参数双重拼接出重复路径 | 🔴 雷2、雷3埋下 |
+| 08-18 | v6.68.0 验证盲区 | 只测了 `/app-info` 读接口（logo/title 显示），且测试对象恰是根级应用——发错的 projectDir 恰好指向根配置=正确应用，"错进错出"侥幸通过；未点过「同步表单字段」按钮 | 🟡 侥幸放行 |
+| 08-19~21 | V2.0.26~29 | 每日整目录复制传承，三雷随行；项目内只有课程录制一个根级应用、无子目录应用，触发条件不成立 | 🟡 沉睡期 |
+| 08-22 6:06 | V2.0.30 | 复制自 V2.0.29 | - |
+| 08-22 6:54~7:01 | V2.0.30 | 首次创建进销存1/进销存2 **子目录**应用，用带雷模板生成原型页面——"根级应用配置清单 + 子目录应用 + 多项目URL + 同步按钮"组合首次成立 | 💥 条件齐备 |
+| 08-22 ~7:0x | V2.0.30 | 点击「同步表单字段」→ 三雷同时引爆 → `...\宜搭AI助手V2.0.30\宜搭AI助手V2.0.30\系统配置清单.md` | 💥 爆发 |
+
+**核心教训**：这不是"突然坏了"，而是**架构变更日（08-18）连环修复埋雷 + 验证盲区侥幸放行 + 沉睡4天 + 今天触发条件首次凑齐**。老 bug（相对路径返回）单独存在时无害，是被新变更（cwd 注入）激活的——重构后必须回归测试依赖该路径的所有调用链（读接口+写接口+子进程链路），不能只验证本次修复目标。
+
+---
+
+### 问题16：08-18大版本变更衍生问题全盘排查（sync_server v3.0.7 / 生成器 v2.40.0 修复）
+
+#### 背景
+问题15根因修复后，针对「URL 带项目段的多项目布局」这一 08-18 架构变更，对全项目做了三路代码审计（服务端路径解析 / 前端路径处理 / 跨脚本子进程隔离），共发现 15 项问题（3高/6中/6低），其中 5 项需代码修复。
+
+#### 本次修复清单
+| # | 问题 | 风险 | 修复 |
+|---|------|------|------|
+| 1 | `sync-ops.js` 的 `regenerateFormConfigJs`/`generatePrototypePages` spawn 子进程未注入 `YIDA_PROJECT_ROOT`+`cwd`，跨项目时生成器 Cookie 定位回溯宿主项目 | 高 | 两处 spawn 补注入（与 executeSync v3.0.3 同款） |
+| 2 | 原型页面「组织主页」按钮硬编码 `href="/本地操作页面/index.html"`——静态根是项目根的**父目录**，该绝对路径 404 | 高 | 生成器 v2.40.0：app.js 模板新增 `buildPortalUrl()`，DOMContentLoaded 时按 URL 首段（项目段）重写全部 `.btn-portal-link`；登录失效提示的门户地址同步改用该函数（旧 `getProjectDirName()` 仅 manifest.html 有定义，list/form 页为 undefined） |
+| 3 | `sync_all_configs.js` 的 `loadCookieData()` 不传项目根；两处 `execSync`（sync_config.js / 原型生成器）未传 `YIDA_PROJECT_ROOT`，跨项目读宿主 Cookie | 高 | 新增 `cookieProjectRoot` 向上定位（.cookies.json/组织及应用信息.md），显式传参 + execSync 注入 cwd/env |
+| 4 | `add_form_to_app.js` 的 `ensureLogin()` 在定位目标项目根**之前**执行，login_manager 读/写宿主项目 `.cookies.json` | 中 | 调整 main() 顺序：先 `getCorrectProjectRoot` → 设置模块级 `TARGET_PROJECT_ROOT` → 再 ensureLogin；execCommand/syncFormSchema 的 execSync 统一注入 |
+| 5 | 生成器 `updateOrgInfoPrototypeUrl` 写入「组织及应用信息.md」的原型地址缺项目段（控制台输出的却是对的），外部浏览器打开 404 | 中 | URL 拼接补 `encodeURIComponent(path.basename(rootDir))` 项目段 |
+
+#### 确认无需修复（审计通过项）
+- `data-backup`/`data-clean`：本就显式传 `PROJECT_ROOT`，execSync 仅用于打开 Excel/7z 与 Cookie 无关
+- `sync_single_form.js`：`loadCookieData()` 无参调用安全——父进程 `executeSync`（v3.0.3）已注入 `YIDA_PROJECT_ROOT`，`findProjectRoot()` 优先读环境变量
+- `manifest.html` 内联 `getPathParts()`：编码/解码两种形式都比对，无问题15的编码比较雷
+- `create_from_markdown.js`：新建应用必在宿主项目内（规则11），无跨项目场景
+- 另：`form-settings.js`（1处）/`flow-settings.js`（3处）的 `loadCookieData()` 已补传 `PROJECT_ROOT`（与 COOKIE_FILE 同源），随本版本一并修复
+
+#### 回归验证结果（v3.0.7 实测）
+1. 进销存2 `index.html`/`list.html` HTTP 200 ✓
+2. `/app-info` 返回 `appName=进销存2`（非课程录制）✓
+3. `/sync-form` 同步「仓库信息」9 字段成功 ✓
+4. 浏览器实测 `.btn-portal-link` href 运行时重写为 `/{项目段}/本地操作页面/index.html`，目标页 HTTP 200 ✓
+5. 进销存1/进销存2 原型页面已用 v2.40.0 重建（`.generator-version` 版本感知机制自动覆盖存量）
+
+#### 预防措施
+1. **凡 spawn/execSync 宜搭子脚本，必须注入 `YIDA_PROJECT_ROOT` + `cwd`**（目标项目根），Cookie/配置定位不允许依赖 `__dirname` 回溯
+2. **生成到 HTML 的链接禁止硬编码绝对路径**——多项目布局下任何 `/xxx` 都缺项目段；要么运行时按 `location.pathname` 首段计算，要么生成时拼项目段
+3. **同一段逻辑出现在「控制台输出」和「写文件」两处时必须同源**（问题5即两处拼 URL 逻辑不一致）
+
+---
+
+### 问题17：应用分组目录平铺到项目根——残留清单 + CLI 无防线形成的自锁闭环（config-sync v2.11.0 / sync_server v3.0.8 修复）
+
+**事故现象**：项目根 `宜搭AI助手V2.0.30` 下出现 11 个应用内部分组目录（`2.组件函数「分组」`、`11.连接器「分组」`、`业务规则「分组」`、`集成自动化「分组」`、`发起审批「分组」`等）+ 一个「课程录制」的系统配置清单.md。用户未点击任何同步按钮，污染在 2026-08-22 07:42:36~50 自发出现；同类事故 08-21 已发生过一次（清单头部「生成日期 2026-08-21」为证）。
+
+**根因（三层叠加，缺一不可）**：
+1. **数据层残留（08-21 第一次事故的遗留）**：08-21 某次以项目根为目标的同步把「课程录制」（APP_HHYNCIQ5E4UZFSMY4W3F，45 表单）平铺到根。当时清理了分组目录但**残留了根目录的系统配置清单.md**，使项目根"伪装"成已初始化的应用目录（`hasSystemConfig()` 仅凭该文件判定）。
+2. **入口层防线不对称（脚本缺陷）**：HTTP 端点 `/sync-app-to-local`、`/sync-app-to-local-stream`、`/sync-config` 自 v3.0.4 起都有"目标目录必须叠加应用名"拦截，但 CLI 入口 `sync_all_configs.js` 的 `args[0]` 零校验——传项目根照单全收；且**单参数调用时 `parseAppIdFromConfig(项目根/系统配置清单.md)` 会静默读出残留清单里的课程录制 appId**（sync_all_configs.js 765-770 行），无任何提示。
+3. **识别层缺陷（服务端）**：`findDirByFileUrl`/`resolveProjectDir` 把含系统配置清单.md 的目录一视同仁当应用目录候选，项目根与真应用目录无法区分（v3.0.5/3.0.6 只修了"取最深/消歧"，未排除项目根本身）。
+
+**自锁闭环机制（为什么"没点同步也会复发"）**：残留清单 → 任何一次以项目根为目标的 `sync_all_configs.js` 调用（AI CLI 调试/误传参）→ 静默继承课程录制 appId → 步骤1 重写根清单 + 45 表单分组平铺根 → 污染自我强化。用户全程无感知，直到肉眼看到根目录长出分组。
+
+**修复**：
+| 层 | 位置 | 修复 |
+|---|------|------|
+| CLI 入口 | `lib/sync-server/guard-root.js`（共享防线模块，v3.0.8 同版引入） | 单一来源 `assertNotProjectRoot()` + `splitAllowRootFlag()`；项目根判定标志=组织及应用信息.md；豁免=`--allow-root`。所有能把清单/表单/分组目录写入目标目录的同步脚本 CLI 入口统一接入，杜绝同模式漏洞各自复制 |
+| CLI 入口 | `config-sync/scripts/sync_all_configs.js` v2.11.0 | 接入共享防线（首个）。此前：目标目录含 `组织及应用信息.md` 即拒绝执行并打印正确用法 |
+| CLI 入口（同模式补漏） | `config-sync/scripts/sync_form_schemas.js` v3.21.0 / `sync_config.js` v3.21.0 / `project-sync/scripts/sync_project.js` v1.1.0 | 二次审计发现三个同模式未设防入口：`sync_form_schemas.js` args[0] 无校验且自建表单目录；`sync_project.js` `--output` 无校验且 213 行就是分组平铺逻辑；`sync_config.js` `--output` 无校验（清单写到根=重新埋种子）。全部接入共享防线 |
+| 识别层 | `lib/sync-server/dir-ops.js` v3.0.8 | 新增 `isProjectRootDir()`；`findDirByFileUrl` file:///http 两分支中项目根候选降级为兜底（仅无应用目录候选时返回）；`resolveProjectDir` 候选稳定排序项目根沉底，防 matchedByForm/首个候选误选根 |
+| 数据层 | 项目根清理 | 已删除根目录残留系统配置清单.md + 11 个杂散分组目录（2026-08-22 执行，根目录验证干净；课程录制如需本地留存应在 `项目根/课程录制/` 下正规同步） |
+
+**验证（实测）**：
+1. 复现事故命令 `node sync_all_configs.js <项目根>` → `❌ 已拦截：目标目录是项目根…` 退出码 1 ✓
+2. 普通目录（temp-file）→ 跳过防线走到原"无法获取应用ID"逻辑，无误伤 ✓
+3. `findDirByFileUrl`：应用 URL（/宜搭AI助手V2.0.30/进销存2/…）→ 返回 `进销存2`（不再被根残留清单劫持）✓；纯根 URL → 返回项目根兜底（旧布局兼容）✓；file:// 应用路径 → 返回 `进销存2` ✓
+4. 二次补漏后 4 个 CLI 入口全量回归：sync_all_configs/sync_form_schemas/sync_project(--output)/sync_config(--output) 以项目根为目标 → 全部 `❌ 已拦截（脚本名）` ✓；temp-file 放行进入原逻辑 ✓
+
+**预防措施**：
+1. **项目根独有标志 = `组织及应用信息.md`**：任何"这是不是应用目录"的判定，先用它排除项目根，再做清单匹配
+2. **入口防线必须对称**：HTTP 端点有的拦截（v3.0.4 叠加应用名 / v2.11.0 拒绝项目根），CLI 入口必须有同款，否则总有绕过 UI 的路径（AI 调试恰恰最爱用 CLI）
+3. **清理污染必须彻底**：分组目录 + 残留清单一起清，残留清单=下次事故的种子（本次 08-21 清理不彻底直接导致 08-22 复发）
+4. **静默继承配置 = 事故温床**：单参数从清单读 appId 的设计在"目录可能被污染"前提下不安全，宁可要求显式传参
+
+---

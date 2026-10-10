@@ -13,6 +13,7 @@ description: 当用户说"清空数据"、"删除数据"、"清空表单数据"�
 1. **执行前必须确认** — 清空数据前必须向用户确认
 2. **清空前自动备份数据ID列表** — 备份到本地文件以防万一
 3. **数据不可恢复** — 必须明确告知用户数据删除后不可恢复
+4. **【强制·v2.3.0】数据查询三项硬规范（P0-3）** — 本 skill 及其脚本中的查询/提交代码必须遵守：①分页查询默认显式写 `pageSize: 50`，平台硬上限 100，传 200 会**静默返回 0 条**（本 skill 既有接口调用使用 100，合规，保持不变）；②直接调用 API 写日期数据必须用 **13 位毫秒时间戳**（如 `1719705600000`），严禁提交 `YYYY-MM-DD` 字符串；③需要**分页、对比、配对**的查询必须显式传 `dynamicOrder` 稳定排序（如 `{"dateField_xxx":"-"}`），不传时 `searchFormDatas` 不保证顺序稳定
 
 ---
 
@@ -149,5 +150,5 @@ POST /dingtalk/web/{appId}/v1/process/deleteInstance.json
 
 ## 七、版本历史
 
-- v2.1.2 (2026-06-05): 根因修复—Markdown转义下划线导致appId包含反斜杠（APP\_XXX→APP_XXX），sync_server和clear-form-data均添加unescape处理
-- v2.1.1 (2026-06-05): 修复getRequest未传csrfToken导致API调用失败；appName容错处理
+- v2.3.0 (2026-09-28): 新增专属硬规则4「数据查询三项硬规范」（pageSize 默认50/硬上限100、日期必须13位毫秒时间戳、order-sensitive 查询必须传 dynamicOrder）。依据：OpenYida 借鉴改造清单 P0-3
+- v2.2.0: 安全约束增强——未指定 `--all/--form/--forms` 直接拒绝执行、非交互无 `--confirm` 不删除、删除前自动备份完整内容到 `temp-file/data-backup/`（详见第4步）

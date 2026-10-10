@@ -51,6 +51,12 @@ const GET_SCHEMA_SCRIPT = path.join(SCRIPT_DIR, '..', '..', 'get-schema', 'scrip
 
 // ==================== 工具函数 ====================
 
+// v3.0.7 多项目隔离：目标项目根（含 .cookies.json/组织及应用信息.md 的目录）。
+// main() 在 ensureLogin 前赋值；execCommand/syncFormSchema 的子进程统一注入
+// YIDA_PROJECT_ROOT + cwd，防止 login_manager/form_manager/sync-schema 内
+// findProjectRoot() 回溯 __dirname 读到宿主项目的 Cookie。
+let TARGET_PROJECT_ROOT = null;
+
 /**
  * 执行命令并获取结果
  * @param {string} command - 命令
@@ -62,6 +68,9 @@ function execCommand(command) {
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
       timeout: 300_000,
+      ...(TARGET_PROJECT_ROOT
+        ? { cwd: TARGET_PROJECT_ROOT, env: { ...process.env, YIDA_PROJECT_ROOT: TARGET_PROJECT_ROOT } }
+        : {}),
     });
 
     const trimmedOutput = stdout.trim();
@@ -558,6 +567,10 @@ function syncFormSchema(projectRoot, appId, formName, formType, formUuid, system
         encoding: 'utf-8',
         stdio: 'pipe',
         timeout: 120_000,
+        // v3.0.7 多项目隔离：sync-schema 内 Cookie 定位跟随目标项目
+        ...(TARGET_PROJECT_ROOT
+          ? { cwd: TARGET_PROJECT_ROOT, env: { ...process.env, YIDA_PROJECT_ROOT: TARGET_PROJECT_ROOT } }
+          : {}),
       }
     );
     
@@ -734,6 +747,12 @@ async function main() {
     });
   }
 
+  // v3.0.7 多项目隔离：先定位目标项目根并注入子进程，再检查登录态
+  // （旧顺序 ensureLogin 在前，login_manager 会读/写宿主项目的 .cookies.json）
+  const correctProjectRoot = getCorrectProjectRoot(formFilePath);
+  TARGET_PROJECT_ROOT = findProjectRoot(correctProjectRoot) || correctProjectRoot;
+  console.log(`  📂 项目根目录: ${correctProjectRoot}`);
+
   // 2. 确保登录
   console.log('\n[2/4] 检查登录态...');
   const loginInfo = ensureLogin();
@@ -750,11 +769,8 @@ async function main() {
 
   // 4. 同步表单结构
   console.log('\n[4/4] 同步表单结构...');
-  
-  // 获取正确的项目根目录
-  const correctProjectRoot = getCorrectProjectRoot(formFilePath);
-  console.log(`  📂 项目根目录: ${correctProjectRoot}`);
-  
+  // （correctProjectRoot 已在步骤2前定位，此处直接复用）
+
   // 查找系统配置清单所在目录（用于更新配置清单）
   const systemConfigRoot = findProjectRoot(correctProjectRoot);
   

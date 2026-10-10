@@ -117,9 +117,11 @@ function httpGet(apiPath, params) {
         'Referer': baseUrl + '/alibaba/web/' + appType + '/visual/modelTableDesigner',
       },
     }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try { resolve(JSON.parse(data)); } catch (e) { resolve({ __raw: data.substring(0, 2000) }); }
       });
     }).on('error', reject);
@@ -143,9 +145,11 @@ function httpPost(apiPath, postData, refererPath) {
         'Referer': refererPath || (baseUrl + '/alibaba/web/' + appType + '/visual/modelTableDesigner'),
       },
     }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try { resolve(JSON.parse(data)); } catch (e) { resolve({ __raw: data.substring(0, 2000) }); }
       });
     });

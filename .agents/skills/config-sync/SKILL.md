@@ -12,6 +12,7 @@ description: 宜搭应用配置同步工具，用于从宜搭平台获取应用I
 ### 专属硬规则
 1. **完整生命周期管理删除/新增/更新** — 同步时处理表单的删除、新增和更新三种情况
 2. **批量同步前展示影响范围** — 批量操作前必须向用户展示即将同步的应用和表单列表
+3. **【v3.23.0·P5-3】可选统一预检** — 同步前可运行 `node .agents/skills/server-manager/scripts/agent_capabilities.js` 输出 JSON 摘要（登录态/服务状态/配置可读性），`loginState != "valid"` 时先处理登录，避免同步中途失败
 
 ---
 
@@ -19,7 +20,14 @@ description: 宜搭应用配置同步工具，用于从宜搭平台获取应用I
 
 ## 版本
 
-**v3.19.0** (2026-07-15) — 历史版本更新详情见 [references/版本历史.md](references/版本历史.md)
+**v3.24.0** (2026-10-01) — 【推送能力扩展·v4.0.0/v4.1.0】scope=all 一键全量推送（用户 2026-09-30 授权）：动作代码 + `代码/推送配置.json` 声明的四类配置一次推送——字段事件绑定（`props.<event>.events`）、远程数据源（`dataSource.online[]` REMOTE 形态）、字段公式、字段校验规则；推送前追加全量 `Schema备份_推送前.json`，推送后重新拉取 Schema 回读逐项验证（保存成功 ≠ 配置正确），actions.list 函数注册表重建（只增不删）。【公式 valueType 修复】2026-10-01 实测事故：API 创建的表单字段自带 `valueType='custom'`，推送公式只写 formula+complexValue 两键时设计器不渲染公式编辑面板；修复为三写（formula+complexValue+`valueType='formula'`），回读验证同步加锁。【自定义函数校验通道】`validations[].rules` 新增 `{type:'customValidate', code, message}` 条目：金标准来自用户设计器手配捕获（夹具 tests/fixtures/schema-push_自定义校验金标准.json，自包含结构不依赖 actions.module，compiled 包装模板逐字符对齐），node --check 语法门禁 + 回读核对 source 逐字节一致。回归测试 17 项（tests/schema-push.test.js）。
+**v3.23.0** (2026-09-28) — 【统一预检接入（P5-3，对齐 OpenYida agent-capabilities 模式）】新增专属硬规则3：同步前可选运行 `server-manager/scripts/agent_capabilities.js` 输出 JSON 摘要（Skill 概况/登录态/8080+3457 服务/配置可读性），登录态失效（退出码1）先处理登录。
+**v3.22.3** (2026-09-28) — 【格式变更】同步动作代码文件（action-code.js v1.1.0）：同步元信息从文件头部头注释挪到**文件末尾尾注**（`// ==== 宜搭同步备份信息 ===`），本地文件开头与宜搭 JS 面板逐行完全一致（含行号，用户明确要求）。推送剥离逻辑同步升级（action-code-sync.js v3.2.5）：`stripHeaderComment` 剥末尾尾注 + 剥头部元信息特征块（含"表单UUID:/同步时间:/表单动作代码（"才剥，用户自写说明注释原样保留），已导出可复用。【bug修复】getFormSchema/saveFormSchema 响应收集改为 Buffer.concat 统一解码（v3.2.4）——原字符串拼接在 chunk 边界撕碎多字节中文字符（U+FFFD 乱码、位置随机，实锤事故：销售对账单"已对账数量"坏字）；lib/core/http.js 同步修复。
+**v3.22.2** (2026-09-28) — 【新增】动作代码推送（用户已授权例外，见工作区规则25补充）：原型页新增「⬆️ 推送动作代码」按钮（橙色），可将本地「代码」文件夹中任一版本推送回宜搭。安全流程六步：拉取线上 Schema → 推送前自动备份（`动作代码YYYYMMDD_推送前备份HHmmss.js`，永不覆盖）→ 剥离同步头注释 → node --check 语法校验 → 仅替换 `actions.module.source`（其余 Schema 原样）→ saveFormSchema 保存（form-urlencoded）。服务端 sync_server v3.2.2 新增 `GET /form-actions-versions`（列代码版本，按修改时间倒序）与 `POST /push-form-actions`；实现位于 `lib/sync-server/action-code-sync.js`（resolvePushContext/listActionCodeVersions/pushActionCode）。文件名安全校验（正则白名单+禁 `..`）。推送后需到宜搭设计器核对并发布才生效。
+**v3.22.1** (2026-09-28) — 【登录组织校验】"刷新登录后仍报登录失效"根因：同一钉钉账号属多个宜搭组织，登录会话落在浏览器记忆的组织（qfhefh），而非项目所属组织（oksruk）。修复：①dashboard v1.8.1 刷新登录请求携带 projectDir（Cookie 写回项目根）；②sync_server v3.2.1 `/refresh-login` 从项目历史 Cookie 读期望组织，经 `YIDA_EXPECTED_BASE_URL` 传给登录脚本；③api-client login_manager v1.0.2 登录后校验组织，不符时提示用户在浏览器右上角切换、每2秒轮询检测（最长5分钟），headless 验证路径组织不符时强制重新登录。
+**v3.22.0** (2026-09-28) — 【防卡死·根因锁定】两次 IDE 卡死定位为前端原生 `alert()` 在 Trae 内置浏览器（WebView）中的同步阻塞所致（服务端日志证明请求 0.2s 正常返回，卡死发生在错误提示环节）。prototype_generator v3.0.8：新增 `showErrorModal` 页面内自定义模态，替换生成器模板中全部 10 处原生 alert（含 syncForm/syncFormActions 的登录失效与错误提示、"无法获取表单名称"、原型演示提示）；同时 v3.2.0 服务端 `/sync-form-actions` 改内联实现（不再 spawn 子进程）+ executeSync 90s 超时兜底。
+**v3.21.0** (2026-09-28) — 【新增】同步动作代码：应用同步时从 Schema 的 `actions.module.source` 提取表单动作代码，写入表单目录「代码/动作代码YYYYMMDD.js」（同日覆盖），未配置代码的表单自动跳过；与 `lib/sync-server/action-code.js` 共享提取模块。
+**v3.20.1** (2026-08-02) — 历史版本更新详情见 [references/版本历史.md](references/版本历史.md)
 
 ## 📚 参考文件索引（按需加载）
 

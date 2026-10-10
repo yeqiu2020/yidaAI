@@ -46,8 +46,11 @@ const path = require('path');
 const https = require('https');
 
 // 配置
+// v3.0.2 多项目隔离：Cookie/组织信息跟随「目标项目」（优先 YIDA_PROJECT_ROOT）
 const SCRIPT_DIR = __dirname;
-const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..', '..');
+const PROJECT_ROOT = (process.env.YIDA_PROJECT_ROOT && fs.existsSync(process.env.YIDA_PROJECT_ROOT))
+  ? process.env.YIDA_PROJECT_ROOT
+  : path.resolve(SCRIPT_DIR, '..', '..', '..', '..');
 
 // Node.js 路径（Phase 6: 使用 lib/core/utils 统一检测，消除硬编码路径）
 let NODE_PATH;
@@ -635,10 +638,11 @@ async function fetchFormNavigation(appId, baseUrl) {
 
     const result = await new Promise((resolve, reject) => {
       const req = https.request(apiUrl, options, (res) => {
-        let data = '';
-        res.setEncoding('utf8');
-        res.on('data', (chunk) => { data += chunk; });
+        // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () => {
+          const data = Buffer.concat(chunks).toString('utf-8');
           try {
             resolve(JSON.parse(data));
           } catch (e) {

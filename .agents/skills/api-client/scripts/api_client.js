@@ -18,7 +18,12 @@ const coreUtils = require("../../../../lib/core/utils");
 
 // ==================== 配置 ====================
 
-const PROJECT_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
+// v3.0.2 多项目隔离：Cookie 必须跟随「目标项目」而不是脚本宿主项目。
+// 优先取 sync_server 注入的 YIDA_PROJECT_ROOT；否则回退脚本宿主（CLI 独立运行）。
+const SCRIPT_HOST_ROOT = path.resolve(__dirname, "..", "..", "..", "..");
+const PROJECT_ROOT = (process.env.YIDA_PROJECT_ROOT && fs.existsSync(process.env.YIDA_PROJECT_ROOT))
+  ? process.env.YIDA_PROJECT_ROOT
+  : SCRIPT_HOST_ROOT;
 const COOKIE_FILE = path.join(PROJECT_ROOT, ".cookies.json");
 const LOGIN_SCRIPT = path.join(__dirname, "login_manager.js");
 const CONFIG_FILE = path.join(__dirname, "..", "config", "default.json");
@@ -156,9 +161,11 @@ function postRequest(baseUrl, requestPath, params, cookies, referer = null) {
         return;
       }
 
-      let responseData = "";
-      response.on("data", chunk => { responseData += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      response.on("data", chunk => chunks.push(chunk));
       response.on("end", () => {
+        const responseData = Buffer.concat(chunks).toString("utf-8");
         console.error(`  HTTP ${response.statusCode}`);
         try {
           resolve(JSON.parse(responseData));
@@ -225,9 +232,11 @@ function getRequest(baseUrl, requestPath, queryParams, cookies) {
         return;
       }
 
-      let responseData = "";
-      response.on("data", chunk => { responseData += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      response.on("data", chunk => chunks.push(chunk));
       response.on("end", () => {
+        const responseData = Buffer.concat(chunks).toString("utf-8");
         try {
           resolve(JSON.parse(responseData));
         } catch (e) {

@@ -21,12 +21,13 @@ description: "宜搭数据集制作技能，用于通过API创建视图表和数
 9. **🔴 创建视图表前必须检查已有数据集** — 必须先读取项目根目录下的 `数据集配置.md`，检查「视图表列表」中是否已有同配置（相同主表+关联表+关联字段）的视图表。如果已有且状态为"✅"，直接复用 cubeCode，**禁止重复创建**
 10. **🔴 禁止创建重复视图表版本** — 同样的主表+关联表+关联字段组合，只创建一个视图表。如果需要修改输出字段，**修改原视图表配置**（重新调用 saveModelTableSchema 保存），而非创建"v2/v3/v4"等新版本。历史教训：同一配置创建了6个版本（v2/v3/v4/v5/三方联合/三方联合v2），导致 cubeCode 混乱和配置堆积
 11. **🔴 创建后必须验证并标记状态** — 创建成功后立即用 queryModelTableDatasAsync 验证数据查询，在 `数据集配置.md` 中标记验证状态（✅ 验证通过 / ⚠️ 已失效）。如果后续 report skill 发现 cubeCode 失效，必须回来更新状态为"⚠️ 已失效"，避免其他报表复用失效的 cubeCode
+12. **【强制·v2.6.0】聚合表写操作必须带 revision 防覆盖（P1-1）** — 聚合表（virtualView）的 save/publish 走 `aggregate-lifecycle.js`，脚本自动执行双轴乐观锁：save 用 `stashGmtModified` 轴、publish 用 `gmtModified` 轴，写入后回读校验 revision 必须前进（`AGGREGATE_WRITE_READBACK_REVISION_UNCHANGED/MISSING/MISMATCH` 即失败）；多人协作时用 `--expected-revision` 显式声明"我基于的版本"，不一致报 `AGGREGATE_WRITE_PRECONDITION_FAILED`（写入前拒绝）。**已发布聚合表属于线上内容，禁止绕过本脚本直接调 virtualview 接口盲改**
 
 ---
 
 # 宜搭数据集制作技能
 
-当前版本：v2.5.0（完整更新日志见 [references/版本历史.md](references/版本历史.md)）
+当前版本：v2.6.0（完整更新日志见 [references/版本历史.md](references/版本历史.md)）
 
 ## 📚 参考文件索引（按需加载）
 
@@ -34,6 +35,27 @@ description: "宜搭数据集制作技能，用于通过API创建视图表和数
 |---------|---------|
 | [references/视图表配置结构详解.md](references/视图表配置结构详解.md) | 构建 `saveModelTableSchema.json` 请求体时，逐结构对照 mainTable/associatedTables/tableRelations/measureMapping/frontSchema/columnFields 完整字段 |
 | [references/版本历史.md](references/版本历史.md) | 需要了解历史版本变更（v2.4.0 配置驱动改造、v2.5.0 防重复规则）时 |
+| [scripts/aggregate-contract.js](scripts/aggregate-contract.js) | 聚合表 design 结构校验规则（DESIGN_KEYS 六数组、限额、publish 完整性）——编写聚合表 design JSON 前对照 |
+
+## ⭐ 聚合表完整生命周期（v2.6.0 新增，P1-1）
+
+> API 契约 1:1 移植自官方 openyida 包（MIT，2026.9.24）`lib/aggregate-table/`，设计校验直接引入官方 contract.js。聚合表=设计器里的「聚合表」，formType=virtualView，与上方"视图表"（saveModelTableSchema 链路）是两条不同链路。
+
+```bash
+node .agents/skills/dataset/scripts/aggregate-lifecycle.js list <appType> [--keyword 关键字]          # 列出聚合表
+node .agents/skills/dataset/scripts/aggregate-lifecycle.js create-empty <appType> <名称>             # 创建空聚合表
+node .agents/skills/dataset/scripts/aggregate-lifecycle.js inspect <appType> <formUuid>              # 结构检查（含双 revision）
+node .agents/skills/dataset/scripts/aggregate-lifecycle.js preview <appType> <formUuid> <design文件> # 数据预览（不落库）
+node .agents/skills/dataset/scripts/aggregate-lifecycle.js save <appType> <formUuid> <design文件> [--expected-revision R]   # 草稿保存（stash 轴）
+node .agents/skills/dataset/scripts/aggregate-lifecycle.js publish <appType> <formUuid> <design文件> [--expected-revision R] # 发布（live 轴）
+node .agents/skills/dataset/scripts/aggregate-lifecycle.js status <appType> <formUuid>               # 构建状态查询
+```
+
+**design JSON 结构**（六数组，校验规则见 `scripts/aggregate-contract.js`）：`relationForms`（关联表单，formUuid 必填，去重）/ `relationships`（relationId + relationshipInfos 数量=relationForms 数）/ `aggregatedFields`（id 必须命中某个 relationship.relationId）/ `auxFields` / `formulaFields`（publish 必填非空，含 formula）/ `validators`。
+
+**revision 防覆盖**：save/publish 提交前自动读取当前轴值作乐观锁并回读校验前进；多人协作或基于 inspect 输出修改时**必须**传 `--expected-revision`。错误码：`AGGREGATE_WRITE_PRECONDITION_FAILED`（版本不一致，写入前拒绝）/ `AGGREGATE_DESIGN_CONTRACT_INVALID`（design 不合契约）/ `AGGREGATE_WRITE_READBACK_REVISION_UNCHANGED`（写入未生效）。
+
+**组织配额提示**：专业版聚合表组织内限额 20 个；超限时 create-empty 会返回平台配额错误（如"已使用27个"），此时只能复用/清理已有聚合表，无法新建。
 
 ## 一、角色定义
 

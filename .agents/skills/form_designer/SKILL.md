@@ -19,6 +19,12 @@ description: 宜搭表单设计器，用于在指定目录下设计新表单或�
 
 ## 版本
 
+**v2.2.2** (2026-08-19)
+
+### 更新内容
+
+- **修复命令路径错误**：3 处命令路径与文件结构目录名误写为历史旧名 `form_planner`，实际目录为 `form_designer`，已全部修正（历史遗留：v2.0.0 重命名 skill 时未同步更新命令路径）
+
 **v2.2.1** (2026-04-01)
 
 ### 更新内容
@@ -27,43 +33,6 @@ description: 宜搭表单设计器，用于在指定目录下设计新表单或�
   - 明确规则：传入的应用分组目录（如 `未分组表单`）的父目录就是项目根目录
   - 项目根目录下一定有 `01需求梳理` 目录（用于设计公式和代码）
   - 直接返回父目录，无需循环查找
-
-**v2.2.0** (2026-04-01)
-
-### 更新内容
-
-- **修复项目根目录查找逻辑**：
-  - 新增 `findProjectRoot()` 函数，自动向上查找包含 `01需求梳理` 目录的项目根目录
-  - 解决在应用分组目录（如 `未分组表单`）下执行时，错误地在当前目录创建 `01需求梳理` 的问题
-  - 现在会正确找到项目根目录（如 `叶秋功能测试`）下的共用 `01需求梳理` 目录
-
-**v2.1.0** (2026-03-31)
-
-### 更新内容
-
-- **字段清单文件智能处理**：
-  - 字段清单.md 始终位于 `01需求梳理` 目录下（标准项目结构）
-  - **文件存在**：直接读取并在末尾追加新表单内容
-  - **文件不存在**：自动创建新文件（兼容老应用同步场景）
-- 表单清单.md 始终生成在项目根目录下
-- 简化路径处理逻辑，专注于文件级别的判断
-
-**v2.0.0** (2026-03-28)
-
-### 更新内容
-
-- 重命名skill：form\_planner → 表单设计
-- 更新触发关键词："在xxx目录下设计一个表单"
-- 支持在任意指定目录下设计表单
-
-**v1.0.0** (2026-03-25)
-
-### 初始版本功能
-
-- 新增表单规划功能，支持在字段清单中添加新表单定义
-- 支持更新现有表单的字段结构
-- 自动生成表单清单.md条目
-- 与form\_creator skill流程对齐
 
 ## 功能概述
 
@@ -112,14 +81,14 @@ description: 宜搭表单设计器，用于在指定目录下设计新表单或�
 **命令**：
 
 ```powershell
-node .agents/skills/form_planner/scripts/update_field_list.js "<目录路径>" "<表单名称>" "<表单类型>" "<字段描述>"
+node .agents/skills/form_designer/scripts/update_field_list.js "<目录路径>" "<表单名称>" "<表单类型>" "<字段描述>"
 ```
 
 **示例**：
 
 ```powershell
 # 在指定目录下设计表单
-node .agents/skills/form_planner/scripts/update_field_list.js "./跨表单测试/01需求梳理" "报工登记" "普通表单" "包含提交部门、提交日期、提交人、工序等字段"
+node .agents/skills/form_designer/scripts/update_field_list.js "./跨表单测试/01需求梳理" "报工登记" "普通表单" "包含提交部门、提交日期、提交人、工序等字段"
 ```
 
 ### 场景2：更新现有表单的字段
@@ -139,7 +108,7 @@ node .agents/skills/form_planner/scripts/update_field_list.js "./跨表单测试
 **命令**：
 
 ```powershell
-node .agents/skills/form_planner/scripts/update_field_list.js "<目录路径>" "<表单名称>" --update "<更新描述>"
+node .agents/skills/form_designer/scripts/update_field_list.js "<目录路径>" "<表单名称>" --update "<更新描述>"
 ```
 
 ### 场景3：从自然语言描述生成字段
@@ -282,15 +251,10 @@ AI：
 ## 文件结构
 
 ```
-form_planner/
+form_designer/
 ├── SKILL.md                          # 本文档
-├── scripts/
-│   ├── update_field_list.js          # 主脚本：更新字段清单
-│   ├── field_parser.js               # 字段解析器
-│   ├── md_generator.js               # Markdown生成器
-│   └── field_type_detector.js        # 字段类型识别器
-└── evals/
-    └── evals.json                    # 测试用例
+└── scripts/
+    └── update_field_list.js          # 主脚本：更新字段清单
 ```
 
 ## 核心脚本说明

@@ -65,6 +65,8 @@ function normalizeLogic(logic) {
 }
 
 function normalizeAssignmentValue(valueType, value) {
+  // v2.8.13: 空字符串/空值不做数字转换（Number('')===0 会把"有值/没有值"条件的空 value 误转成 0，触发"公式构造失败"）
+  if (value === '' || value === null || value === undefined) return value;
   return valueType === 'literal' && !isNaN(Number(value)) ? Number(value) : value;
 }
 
@@ -147,12 +149,30 @@ function buildDataCreateAssignments(assignments) {
   }));
 }
 
-function buildDataUpdateAssignments(assignments) {
-  return assignments.map(({ column, valueType, value }) => ({
-    column,
-    valueType,
-    value: normalizeAssignmentValue(valueType, value),
-  }));
+function buildDataUpdateAssignments(assignments, scriptNodeId, scriptOutputNames) {
+  return assignments.map(({ column, valueType, value }) => {
+    // 【v2.0.33 新增】如果 valueType=processVar 且脚本节点存在，自动展开为列公式引用脚本输出变量
+    // 脚本引擎将输出变量注册为 <nodeId>_<varName>，公式中必须用 #{<nodeId>_<varName>} 引用
+    // 用户只需传 varName，builder 自动拼接 nodeId 前缀和 #{} 包裹
+    // ⚠️ 判断规则：value 存在于 scriptOutputNames（用户声明的脚本输出变量名）
+    const isScriptOutput = valueType === 'processVar' && scriptNodeId && value
+      && (scriptOutputNames || []).some((name) => name === value);
+    if (isScriptOutput) {
+      const fullVar = `${scriptNodeId}_${value}`;
+      return {
+        column,
+        valueType: 'column',
+        value: `#{${fullVar}}`,
+        __display: `${value}（脚本输出）`,
+        __source: `#{${fullVar}}`,
+      };
+    }
+    return {
+      column,
+      valueType,
+      value: normalizeAssignmentValue(valueType, value),
+    };
+  });
 }
 
 function buildUpdateConditions(updateConditions) {
@@ -262,22 +282,48 @@ function buildConditionNodeProps(branchConditions, logic) {
   const groupId = generateRuleGroupId();
   const rules = list.map((bc) => {
     const opCode = bc.opCode || 'Equal';
-    const ruleValue = normalizeAssignmentValue(bc.valueType, bc.value);
-    return {
+    // v2.8.28: 无值操作符（ExistValue 有值 / NotExistValue 无值）禁止写 value/ruleValue 键。
+    //   金标准（用户手配 captured_save.json）：这两个键【不存在】。CLI 写 value:""/ruleValue:"" 会导致
+    //   设计器条件 setter 拿空字符串去匹配下拉选项 key（${node}.pid），匹配不到 → span 靠 name 显示正确
+    //   但下拉不选中+标红（v2.8.28 历史事故，与 ${} 包裹丢失同症状不同根因，逐字符 diff 才发现）。
+    const isValuelessOp = opCode === 'ExistValue' || opCode === 'NotExistValue';
+    const ruleValue = isValuelessOp ? undefined : normalizeAssignmentValue(bc.valueType, bc.value);
+    const rule = {
       id: bc.fieldId || '',
       op: mapTriggerOperator(opCode),
       operators: [],
-      value: ruleValue,
+      ...(ruleValue === undefined ? {} : { value: ruleValue }),
       componentType: bc.componentType || 'TextField',
       ruleId: generateRuleItemId(),
       parentId: groupId,
       extValue: bc.valueType || 'literal',
-      ruleValue,
+      ...(ruleValue === undefined ? {} : { ruleValue }),
       name: bc.fieldName || bc.fieldId || '',
       valueType: bc.valueType || 'literal',
       ruleType: 'rule_text',
       opCode,
     };
+    // v2.8.16: 条件字段是节点变量引用（${node}.field，如条件分支 upsert 的获取节点输出）时，
+    //   BranchSetter 无法自动解析，必须补 __display（源字段中文名），否则画布显示"请配置字段/变量"（空分支）。
+    //   硬规则10同类坑（循环内发起审批 assignments 缺 __display 显示空白，v2.8.0 根治）。
+    // v2.8.24: 无值操作符（ExistValue/NotExistValue）的 extValue 必须用 "value"（与用户手配金标准一致）。
+    //   金标准（temp-file/csa66_golden.json 条件规则，用户在设计器手配"获取单条数据.实例ID 有值"）：
+    //   extValue="value"、valueType="literal"、无 value/ruleValue 键。
+    // v2.0.33 修复：有值操作符（如 GreaterThan）的 extValue 禁止覆盖为 "value"——服务端 buildValue 会将其
+    //   解析为公式表达式，但实际 value 只是字面量或字段引用，导致"公式构造失败，未包含公式"。
+    //   金标准（dataRetrieveCondition）：extValue = valueType === 'literal' ? 'value' : valueType。
+    const isNodeVarRef = (bc.fieldId || '').includes('.');
+    if (isNodeVarRef) {
+      rule.__display = bc.fieldName || bc.fieldId || '';
+      // v2.0.33 修复：有值操作符携带 value 时，禁止覆盖 extValue='value'——服务端	buildValue 会把
+      //   extValue='value' 当成公式表达式解析，导致"公式构造失败，未包含公式"。
+      //   保留初始 extValue = bc.valueType || 'literal'（如 literal 字段保持 'literal'）。
+      //   仅无值操作符（ExistValue/NotExistValue 无任何 value 字段）按 v2.8.24 金标准覆盖 extValue='value'。
+      if (isValuelessOp) {
+        rule.extValue = 'value';
+      }
+    }
+    return rule;
   });
   const normalizedLogic = normalizeLogic(logic);
   return {
@@ -285,6 +331,23 @@ function buildConditionNodeProps(branchConditions, logic) {
     rules,
     ruleId: groupId,
     conditionCode: normalizedLogic === 'OR' ? '||' : '&&',
+  };
+}
+
+// v2.8.27: 条件分支"存在性判断"自动条件（conditionalUpsert 用）——抽成可单测的导出函数。
+// ⚠️ fieldId 必须是字面量 `${nodeId}.pid`（${} 包裹不可丢）：
+//   - 设计器变量树下拉按 `${node}.pid` 匹配选项，丢了 ${} 就"显示对但下拉不选中+标红"；
+//   - 运行时引擎按 ${node} 变量表达式解析，丢了 ${} 恒判"无值"→ 永远走默认分支重复插入。
+//   金标准（用户手配 captured_save.json）：id="${node_8d3181987be}.pid"。
+//   历史事故（v2.8.23~v2.8.26）：create.js 用未转义模板字符串 `${dataNodeId}.pid`，
+//   JS 插值把 ${} 吃掉产出 "node_xxx.pid"，连续三个版本都声称修复却仍坏，直到 v2.8.27 对照金标准逐字符比对才发现。
+function buildExistenceBranchCondition(dataNodeId) {
+  return {
+    fieldId: `\${${dataNodeId}}.pid`,
+    fieldName: '获取单条数据.实例ID',
+    opCode: 'ExistValue',
+    componentType: 'TextField',
+    valueType: 'literal',
   };
 }
 
@@ -345,17 +408,33 @@ function buildProcessJson(options) {
     connectorMode, connectionId,
     dataQueryType, dataQuantity,
     updateFormUuid, updateConditions, updateAssignments,
-    hasDeleteDataNode, deleteSubSourceId,
+    hasDeleteDataNode, deleteSubSourceId, deleteSubConditions,
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
     // 数据来源类型：form(默认,从表单查询) 或 subform(从触发数据子表获取)
     // bundle 验证：originalType="sub_table" 时 sourceId="#{formUuid}"，subSourceId=子表字段ID
     dataSourceType, dataSubFieldId,
+    // v2.8.5: 链式获取模式——5节点 cascade
+    isChainMode, dataSubSourceId, dataSubConditions, dataNode2Id,
+    // v2.8.7: 目标表单子表直接获取模式（isSubFormTarget=true 时获取节点 originalType=sub_table, sourceId=#{目标表单}, subSourceId=目标子表）
+    isSubFormTarget,
+    // v2.8.8: 目标表单类型（process/receipt）——决定 originalType（process_form/process/form）
+    dataFormType,
     // 循环体内更新数据节点（用于 --cycle + --cycle-update-form-uuid 组合）
     // 场景：遍历触发子表行，逐行 UPSERT 目标表单记录
     cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments,
     cycleUpdateNoneOperation, cycleUpdateDataNodeId,
+    // 循环体内发起审批节点（用于 --cycle + --cycle-initiate-approval-form-uuid 组合）
+    // 场景：遍历触发子表行，逐行向目标流程表单发起审批
+    // assignments[].value 必须使用 ${cycleNodeId}.fieldId 格式（硬规则10）
+    cycleInitiateApprovalFormUuid, cycleInitiateApprovalInitiator,
+    cycleInitiateApprovalAssignments, cycleInitiateApprovalNodeId,
+    // v2.8.13: 条件分支upsert模式——获取单条→条件判断→[有值:更新 / 没有值:发起审批]
+    conditionalUpsert,
+    // 【新增】v2.0.33: 条件分支内嵌更新模式——获取单条→条件判断→[满足条件:更新 / 不满足:结束]
+    //   与 conditionalUpsert 互斥；不提供 initiateApprovalFormUuid，默认分支直接指向结束节点
+    nestedUpdate,
   } = options;
 
   const hasAddDataNode = Boolean(addDataFormUuid);
@@ -367,8 +446,10 @@ function buildProcessJson(options) {
   const hasConnectorCallNode = Boolean(connectorId && actionId);
   const hasScript = Boolean(hasScriptNode);
   const hasCondition = Boolean(hasConditionNode);
+  const hasNestedUpdate = Boolean(nestedUpdate);
   const hasCycle = Boolean(hasCycleNode);
   const hasCycleUpdateNode = Boolean(cycleUpdateFormUuid) && Boolean(cycleUpdateDataNodeId);
+  const hasCycleInitiateApprovalNode = Boolean(cycleInitiateApprovalFormUuid) && Boolean(cycleInitiateApprovalNodeId);
   const normalizedConnectorMode = resolveConnectorMode(connectorId, connectorMode);
   const connectorProcessType = normalizedConnectorMode === 5 ? 'httpConnector' : 'innerConnector';
   const includeMessageNode = hasMessageNode !== false;
@@ -394,10 +475,12 @@ function buildProcessJson(options) {
     }))
     : [];
 
-  // 节点顺序：trigger, dataRetrieve, addData, initiateApproval, updateData, deleteData, script, connector, condition, cycle, message, end
+  // 节点顺序：trigger, dataRetrieve, dataRetrieve2(chain), addData, initiateApproval, updateData, deleteData, script, connector, condition, cycle, message, end
   let nodeIdIndex = 0;
   const triggerNodeId = nodeIds[nodeIdIndex++];
   const dataNodeId = hasDataNode ? nodeIds[nodeIdIndex++] : null;
+  // v2.8.5: 链式获取模式第二个获取节点
+  const dataNode2IdResolved = isChainMode ? nodeIds[nodeIdIndex++] : null;
   const addDataNodeId = hasAddDataNode ? nodeIds[nodeIdIndex++] : null;
   const initiateApprovalNodeId = hasInitiateApprovalNode ? nodeIds[nodeIdIndex++] : null;
   const updateDataNodeId = hasUpdateDataNode ? nodeIds[nodeIdIndex++] : null;
@@ -406,6 +489,7 @@ function buildProcessJson(options) {
   const connectorCallNodeId = hasConnectorCallNode ? nodeIds[nodeIdIndex++] : null;
   const conditionNodeId = hasCondition ? nodeIds[nodeIdIndex++] : null;
   const cycleNodeId = hasCycle ? nodeIds[nodeIdIndex++] : null;
+  const cycleInitiateApprovalNodeIdResolved = hasCycleInitiateApprovalNode ? nodeIds[nodeIdIndex++] : null;
   const messageNodeId = includeMessageNode ? nodeIds[nodeIdIndex++] : null;
   const endNodeId = nodeIds[nodeIdIndex++];
 
@@ -426,6 +510,21 @@ function buildProcessJson(options) {
         : tailNodeId;
     }
     if (current === 'dataRetrieve') {
+      // v2.8.5: 链式模式下 dataRetrieve 的下一个是 dataRetrieve2
+      if (isChainMode) return dataNode2IdResolved;
+      // v2.8.13: 条件分支upsert模式——获取数据后直接到条件分支（跳过发起审批和更新数据，它们移入分支内）
+      // 【新增】v2.0.33: 条件分支内嵌更新模式——同上，跳过所有后续节点，直接到条件分支
+      if (conditionalUpsert || hasNestedUpdate) return conditionNodeId;
+      return hasAddDataNode ? addDataNodeId
+        : hasInitiateApprovalNode ? initiateApprovalNodeId
+        : hasUpdateDataNode ? updateDataNodeId
+        : hasDeleteNode ? deleteDataNodeId
+        : hasScript ? scriptNodeId
+        : hasConnectorCallNode ? connectorCallNodeId
+        : hasCondition ? conditionNodeId
+        : tailNodeId;
+    }
+    if (current === 'dataRetrieve2') {
       return hasAddDataNode ? addDataNodeId
         : hasInitiateApprovalNode ? initiateApprovalNodeId
         : hasUpdateDataNode ? updateDataNodeId
@@ -445,6 +544,8 @@ function buildProcessJson(options) {
         : tailNodeId;
     }
     if (current === 'initiateApproval') {
+      // v2.8.13: 条件分支upsert模式——发起审批在默认分支内，后继直接到结束
+      if (conditionalUpsert) return endNodeId;
       return hasUpdateDataNode ? updateDataNodeId
         : hasDeleteNode ? deleteDataNodeId
         : hasScript ? scriptNodeId
@@ -453,6 +554,9 @@ function buildProcessJson(options) {
         : tailNodeId;
     }
     if (current === 'updateData') {
+      // v2.8.13: 条件分支upsert模式——更新数据在命中分支内，后继直接到结束
+      // 【新增】v2.0.33: 条件分支内嵌更新模式——同上，更新节点在分支内，后继直结束
+      if (conditionalUpsert || hasNestedUpdate) return endNodeId;
       return hasDeleteNode ? deleteDataNodeId
         : hasScript ? scriptNodeId
         : hasConnectorCallNode ? connectorCallNodeId
@@ -524,9 +628,16 @@ function buildProcessJson(options) {
     const dataRetrieveNextId = nextAfter('dataRetrieve');
 
     const isSubformSource = dataSourceType === 'subform';
-    const dataOriginalType = isSubformSource ? 'sub_table' : 'form';
-    const dataSourceIdValue = isSubformSource ? `#{${formUuid}}` : dataFormUuid;
-    const dataSubSourceIdValue = isSubformSource ? (dataSubFieldId || '') : '';
+    // v2.8.7: 目标表单子表直接获取模式（sourceId=#{目标表单}, subSourceId=目标子表）
+    const isTargetSubTable = Boolean(isSubFormTarget) && dataSubSourceId !== '';
+    // v2.8.8 金标准：目标表单是流程表单时，GetSingleDataNode 用 'process_form'，GetBatchDataNode 用 'process'
+    //   （手工配置 viewJson 验证：单条=process_form，多条=process；普通表单目标=form）
+    const dataOriginalType = (isSubformSource || isTargetSubTable) ? 'sub_table'
+      : (dataFormType === 'process' ? (dataQueryIsMultiple ? 'process' : 'process_form') : 'form');
+    const dataSourceIdValue = isSubformSource ? `#{${formUuid}}`
+      : (isTargetSubTable ? `#{${dataFormUuid}}` : dataFormUuid);
+    const dataSubSourceIdValue = isSubformSource ? (dataSubFieldId || '')
+      : (isTargetSubTable ? dataSubSourceId : '');
 
     nodes.push({
       name: { zh_CN: dataQueryIsMultiple ? '获取多条数据' : '获取单条数据', en_US: '' },
@@ -541,11 +652,58 @@ function buildProcessJson(options) {
         filterType: 'condition',
         sort: { type: 'none', column: '' },
         sourceId: dataSourceIdValue,
-        appType: isSubformSource ? '' : appType,
+        appType: (isSubformSource || isTargetSubTable) ? '' : appType,
         originalType: dataOriginalType,
         subSourceId: dataSubSourceIdValue,
         condition: conditions,
         quantity: dataRetrieveQuantity,
+        dataRules: {
+          rules: [
+            {
+              componentName: '',
+              labe: '',
+              name: '',
+              required: false,
+              ruleId: generateDataRuleId(),
+              value: '',
+              valueType: 'literal',
+            },
+          ],
+        },
+        assignments: [],
+      },
+      childNodes: [],
+    });
+  }
+
+  // v2.8.5: 链式获取第二个节点 - GetBatchDataNode(originalType="node", sourceId=第一个获取节点)
+  // 从前置获取节点的主表记录中获取子表行数据
+  if (isChainMode && dataNode2IdResolved) {
+    const subConditions = dataSubConditions && dataSubConditions.length > 0
+      ? buildDataRetrieveCondition(dataSubConditions)
+      : { condition: 'AND', rules: [], ruleId: generateRuleGroupId(), conditionCode: '&&' };
+    const subFilterType = dataSubConditions && dataSubConditions.length > 0 ? 'condition' : 'all';
+    const dataRetrieve2NextId = nextAfter('dataRetrieve2');
+
+    nodes.push({
+      name: { zh_CN: '获取多条数据', en_US: '' },
+      description: '请设置想要获取的数据',
+      type: 'dataRetrieve',
+      nodeId: dataNode2IdResolved,
+      prevId: '',
+      nextId: [dataRetrieve2NextId],
+      props: {
+        type: 'batch',
+        filterType: subFilterType,
+        sort: { type: 'none', column: '' },
+        sourceId: dataNodeId,
+        appType: '',
+        // v2.8.8: 修正为 sub_table（原值 'node' 是错的，导致 UI 显示"从数据节点中获取"而非"从子表中获取"）
+        // 设计器手工配置金标准：originalType='sub_table' + sourceId=前置节点ID + subSourceId=目标子表字段ID
+        originalType: 'sub_table',
+        subSourceId: dataSubSourceId,
+        condition: subConditions,
+        quantity: String(dataQuantity || 100),
         dataRules: {
           rules: [
             {
@@ -626,7 +784,11 @@ function buildProcessJson(options) {
   if (hasUpdateDataNode && updateDataNodeId) {
     const updateNextId = nextAfter('updateData');
     const updateType = options.updateType || 'direct_form';
-    const targetMainFormUuid = options.updateSourceId || updateFormUuid;
+    // cascade 模式下（--update-type node + 链式获取），sourceId 必须指向 GetBatchDataNode
+    // 才能逐行更新子表数据；否则指向 target form 只更新单条主表
+    const targetMainFormUuid = updateType === 'node' && isChainMode
+      ? (dataNode2IdResolved || updateFormUuid)
+      : (options.updateSourceId || updateFormUuid);
     const targetSubFieldId = options.updateSubSourceId || '';
     const hasSubUpdate = Boolean(targetSubFieldId);
 
@@ -644,7 +806,7 @@ function buildProcessJson(options) {
       // 子条件：仅子表更新时非空（引擎对子表行逐行匹配）
       subCondition,
       // 赋值规则（valueType='column' 为公式）
-      assignments: buildDataUpdateAssignments(updateAssignments || []),
+      assignments: buildDataUpdateAssignments(updateAssignments || [], scriptNodeId, (scriptOutputs || []).map((o) => o.name)),
       // 未匹配到目标数据时：ignored=跳过 / add=新增一条(upsert)
       noneOperation: options.updateNoneOperation || 'ignored',
       // 设计器回读时的条件行UI状态（镜像 condition/subCondition 的 rules）
@@ -669,13 +831,25 @@ function buildProcessJson(options) {
   // 保存形状源于 bundle Xb：无 subSourceId 时 type="node" 且不带 subSourceId 字段
   if (hasDeleteNode && deleteDataNodeId) {
     const deleteNextId = nextAfter('deleteData');
+    // v2.8.8 金标准（手工配置 viewJson 验证）：
+    //   - 删除【子表行】（有 deleteSubSourceId）：type="sub_table" + 无 appType + targetItem:{} + subSourceId
+    //   - 删除【整条主表记录】（无 deleteSubSourceId）：type="node" + appType + sourceId
+    const deleteIsSubTable = Boolean(deleteSubSourceId);
     const deleteProps = {
-      appType,
-      sourceId: dataNodeId,
-      type: 'node',
+      sourceId: isChainMode ? dataNode2IdResolved : dataNodeId,
+      type: deleteIsSubTable ? 'sub_table' : 'node',
     };
     if (deleteSubSourceId) {
       deleteProps.subSourceId = deleteSubSourceId;
+    }
+    if (deleteIsSubTable) {
+      deleteProps.targetItem = {};
+    } else {
+      deleteProps.appType = appType;
+    }
+    if (deleteSubConditions && deleteSubConditions.length > 0) {
+      deleteProps.subCondition = buildDataRetrieveCondition(deleteSubConditions);
+      deleteProps.tableRulesFilter = deleteProps.subCondition.rules || [];
     }
 
     nodes.push({
@@ -754,6 +928,11 @@ function buildProcessJson(options) {
       ? buildConditionNodeProps(branchList, branchLogic)
       : { condition: 'AND', rules: [], ruleId: generateRuleGroupId(), conditionCode: '&&' };
 
+    // v2.8.13: conditionalUpsert 模式——命中分支(有值)→更新数据，默认分支(没值)→发起审批
+    // 【新增】v2.0.33: nestedUpdate 模式——满足条件(如价格≥新价)→更新数据，不满足→结束（默认分支空操作）
+    const branchYesNextId = (conditionalUpsert || hasNestedUpdate) ? [updateDataNodeId] : [conditionNextId];
+    const branchDefaultNextId = conditionalUpsert ? [initiateApprovalNodeId] : [endNodeId];
+
     nodes.push({
       name: { zh_CN: '条件分支', en_US: '' },
       description: '',
@@ -769,7 +948,7 @@ function buildProcessJson(options) {
           type: 'condition',
           nodeId: branchYesId,
           prevId: conditionNodeId,
-          nextId: [conditionNextId],
+          nextId: branchYesNextId,
           props: {
             priority: 1,
             isDefault: false,
@@ -785,8 +964,8 @@ function buildProcessJson(options) {
           type: 'condition',
           nodeId: branchDefaultId,
           prevId: conditionNodeId,
-          // 默认分支不走尾节点，直接到结束（与命中分支形成真正分流）
-          nextId: [endNodeId],
+          // v2.8.13: conditionalUpsert 模式下默认分支→发起审批；普通模式下默认分支→结束
+          nextId: branchDefaultNextId,
           props: {
             priority: 2147483647,
             isDefault: true,
@@ -852,10 +1031,47 @@ function buildProcessJson(options) {
         subSourceId: '',
         condition: cycleUpdateMainCondition,
         subCondition: {},
-        assignments: buildDataUpdateAssignments(cycleUpdateAssignments || []),
+        assignments: buildDataUpdateAssignments(cycleUpdateAssignments || [], scriptNodeId, (scriptOutputs || []).map((o) => o.name)),
         noneOperation: cycleUpdateNoneOperation || 'add',
         rulesFilter: cycleUpdateMainCondition.rules || [],
         tableRulesFilter: [],
+      },
+      childNodes: [],
+    };
+  }
+
+  // 循环体内发起审批节点（可选）
+  // 场景：遍历触发子表行，逐行向目标流程表单发起审批
+  // ⚠️ assignments[].value 必须使用 ${cycleNodeId}.fieldId 格式（硬规则10）
+  //   循环体末节点 nextId 回指容器自身形成回环（与 cycleUpdateNode 一致）
+  let cycleInitiateApprovalNode = null;
+  if (hasCycleInitiateApprovalNode && cycleInitiateApprovalNodeIdResolved) {
+    const cycleApprovalAssignments = (cycleInitiateApprovalAssignments || []).map(({ column, valueType, value }) => {
+      // 将源字段ID转换为 ${cycleNodeId}.fieldId 格式（硬规则10）
+      const transformedValue = `\${${cycleNodeId}}.${value}`;
+      return {
+        column,
+        valueType,
+        value: normalizeAssignmentValue(valueType, transformedValue),
+        required: false,
+      };
+    });
+    cycleInitiateApprovalNode = {
+      name: { zh_CN: '发起审批', en_US: 'Initiate approval', type: 'i18n' },
+      description: '请设置发起审批',
+      type: 'initiateApproval',
+      nodeId: cycleInitiateApprovalNodeIdResolved,
+      prevId: '',
+      nextId: [cycleNodeId],
+      props: {
+        type: 'single',
+        initiator: cycleInitiateApprovalInitiator || { type: 'select_user', value: '' },
+        assignments: cycleApprovalAssignments,
+        formUuid: cycleInitiateApprovalFormUuid,
+        processCode,
+        formTitle: '',
+        appType,
+        description: `在 [${cycleInitiateApprovalFormUuid}] 中发起一条审批`,
       },
       childNodes: [],
     };
@@ -867,8 +1083,8 @@ function buildProcessJson(options) {
   //   props = viewJson 的 cycleContainerRules 直接透传（ny）：{ sourceId: 前置获取多条节点id, blockType, outputs }
   //   循环体末节点 nextId 回指容器自身形成回环（Fb）
   if (hasCycle && cycleNodeId) {
-    // 循环体节点：优先更新数据节点，其次消息通知节点
-    const cycleBodyNode = cycleUpdateNode || messageNode;
+    // 循环体节点：优先发起审批节点，其次更新数据节点，最后消息通知节点
+    const cycleBodyNode = cycleInitiateApprovalNode || cycleUpdateNode || messageNode;
     nodes.push({
       name: { zh_CN: '循环', en_US: '' },
       description: '',
@@ -886,6 +1102,8 @@ function buildProcessJson(options) {
     });
   } else if (messageNode) {
     nodes.push(messageNode);
+  } else if (cycleInitiateApprovalNode) {
+    nodes.push(cycleInitiateApprovalNode);
   } else if (cycleUpdateNode) {
     nodes.push(cycleUpdateNode);
   }
@@ -927,6 +1145,7 @@ module.exports = {
   buildScriptNodeProps,
   normalizeBranchConditions,
   buildConditionNodeProps,
+  buildExistenceBranchCondition,
   buildInitiateApprovalAssignments,
   buildConnectorCallAssignments,
   resolveConnectorMode,

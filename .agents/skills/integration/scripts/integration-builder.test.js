@@ -19,6 +19,7 @@ const {
   normalizeLogic,
   normalizeScriptType,
   normalizeBranchConditions,
+  buildExistenceBranchCondition,
 } = require('./integration-process-builder');
 const { buildViewJson } = require('./integration-view-builder');
 const { exportToExcel } = require('./integration-check');
@@ -113,6 +114,93 @@ test('processJson: 默认分支 nextId 指向结束节点，命中分支指向�
   assert.notDeepStrictEqual(yesBranch.nextId, defaultBranch.nextId, '两分支 nextId 不应相同');
   // 默认分支 priority 为 max int
   assert.strictEqual(defaultBranch.props.priority, 2147483647);
+});
+
+console.log('== P0.14 存在性判断条件自动生成（buildExistenceBranchCondition）==');
+test('fieldId 必须是字面量 ${nodeId}.pid，${} 包裹不可丢（v2.8.27 历史事故防回归）', () => {
+  const bc = buildExistenceBranchCondition('node_abc123');
+  assert.strictEqual(bc.fieldId, '${node_abc123}.pid', 'fieldId 必须带 ${} 包裹，丢了设计器下拉不选中+运行时恒判无值');
+  assert.strictEqual(bc.fieldName, '获取单条数据.实例ID');
+  assert.strictEqual(bc.opCode, 'ExistValue');
+  assert.strictEqual(bc.valueType, 'literal');
+  assert.strictEqual(bc.componentType, 'TextField');
+  // v2.8.28: 无值操作符不携带 value 键（金标准无此键，空字符串会干扰设计器下拉匹配）
+  assert.strictEqual(bc.value, undefined, '存在性判断条件不应携带 value 键');
+});
+console.log('== P0.13 条件分支upsert模式（conditionalUpsert）==');
+test('processJson: 命中分支→更新数据，默认分支→发起审批，主链 获取→条件→结束', () => {
+  // 节点序列：trigger, dataRetrieve, initiateApproval, updateData, condition, end = 6 个
+  const ids = makeIds(6);
+  const branchIds = { yes: 'node_yes', fallback: 'node_fallback' };
+  const process = buildProcessJson({
+    processCode: 'LPROC-TEST', formUuid: 'FORM-1', appType: 'APP-1',
+    formEventTypes: ['processFinish'],
+    approvalActions: ['agree'],
+    notificationTitle: 't', notificationContent: 'c',
+    toUsers: [], userFields: [], hasMessageNode: false,
+    nodeIds: ids,
+    dataFormUuid: 'FORM-2', dataQueryType: 'single',
+    dataConditions: [{ bFieldId: 'textField_name', bFieldName: '名称', aFieldId: 'textField_trig', componentType: 'TextField', opCode: 'Equal', valueType: 'processVar' }],
+    updateFormUuid: 'FORM-2', updateConditions: [], updateAssignments: [],
+    updateType: 'direct_form', updateSourceId: 'FORM-2', updateNoneOperation: 'ignored',
+    initiateApprovalFormUuid: 'FORM-2', initiateApprovalInitiator: { type: 'select_user', value: '{"id":"u1","label":"张三","type":"employee"}' },
+    initiateApprovalAssignments: [],
+    hasConditionNode: true,
+    // v2.8.27: fieldId 必须带 ${} 包裹（金标准格式），断言 builder 不剥离 ${}
+    branchCondition: { fieldId: '${node_test_1}.pid', fieldName: '获取单条数据.实例ID', opCode: 'ExistValue', value: '', componentType: 'TextField', valueType: 'literal' },
+    conditionBranchIds: branchIds,
+    conditionalUpsert: true,
+  });
+  const nodes = process.nodes;
+  const dataNode = findNode(nodes, 'dataRetrieve');
+  const updateNode = findNode(nodes, 'dataUpdate');
+  const approveNode = findNode(nodes, 'initiateApproval');
+  const routeNode = findNode(nodes, 'route');
+  const endNode = findNode(nodes, 'finish');
+  const yesBranch = routeNode.childNodes.find((c) => !c.props.isDefault);
+  const defaultBranch = routeNode.childNodes.find((c) => c.props.isDefault);
+  // 主链：获取数据 → 条件分支
+  assert.deepStrictEqual(dataNode.nextId, [routeNode.nodeId], '获取数据后应直接到条件分支');
+  // 命中分支 → 更新数据
+  assert.deepStrictEqual(yesBranch.nextId, [updateNode.nodeId], '命中分支应指向更新数据');
+  // 默认分支 → 发起审批
+  assert.deepStrictEqual(defaultBranch.nextId, [approveNode.nodeId], '默认分支应指向发起审批');
+  // 更新数据 → 结束
+  assert.deepStrictEqual(updateNode.nextId, [endNode.nodeId], '更新数据后应直接到结束');
+  // 发起审批 → 结束
+  assert.deepStrictEqual(approveNode.nextId, [endNode.nodeId], '发起审批后应直接到结束');
+  // 条件 HasValue 映射为"有值"
+  const condRules = yesBranch.props.conditions.rules;
+  // v2.8.27: id 必须原样保留 ${} 包裹——丢了 ${} 设计器下拉匹配不到+运行时恒判无值（历史事故 v2.8.23~26）
+  assert.strictEqual(condRules[0].id, '${node_test_1}.pid', '条件字段应引用获取节点输出且 ${} 包裹不可丢');
+  assert.strictEqual(condRules[0].op, '有值', 'ExistValue 应映射为"有值"');
+  // v2.8.24: 节点变量引用条件（id 含 .）extValue 必须为 "value"，否则设计器 setter 不当成节点实例ID引用
+  assert.strictEqual(condRules[0].extValue, 'value', '节点变量引用条件的 extValue 应为 value');
+  assert.strictEqual(condRules[0].valueType, 'literal', '节点变量引用条件的 valueType 保持 literal');
+  // v2.8.28: 无值操作符（ExistValue）规则禁止携带 value/ruleValue 键——金标准无此键，
+  //   写空字符串会导致设计器下拉拿 "" 匹配选项 key 匹配不到 → 不选中+标红（历史事故 v2.8.28）
+  assert.strictEqual('value' in condRules[0], false, '存在性判断规则不应有 value 键');
+  assert.strictEqual('ruleValue' in condRules[0], false, '存在性判断规则不应有 ruleValue 键');
+});
+test('processJson: 普通模式（conditionalUpsert=false）不受影响，分支仍指向尾节点/结束', () => {
+  const ids = makeIds(4);
+  const branchIds = { yes: 'node_yes', fallback: 'node_fallback' };
+  const process = buildProcessJson({
+    processCode: 'LPROC-TEST', formUuid: 'FORM-1', appType: 'APP-1',
+    formEventTypes: ['insert'],
+    notificationTitle: 't', notificationContent: 'c',
+    toUsers: [], userFields: [], hasMessageNode: false,
+    nodeIds: ids,
+    hasConditionNode: true,
+    branchCondition: { fieldId: 'f1', fieldName: '字段1', opCode: 'Equal', value: 'x', valueType: 'literal' },
+    conditionBranchIds: branchIds,
+  });
+  const routeNode = findNode(process.nodes, 'route');
+  const endNode = findNode(process.nodes, 'finish');
+  const yesBranch = routeNode.childNodes.find((c) => !c.props.isDefault);
+  const defaultBranch = routeNode.childNodes.find((c) => c.props.isDefault);
+  assert.deepStrictEqual(defaultBranch.nextId, [endNode.nodeId], '普通模式默认分支仍指向结束');
+  assert.deepStrictEqual(yesBranch.nextId, [endNode.nodeId], '普通模式无尾节点时命中分支指向结束');
 });
 
 console.log('== P2.11 AND/OR 逻辑 ==');

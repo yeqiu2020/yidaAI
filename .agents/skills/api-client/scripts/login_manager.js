@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 /**
  * login_manager.js - 宜搭平台登录态管理模块 (Node.js版本)
- * 版本: 1.0.0
+ * 版本: 1.0.1
  * 创建日期: 2026-03-25
  * 
  * 功能: 管理宜搭平台的登录态，支持Cookie持久化和自动验证
  * 替代原 Python 版本的 login_manager.py
+ * 更新(1.0.1): 验证 Cookie 由 networkidle 改为 domcontentloaded，解决宜搭 SPA 持续后台请求导致刷新登录态卡 60s 超时的问题
  */
 
 const { chromium } = require('playwright');
@@ -18,10 +19,20 @@ const coreUtils = require('../../../../lib/core/utils');
 
 // ==================== 配置 ====================
 
+// v3.0.2 多项目隔离：Cookie 写入「目标项目」（优先 YIDA_PROJECT_ROOT）；
+// config 等脚本依赖跟随宿主项目
 const SCRIPT_DIR = __dirname;
-const PROJECT_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..', '..');
-const CONFIG_FILE = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'config', 'default.json');
+const SCRIPT_HOST_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..', '..');
+const PROJECT_ROOT = (process.env.YIDA_PROJECT_ROOT && fs.existsSync(process.env.YIDA_PROJECT_ROOT))
+  ? process.env.YIDA_PROJECT_ROOT
+  : SCRIPT_HOST_ROOT;
+const CONFIG_FILE = path.join(SCRIPT_HOST_ROOT, '.agents', 'skills', 'api-client', 'config', 'default.json');
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
+
+// v1.0.2: 期望组织校验（由 /refresh-login 端点通过环境变量传入，值 = 项目历史 Cookie 的 base_url）。
+// 背景：同一钉钉账号可属多个宜搭组织，登录后会话落在哪个组织取决于浏览器记忆，
+// 曾导致"登录成功但登到了其他组织"，项目内所有同步报"登录已失效"。
+const EXPECTED_BASE_URL = (process.env.YIDA_EXPECTED_BASE_URL || '').replace(/\/$/, '');
 
 // 默认配置
 const DEFAULT_CONFIG = {
@@ -94,7 +105,8 @@ async function fetchPageInfo(page, targetUrl) {
   console.error(`  📄 正在获取页面信息: ${targetUrl}`);
   
   try {
-    await page.goto(targetUrl, { waitUntil: 'networkidle', timeout: 60000 });
+    // 【加速】宜搭 SPA 有持续后台请求，networkidle 会等到 60s 超时导致刷新变慢，改用 domcontentloaded
+    await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 15000 });
   } catch (e) {
     console.error(`  ⚠️  页面加载超时: ${e.message}`);
   }
@@ -230,6 +242,19 @@ async function tryHeadlessLogin(savedCookies, savedBaseUrl) {
   return null;
 }
 
+// v1.0.2: 轮询等待用户在浏览器中切换到目标组织（每2秒检测一次页面域名）
+async function waitForOrgSwitch(page, expectedBase, timeoutMs) {
+  const start = Date.now();
+  while (Date.now() - start < timeoutMs) {
+    try {
+      const currentOrigin = new URL(page.url()).origin.replace(/\/$/, '');
+      if (currentOrigin === expectedBase) return true;
+    } catch (_) { /* 页面跳转中，忽略 */ }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  return false;
+}
+
 async function interactiveLogin() {
   console.error('\n🔐 请扫码登录宜搭平台...');
   console.error(`  登录地址: ${LOGIN_URL}`);
@@ -258,7 +283,23 @@ async function interactiveLogin() {
   const myAppUrl = `${postLoginBase}/myApp`;
   
   // 获取页面信息
-  const pageInfo = await fetchPageInfo(page, myAppUrl);
+  let pageInfo = await fetchPageInfo(page, myAppUrl);
+
+  // v1.0.2: 目标组织校验 — 登录落到的组织与项目期望不符时，等待用户在浏览器手动切换
+  if (EXPECTED_BASE_URL && pageInfo && pageInfo.baseUrl) {
+    const currentBase = String(pageInfo.baseUrl).replace(/\/$/, '');
+    if (currentBase !== EXPECTED_BASE_URL) {
+      console.error(`  ⚠️ 当前登录组织(${currentBase})与项目期望组织(${EXPECTED_BASE_URL})不一致`);
+      console.error('  👉 请在浏览器右上角头像处切换到目标组织（最长等待5分钟）...');
+      const switched = await waitForOrgSwitch(page, EXPECTED_BASE_URL, 300000);
+      if (switched) {
+        console.error('  ✅ 已切换到目标组织，重新获取登录信息...');
+        pageInfo = await fetchPageInfo(page, `${EXPECTED_BASE_URL}/myApp`);
+      } else {
+        console.error('  ❌ 未能在限时内切换到目标组织，本次保存的登录态可能无法用于本项目同步');
+      }
+    }
+  }
   
   // 保存Cookie
   const cookies = await context.cookies();
@@ -288,7 +329,12 @@ async function ensureLogin() {
   if (cache && cache.cookies) {
     console.error('🔍 检测到本地Cookie，尝试验证...');
     const result = await tryHeadlessLogin(cache.cookies, cache.base_url);
-    if (result) {
+    // v1.0.2: 组织校验 — Cookie 属于其他组织时视为无效，走重新登录流程
+    const orgMismatch = result && EXPECTED_BASE_URL &&
+      String(result.baseUrl || '').replace(/\/$/, '') !== EXPECTED_BASE_URL;
+    if (result && orgMismatch) {
+      console.error(`  ⚠️ 本地Cookie属于其他组织(${result.baseUrl})，与项目期望(${EXPECTED_BASE_URL})不符，需要重新登录`);
+    } else if (result) {
       saveLoginCache(result.cookies, result.baseUrl, result.csrfToken, result.corpId, result.loginUser);
       return {
         csrf_token: result.csrfToken,

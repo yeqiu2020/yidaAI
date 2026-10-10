@@ -1,7 +1,14 @@
 /**
  * schema_builder.js - 宜搭表单Schema构建器
- * 版本: 1.4.0
- * 更新日期: 2026-07-28
+ * 版本: 1.5.0
+ * 更新日期: 2026-08-06
+ *
+ * v1.5.0: 【功能增强】新增 RichText 说明文本组件支持 + DateField/EmployeeField 默认值公式支持
+ *         - RichText：新增 case "RichText" 分支，清理表单字段属性，设置 content/foldHeight/
+ *           imagePreview/contentPaddingMobile/disableCopy 等属性，保留源表单富文本说明内容
+ *         - DateField：支持 complexValue/variable 属性，保留默认值公式（如 TIMESTAMP(TODAY())）
+ *         - EmployeeField：支持 complexValue/variable 属性，保留默认值公式（如 USER()）
+ *         - 影响范围：form_creator 创建的含说明文本或默认值公式的表单
  *
  * v1.4.0: 【根因修复】AssociationFormField 兜底生成 FORM-TEMP 占位符时不再静默
  *         - 事故背景（进销存3）：上游未传 associationForm.formUuid 时此处静默生成
@@ -143,8 +150,11 @@ function buildFieldComponent(field) {
       props.format = field.format || "YYYY-MM-DD";
       props.hasClear = true;
       props.disabledDate = { type: "none" };
-      props.valueType = "custom";
+      props.valueType = field.valueType || "custom";
       props.resetTime = false;
+      // 支持默认值公式（如 TIMESTAMP(TODAY())）
+      if (field.complexValue) props.complexValue = field.complexValue;
+      if (field.variable) props.variable = field.variable;
       break;
 
     case "SelectField":
@@ -177,6 +187,9 @@ function buildFieldComponent(field) {
       props.showEmpIdType = "NAME";
       props.startWithDepartmentId = "SELF";
       props.renderLinkForView = true;
+      // 支持默认值公式（如 USER()）
+      if (field.complexValue) props.complexValue = field.complexValue;
+      if (field.variable) props.variable = field.variable;
       break;
 
     case "DepartmentSelectField":
@@ -237,7 +250,7 @@ function buildFieldComponent(field) {
       props.submittable = "ALWAYS";
       props.validateFilter = false;
       props.__useMediator = "value";
-      
+
       // 使用占位符UUID或传入的UUID
       // v1.4.0: 兜底生成占位符时必须显式告警，禁止静默产出"表单不存在"的坏关联字段
       let formUuid;
@@ -248,12 +261,12 @@ function buildFieldComponent(field) {
         console.warn(`⚠️  [schema_builder] 关联表单字段 "${field.label || '(未命名)'}" 未提供 associationForm.formUuid，已生成占位符 ${formUuid}。`);
         console.warn(`    后果：该字段在线上点击"新增"会报"表单不存在"，必须回填真实 formUuid！`);
       }
-      
+
       let formTitle = (field.associationForm && field.associationForm.formTitle) || "";
       if (typeof formTitle === 'string') {
         formTitle = i18n(formTitle);
       }
-      
+
       props.associationForm = {
         formType: (field.associationForm && field.associationForm.formType) || "receipt",
         formUuid: formUuid,
@@ -269,7 +282,7 @@ function buildFieldComponent(field) {
         subComponentName: "",
         linkageFields: []
       };
-      
+
       props.dataFilterRules = {
         condition: "AND",
         rules: [],
@@ -278,14 +291,14 @@ function buildFieldComponent(field) {
         version: "v2"
       };
       props.supportDataFilter = false;
-      
+
       props.dataFillingRules = {
         mainRules: [],
         tableRules: [],
         version: "v2"
       };
       props.supportDataFilling = false;
-      
+
       props.orderEnable = false;
       props.orderConfig = [];
       break;
@@ -393,6 +406,38 @@ function buildFieldComponent(field) {
       props.isCustomStore = true;
       props.behavior = "READONLY";
       props.validation = [];
+      break;
+    }
+
+    case "RichText": {
+      // RichText 是说明文本组件，不是表单字段，清理表单字段相关属性
+      delete props.label;
+      delete props.placeholder;
+      delete props.validation;
+      delete props.hasClear;
+      delete props.valueType;
+      delete props.labelAlign;
+      delete props.labelTextAlign;
+      delete props.labelColSpan;
+      delete props.size;
+      delete props.submittable;
+      delete props.dataEntryMode;
+      delete props.__useMediator;
+      delete props.__category__;
+      delete props.behavior;
+      delete props.visibility;
+      delete props.tips;
+      // content 支持 field.content 传入（i18n 对象 {zh_CN, en_US, type}）
+      props.content = field.content || i18n("rich text", "rich text");
+      props.foldHeight = 110;
+      props.isFold = false;
+      props.isDefaultFold = false;
+      props.imagePreview = "NONE";
+      props.contentPaddingMobile = "16";
+      props.disableCopy = false;
+      props.__style__ = {};
+      props.visibility = ["PC", "MOBILE"];
+      props.behavior = "NORMAL";
       break;
     }
   }

@@ -25,6 +25,7 @@ description: 宜搭自定义页面开发。使用 export function renderJsx() �
 12. **`actions.list` 必须包含所有导出函数名**：不能只列默认 6 个方法，必须自动提取所有 `export function` 名称（详见 [踩坑记录 P-03](references/pitfalls.md)）
 13. **【强制】代码必须自动发布，禁止要求用户手动复制粘贴**：编写完页面代码后，必须立即调用 `publish-page.js` 脚本将代码自动写入宜搭平台，不得让用户自行打开设计器粘贴代码
 14. **【强制】创建自定义页面必须使用 `formType: 'display'`**：宜搭平台创建自定义页面时，`saveFormSchemaInfo` API 的 `formType` 参数必须传 `'display'`，严禁使用 `'page'`。使用 `'page'` 会导致 `getSchemaWithAllNavs` API 返回 500，页面完全空白且无控制台错误（详见 [踩坑记录 P-13](references/pitfalls.md)）
+15. **【强制】页面源码修改必须发布闭环，无发布证据不得汇报"已上线"**：本轮只要新建/修改了自定义页面源码（`page-code.js`、`.canvas.jsx` 等页面文件），执行结束前必须看到**发布成功的证据**——`publish-page.js` 输出发布成功结果（含设计器/工作台 URL 或 API 成功 JSON）。无证据时只允许汇报「源码已修改，尚未发布」，**严禁汇报「页面已更新/已重新发布/已上线」**；本地编辑、diff、lint 通过、编译通过、口头声明都**不能**作为发布证据（对齐 OpenYida 官方规则 5 证据契约）。发布前建议先走 `publish-guard` Skill 检查线上是否有未同步改动，发布后按 publish-guard 的回读步骤核对（C5）通过才算闭环完成
 
 ### 重要规则（IMPORTANT）
 
@@ -46,19 +47,168 @@ description: 宜搭自定义页面开发。使用 export function renderJsx() �
 > 每条规则的代码示例、反模式和常见错误见 [编码指南](references/coding-guide.md)（编写代码前强制必读）。
 > 表单类 JSX 控件、筛选栏、表格、成员/附件等组件写法见 [组件指南](references/component-jsx-guide.md)；未验证的平台组件能力不得编造。
 
-## 链路选择决策（Phase 3 新增）
+## 双链架构与运行桥规范（v1.4.0 对齐官方 Canvas 架构，P3-1）
 
 > 自定义页面有两种编译链路，根据文件扩展名自动选择。
 
+### 1. 链路选型决策表
+
 | 条件 | 链路 | 说明 |
 |------|------|------|
-| `.canvas.jsx` / `.canvas.tsx` | **Canvas 链路（实验性）** | React18 + hooks + antd，崩溃隔离，详见 [Canvas 开发指南](references/canvas-guide.md) |
-| `.js` / `.oyd.jsx` / `.jsx`（非 canvas） | **Native 链路（稳定）** | React16 类组件 + `this.utils.yida`，原有流程不受影响 |
+| `.canvas.jsx` / `.canvas.tsx` | **Canvas 现代链路** | React18 + hooks + antd，崩溃隔离，详见 [Canvas 开发指南](references/canvas-guide.md) |
+| `.js` / `.oyd.jsx` / `.jsx`（非 canvas） | **Native 经典链路（稳定）** | React16 类组件 + `this.utils.yida`，原有流程不受影响 |
+
+**选型规则**（官方原义）：新建页面默认走现代链路（Canvas）；**维护既有经典格式页面**（`.oyd.jsx`/`renderJsx`/平台 Jsx 组件）时继续用经典链路维护；仅当用户明确要求转为 Canvas 时才走迁移（见第 4 节迁移指引）。经典链路的判定特征：页面依赖 `this.$(fieldId)`、`this.utils.yida.*`、`this.dataSourceMap`、表单提交、字段双向绑定——这些是经典链路专属能力。
 
 **Canvas 适用**：现代 React 交互、hooks 状态、可视化、需要崩溃隔离的页面
 **Native 适用**：需要 `this.utils.yida.*` 数据桥、`this.$(fieldId)` 表单字段双向绑定、`dataSourceMap` 的页面
 
-> Canvas 是实验性功能，如遇问题可降级为 Native 链路。
+> Canvas 实验性能力（如原生组件桥）未验证前可降级 Native 链路，但**新建页面优先 Canvas**。
+
+### 2. 运行桥规范（页面代码与平台私有 API 解耦——架构铁律）
+
+**Canvas 现代链路页面内部禁止直接写 `this.utils.yida.*`、`this.$(fieldId)`、`this.dataSourceMap`**（官方致命规则原义：*组件内部不能直接写 this.$(fieldId)、this.utils.yida.* 或 this.dataSourceMap*——YidaCodeCanvas 没有平台 JSX 实例桥，this 上下文不存在）。取而代之的三桥分工：
+
+| 桥对象（官方命名，本项目落地时按自身发布机制命名，**解耦原则不变**） | 职责 | 使用规则 |
+|------|------|---------|
+| `window.__OPENYIDA_YIDA_API__` | 表单/流程数据操作（如 searchFormDatas） | 表单数据读写一律走此桥（业务字段位于 `row.formData[fieldId]`） |
+| `window.__OPENYIDA_UTILS__` | 根级工具（toast/dialog/router/isMobile 等宜搭 utils 函数） | 页面不直接依赖平台 this.utils |
+| `window.__OPENYIDA_CONNECTOR_API__` | 平台连接器调用 | 仅接受 `Http_*` 格式 connectorName/operationId/connectionId，Body 传对象 |
+
+**接入分工铁律**：表单数据 → JS-API 桥；平台连接器 → 连接器桥；**只有自定义同源接口才使用 `fetch`**。数据、生命周期与渲染必须通过 hooks、props、桥对象完成，不使用经典页面的 this 上下文 API。
+
+### 3. 经典链路维护
+
+既有 Native 页面的维护规范不变（本文档致命规则 1-14 与编码指南全部适用）。经典链路**不是待淘汰品**：强依赖 `this.utils.yida.*`/`dataSourceMap` 的页面在迁移验证完成前**必须留在经典链路**，禁止为升级而升级。
+
+### 4. 迁移指引（经典 → Canvas，六步，源自官方 yida-canvas-upgrade）
+
+1. **盘点原页面**：读源文件（不从编译产物反推），列导出函数/顶层常量/_customState 字段/生命周期/API 调用，标记依赖 `this` 的能力
+2. **判断可迁性**：纯展示 UI+本地状态+白名单图表库 → 可迁；强依赖 `this.utils.yida.*` 或 `dataSourceMap` 且 props 注入未验证 → 先输出阻塞点，**保留历史页面**；诉求实为字段/流程/报表/权限 → 停止迁移改走配置型 Skill
+3. **生成 Canvas 源码**：`export function renderJsx()` 的 JSX → `function YidaComp(props)`；`_customState` → useState/useMemo；didMount/didUnmount → useEffect + cleanup；删掉 forceUpdate/timestamp 强刷
+4. **处理依赖**：import 仅限可用资源清单内的包；CDN 脚本换白名单或最小验证
+5. **发布 + 回读验证**：publish 后回读 Schema 确认组件树存在 `YidaCodeCanvas` 且 `runtimeCode` 非空（回读仍是 `Jsx` = 升级未完成，见致命规则 15 发布闭环）
+6. **运行验收**：首屏非空、控制台无依赖缺失/`YidaComp` 未定义错误、核心交互可触发、移动端宽度检查；迁移完成或受阻都输出升级报告
+
+> 兼容性红线：工具函数替换（this.utils.toast/dialog → antd Message/Modal 或 props 注入）需验证；原生字段组件（如 EmployeeField）需先最小验证；未验证前只交草案不得发布覆盖线上页。
+
+## 原生组件桥接（v1.5.0 新增，P3-2）
+
+> Canvas 现代链路页面里使用宜搭运行态原生组件时的标准桥接方案。方法论三件事（官方原义）：**能力检测**（先探测、可用增强）→ **降级方案**（fallback 保底）→ **值归一化**（提交 payload 不依赖 raw 原始对象）。**Canvas 自绘 fallback 是页面稳定基线；原生组件是增强体验。**
+
+### 能力检测（findYidaComponent 查找顺序）
+
+运行时从 `window.Deep` → `window.DeepYida.default`（或 bundle 数组按 displayName 匹配）→ `window.YidaNativeComponents[name]` 依次查找。桥接函数只返回**可渲染组件**（函数组件/class 组件/带 render() 的对象/包装对象的 component|Component|default 字段）；仅有 displayName/name 的描述对象不可直接渲染（会触发 `Minified React error #130`）。未传 `form.value/formUuid`、CSS 未就绪、弹层打不开、OSS 签名未完成、移动端形态未适配等场景一律走降级。
+
+### 组件清单与三件事（10 类）
+
+| 类别 | 组件 | 能力检测 | 降级方案（fallback） | 值归一化 |
+|------|------|---------|---------------------|---------|
+| 门户-公告横幅 | `PortalTopBanner` | window.Deep 查找 | Canvas 自绘横幅 | 无业务值 |
+| 门户-快捷入口 | `PortalQuickEntry` | 同上 | Canvas 自绘入口列表 | 无业务值 |
+| 门户-收藏容器 | `QuickAccessCard`（theme 必传） | 同上+theme 校验 | Canvas 自绘卡片 | 无业务值 |
+| 门户-最近访问 | `RecentlyUsedCard`（theme 必传） | 同上 | Canvas 自绘卡片 | 无业务值 |
+| 数据管理视图 | `DataManageViews` | 同上 | iframe 嵌表单（`workbench/{formUuid}?iframe=true`） | 无业务值 |
+| 字段-成员选择 | `EmployeeField` | 同上 | Canvas 自绘成员选择器 | ⬇ 见归一化示例 |
+| 字段-部门选择 | `DepartmentSelectField` | 同上 | Canvas 自绘部门选择器 | ⬇ 见归一化示例 |
+| 上传-附件 | `AttachmentField` | 同上 | `<input type="file">` + 直传 | ⬇ 见归一化示例 |
+| 上传-图片 | `ImageField` | 同上 | `<input type="file" accept="image/*">` | ⬇ 见归一化示例 |
+| 门户-数据卡片 | `DataCard` | ⚠️ 仅确认门户数据卡片上下文可用时接入 | Canvas 自绘卡片取数 | 无业务值 |
+
+### 值归一化示例（官方结构；首次接入时记录一次真实 onChange 输出按实际结构适配）
+
+```javascript
+// 成员 EmployeeField：页面状态只存归一化值，raw 仅用于检查、不进提交 payload
+function normalizeEmployee(raw) {
+  return { userId: raw.userId || '', emplId: raw.emplId || '', name: raw.name || '',
+           nickName: raw.nickName || '', workNo: raw.workNo || '', avatar: raw.avatar || '', raw };
+}
+// 提交表单时：formDataJson[employeeFieldId] = [normalized.userId]（成员字段提交格式=userId数组）
+
+// 部门 DepartmentSelectField
+function normalizeDepartment(raw) {
+  return { deptId: raw.deptId || '', value: raw.value || '', name: raw.name || '',
+           text: raw.text || '', deptFullPath: raw.deptFullPath || '', raw };
+}
+
+// 附件/图片 AttachmentField / ImageField：提交只用归一化后的文件数组
+function normalizeFile(raw) {
+  return { name: raw.name || '', url: raw.url || '', downloadURL: raw.downloadURL || '',
+           imgURL: raw.imgURL || '', fileId: raw.fileId || '', size: raw.size || 0,
+           type: raw.type || '', raw };
+}
+```
+
+**降级控件也必须产出上述归一化结构**（成员存 name/userId/workNo，部门存 deptId 与名称，文件存 name/url/fileId），保证提交链路不感知"值来自原生组件还是 fallback"。
+
+## 表格批量录入页面模式（v1.6.0 新增，P3-3）
+
+> 「一张页面里多行表格填报、批量提交」的标准页面模式（如批量报单、批量入库）。适用 Canvas 现代链路（`.canvas.jsx` + YidaComp + hooks）；存量平台 JSX/native 页面的表格录入走经典链路既有能力。
+
+### 页面结构与行状态模型
+
+- **UI**：antd `Table` + `Input`/`Select`/`DatePicker` 行内编辑（Excel 式多行编辑）
+- **行状态模型**：每行携带 `_rowId`（唯一标识）、`_status`（`draft | invalid | submitting | submitted | failed`）、`_errors`（行内校验错误）、`_submitError`；单元格修改后清错并把 `failed/invalid` 恢复为 `draft`
+- **草稿持久化**：存 `localStorage`，key 必须含目标 `formUuid`；全部提交成功后清除，部分失败时**保留失败行**
+- **提交流程**：先行级校验 → 展示待提交行数与关键摘要 → 用户确认 → 分批写入
+
+### 批量提交链路（官方契约）
+
+- Canvas 内禁止 `this.utils.yida.*`（见双链架构运行桥规范）；写入默认走发布层注入的 `window.__OPENYIDA_YIDA_API__.saveFormData / updateFormData` **逐行调用**（每行=一条独立表单实例，非子表控件写入；子表数据提交遵循本项目 integration/business-rule 既有硬规则）
+- 或使用已验证的连接器代理/同源业务桥（`writeBridge.saveRow`），要求 `writeBridge.verified === true` 且字段 ID 来自 `get-schema` 真实 Schema；**未验证时按钮禁用，不得模拟成功或伪造 formInstId**（对齐致命规则 15 发布闭环）
+- 日期字段值遵守数据查询三项硬规范（13 位毫秒时间戳，见 P0-3）
+
+**分批提交模板**（官方原义，批次建议 5–20 行，批间顺序、批内并发）：
+
+```javascript
+async function submitInBatches(rows, writeBridge, batchSize) {
+  const results = [];
+  for (let index = 0; index < rows.length; index += batchSize) {
+    const batch = rows.slice(index, index + batchSize);
+    const batchResults = await Promise.all(batch.map(async (row) => {
+      try {
+        const value = await writeBridge.saveRow(toPayload(row), {
+          rowId: row._rowId,
+          idempotencyKey: 'canvas-table:' + row._rowId,  // 幂等键防重复提交
+        });
+        return { rowId: row._rowId, ok: true, value };
+      } catch (error) {
+        return { rowId: row._rowId, ok: false, error: error.message || '提交失败' };
+      }
+    }));
+    results.push(...batchResults);
+  }
+  return results;
+}
+```
+
+失败行只重试失败部分，成功行不重复提交。
+
+## 图表技术选型（v1.7.0 新增，P2-2 决策表）
+
+> 自定义页面图表有明确选型规则，AI 禁止随机选择图表库。**默认 Recharts，例外才 ECharts**——禁止仅因用户说"高级""好看""大屏"就切换 ECharts。
+
+### 决策表（官方路由原义）
+
+| 场景 | 选型 |
+|------|------|
+| 折线/面积/柱/条/饼环/组合图等常规图表（新页面，未指定技术栈） | **Recharts**（白名单依赖，`.canvas.jsx` + YidaComp + hooks） |
+| 标准统计报表、原生筛选器、指标卡和表格报表 | 走 `report` Skill 原生报表（非页面代码） |
+| 用户明确要求 ECharts | ECharts 兼容链路 |
+| 维护已有 ECharts / 平台 JSX 组件图表页面 | ECharts 兼容链路（维护场景） |
+| 复杂 option 能力缺口：地图、graph、桑基、custom series 等 Recharts 无法覆盖 | ECharts 兼容链路 |
+| 经营分析看板/驾驶舱类交付 | **先做指标分析再选组件**（见下方方法论），图表路由在步骤 7 才决定 |
+| 先建统计口径再做定制图表 | 先 `report`/`data-prep` 形成聚合数据源，再页面图表展示 |
+
+### 经营看板方法论（官方 dashboard 九步，要点）
+
+澄清业务范围（5-8 个经营维度/指标/角色/刷新频率）→ 数据契约（appType/formUuid/fieldId/报表/连接器）→ 派单触发配置 → 场景/主题/Shell 设计 → 生成看板源码 → hooks 实现筛选/轮询/导航/cleanup → **图表路由（此刻才选 Recharts 或 ECharts）** → 编译快检+发布回读 → 验收闭环。
+
+### 图表数据规则（与 P0-1 服务端聚合硬规则同源，官方原文）
+
+- KPI/趋势/占比必须来自**服务端聚合、报表结果或明确的聚合接口**——禁止前端全量聚合（拉全量明细 reduce/groupBy 冒充生产聚合）
+- 明细查询必须分页；demo/seed 数据只能离线预览并明确标记，真实交付无数据时展示真实空态
+- 筛选/周期切换/Tabs/刷新按钮均为受控状态并真实驱动派生数据；不得在 YidaCodeCanvas 组件内使用 `this.dataSourceMap`
 
 ## 适用场景
 
@@ -361,12 +511,14 @@ node .agents/skills/custom-page/scripts/lint-page.js <代码文件路径>
 
 ---
 
+*v1.7.0 (2026-09-28) — 新增「图表技术选型」决策表（P2-2）：默认 Recharts / 例外才 ECharts（明确要求、维护旧页、地图 graph 桑基 custom series 能力缺口）/ 原生报表归 report skill / 经营看板先指标分析再选组件（dashboard 九步要点）/ 图表数据规则与服务端聚合硬规则同源。依据：OpenYida 借鉴改造清单 P2-2（官方 yida-rechart / yida-chart / yida-dashboard 路由原义）*
+
+*v1.6.0 (2026-09-28) — 新增「表格批量录入页面模式」章节（P3-3）：行状态模型（_rowId/_status 四态/_errors/草稿 localStorage 含 formUuid）+ 提交流程（校验→确认→分批）+ 批量提交契约（YIDA_API 桥逐行 saveFormData=每行独立实例、writeBridge.verified 才可用、未验证禁用按钮禁伪造 formInstId）+ 官方分批提交模板（5-20 行批间顺序批内并发+幂等键）。依据：OpenYida 借鉴改造清单 P3-3（官方 yida-canvas-table-form 原义）*
+
+*v1.5.0 (2026-09-28) — 新增「原生组件桥接」章节（P3-2）：方法论三件事（能力检测 findYidaComponent 三级查找/降级 fallback 为稳定基线/值归一化 raw 不进提交 payload）+ 10 类组件三件事对照表（门户4类/DataManageViews/成员/部门/附件/图片/DataCard 边界）+ 成员/部门/附件图片三组可运行归一化示例代码。依据：OpenYida 借鉴改造清单 P3-2（官方 yida-canvas-custom-page/references/native-components-bridge.md 原义）*
+
+*v1.4.0 (2026-09-28) — 「链路选择决策」升级为「双链架构与运行桥规范」（P3-1）：①选型补官方规则（新建默认 Canvas、经典格式页面留经典链路维护、明确请求才迁移）；②新增运行桥三桥分工表（YIDA_API/UTILS/CONNECTOR）与解耦铁律（Canvas 内禁写 this.utils.yida.*/this.$/dataSourceMap，只有自定义同源接口才用 fetch）；③新增六步迁移指引（盘点→可迁性判断→生成→依赖→发布回读→运行验收）与兼容性红线。依据：OpenYida 借鉴改造清单 P3-1（官方 yida-canvas-custom-page / yida-canvas-upgrade 原义）*
+
+*v1.3.5 (2026-09-28) — 新增致命规则 15「页面源码修改必须发布闭环，无发布证据不得汇报已上线」：本轮修改/新建页面源码后，执行结束前必须看到 publish-page.js 发布成功证据（URL/成功 JSON）；无证据只能汇报「源码已修改，尚未发布」，严禁宣称已上线；发布前走 publish-guard、发布后按其 C5 回读核对。依据：OpenYida 借鉴改造清单 P0-2（官方规则 5 证据契约原义）*
+
 *v1.3.4 (2026-07-24) — lint-page.js 新增 W07 规则（检测 UI 文案/标题/按钮中的装饰性 emoji，跳过纯注释行，WARN 级不阻断发布）；coding-guide.md 自检清单 E 段补充 emoji 红线*
-
-*v1.3.3 (2026-07-24) — visual-decision-guide.md 新增「场景级反 AI 味红线」一节（工作台/看板/列表/详情/落地页/批量录入 6 类场景的禁止默认脸清单，纯增量，不改动原 6 步法）*
-
-*v1.3.2 (2026-07-24) — coding-guide.md 顶部新增「生成代码前自检清单」（聚合已有硬规则，无新增知识）；design-system.md 新增「原生控件 focus 边框重置」一节*
-
-*v1.3.1 (2026-07-11) — 修复 publish-page.js 无 main 守卫导致 require 时触发 process.exit 的问题，新增 module.exports 导出*
-
-*v1.3.0 (2026-06-02) — 修复 formType 致命错误：自定义页面必须使用 formType:'display'，新增踩坑记录 P-13*

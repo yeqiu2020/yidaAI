@@ -53,9 +53,11 @@ function httpRequest(url, options = {}) {
     };
 
     const req = requestModule.request(requestOptions, (res) => {
-      let body = '';
-      res.on('data', chunk => { body += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const body = Buffer.concat(chunks).toString('utf-8');
         // 解析 Set-Cookie 头
         const cookies = [];
         const setCookieHeaders = res.headers['set-cookie'];

@@ -21,6 +21,118 @@ const {
 const ZWSP = '\u200b';
 
 /**
+ * 从表单 Schema 构建设计器需要的 rulesFilter 和 outputs 字段列表
+ * 设计器获取数据节点面板需要这些字段来渲染条件/排序的字段下拉选项
+ * @param {Array} schemaComponents - getFormSchema 返回的组件数组
+ * @param {string} parentLabel - 子表字段的父标签（可选）
+ * @returns {{rulesFilter: Array, outputs: Array}}
+ */
+function buildRulesFilterAndOutputs(schemaComponents, parentLabel) {
+  const rulesFilter = [];
+  const outputs = [];
+  if (!Array.isArray(schemaComponents)) return { rulesFilter, outputs };
+
+  function processComponents(components, pLabel) {
+    for (const comp of components) {
+      if (!comp || !comp.props) continue;
+      const fieldId = comp.props.fieldId;
+      if (!fieldId) {
+        // 递归处理子表 children
+        if (Array.isArray(comp.children) && comp.children.length > 0) {
+          const subLabel = comp.props.label
+            ? (typeof comp.props.label === 'object' ? (comp.props.label.zh_CN || comp.props.label.en_US || '') : String(comp.props.label))
+            : '';
+          processComponents(comp.children, subLabel);
+        }
+        continue;
+      }
+      const labelObj = comp.props.label || {};
+      const labelText = typeof labelObj === 'object'
+        ? (labelObj.zh_CN || labelObj.en_US || fieldId)
+        : String(labelObj);
+      const componentName = comp.componentName || 'TextField';
+
+      // 跳过子表容器本身（TableField），只处理实际字段
+      if (componentName === 'TableField') {
+        if (Array.isArray(comp.children) && comp.children.length > 0) {
+          processComponents(comp.children, labelText);
+        }
+        continue;
+      }
+
+      const item = {
+        id: fieldId,
+        name: labelText,
+        componentType: componentName,
+        placeholder: comp.props.placeholder || '',
+        operators: [],
+        supportSort: true,
+        props: { ...comp.props },
+      };
+      if (pLabel) {
+        item.props.__parentLabel = pLabel;
+        item.props.parentComponentName = 'TableField';
+      }
+      rulesFilter.push(item);
+
+      outputs.push({
+        id: fieldId,
+        name: labelText,
+        componentName,
+        props: { ...comp.props },
+        supportSort: true,
+      });
+    }
+  }
+
+  processComponents(schemaComponents, parentLabel || '');
+  return { rulesFilter, outputs };
+}
+
+/**
+ * 递归查找子表字段的中文名称
+ * @param {Array} schemaComponents - getFormSchema 返回的组件数组
+ * @param {string} subFieldId - 子表字段ID (tableField_xxx)
+ * @returns {string} 子表中文名称，找不到返回 '子表单'
+ */
+function findSubFieldLabel(schemaComponents, subFieldId) {
+  if (!Array.isArray(schemaComponents) || !subFieldId) return '子表单';
+  for (const comp of schemaComponents) {
+    if (comp && comp.props && comp.props.fieldId === subFieldId) {
+      const labelObj = comp.props.label || {};
+      return typeof labelObj === 'object'
+        ? (labelObj.zh_CN || labelObj.en_US || subFieldId)
+        : String(labelObj);
+    }
+  }
+  return '子表单';
+}
+
+/**
+ * 递归收集子表内的子字段组件数组
+ * @param {Array} schemaComponents - getFormSchema 返回的组件数组
+ * @param {string} subFieldId - 子表字段ID (tableField_xxx)
+ * @returns {Array} 子字段组件数组
+ */
+function collectSubFields(schemaComponents, subFieldId) {
+  if (!Array.isArray(schemaComponents) || !subFieldId) return [];
+  for (const comp of schemaComponents) {
+    if (comp && comp.props && comp.props.fieldId === subFieldId) {
+      const subFields = [];
+      (function collect(children) {
+        for (const child of children || []) {
+          if (!child || typeof child !== 'object') continue;
+          if (child.props && child.props.fieldId) { subFields.push(child); }
+          if (Array.isArray(child.children) && child.children.length > 0) { collect(child.children); }
+        }
+      })(comp.children);
+      return subFields;
+    }
+  }
+  return [];
+}
+
+/**
  * 构建公式赋值的三个显示字段：__display（纯文本）、__source、value
  *
  * bundle 逆向结论（parseListFieldsToVars + handleDialogEnter + renderInputArea）：
@@ -161,18 +273,32 @@ function buildViewJson(options) {
     connectorId, actionId, connectorAssignments, connectorName, connectorIcon, connectorInputs,
     connectionId,
     dataQueryType, dataQuantity,
+    // v2.8.6: 获取数据节点的目标表单 Schema/类型/名称（用于 rulesFilter/outputs/targetItem/originalType）
+    dataFormSchema, dataFormType, dataFormName,
     updateFormUuid, updateConditions, updateAssignments, updateFormSchema, updateFormName,
     updateType, updateSourceId, updateSubSourceId, updateSubConditions, updateNoneOperation,
-    hasDeleteDataNode, deleteSubSourceId,
+    hasDeleteDataNode, deleteSubSourceId, deleteSubConditions,
     hasScriptNode, scriptCode, scriptOutputs, scriptLang,
     hasConditionNode, branchCondition, branchConditions, branchLogic, conditionBranchIds,
     hasCycleNode,
     // 数据来源类型：form(默认) 或 subform(从触发数据子表获取，bundle 验证 originalType="sub_table")
     dataSourceType, dataSubFieldId,
+    // v2.8.5: 链式获取模式
+    isChainMode, dataSubSourceId, dataSubConditions, dataNode2Id,
+    // v2.8.7: 目标表单子表直接获取模式（isSubFormTarget=true 时获取节点 originalType=sub_table, sourceId=#{目标表单}, subSourceId=目标子表）
+    isSubFormTarget,
     // 循环体内更新数据节点（用于 --cycle + --cycle-update-form-uuid 组合）
     cycleUpdateFormUuid, cycleUpdateConditions, cycleUpdateAssignments,
     cycleUpdateNoneOperation, cycleUpdateDataNodeId, cycleUpdateFormSchema,
+    // 循环体内发起审批节点（用于 --cycle + --cycle-initiate-approval-form-uuid 组合）
+    cycleInitiateApprovalFormUuid, cycleInitiateApprovalInitiator,
+    cycleInitiateApprovalAssignments, cycleInitiateApprovalNodeId,
     triggerFormSchema,
+    // v2.8.13: 条件分支upsert模式——获取单条→条件判断→[有值:更新 / 没有值:发起审批]
+    conditionalUpsert,
+    // 【新增】v2.0.33: 条件分支内嵌更新模式——获取单条→条件判断→[满足条件:更新 / 不满足:结束]
+    //   与 conditionalUpsert 互斥；默认分支无动作节点
+    nestedUpdate,
   } = options;
 
   const hasAddDataNode = Boolean(addDataFormUuid);
@@ -186,6 +312,7 @@ function buildViewJson(options) {
   const hasCondition = Boolean(hasConditionNode);
   const hasCycle = Boolean(hasCycleNode);
   const hasCycleUpdateNode = Boolean(cycleUpdateFormUuid) && Boolean(cycleUpdateDataNodeId);
+  const hasCycleInitiateApprovalNode = Boolean(cycleInitiateApprovalFormUuid) && Boolean(cycleInitiateApprovalNodeId);
   const includeMessageNode = hasMessageNode !== false;
   const dataQueryIsMultiple = dataQueryType === 'multiple';
   const isApprovalNodeEvent = formEventTypes.includes('activityTask');
@@ -231,6 +358,8 @@ function buildViewJson(options) {
   const canvasId = nodeIds[nodeIdIndex++];
   const triggerNodeId = nodeIds[nodeIdIndex++];
   const dataNodeId = hasDataNode ? nodeIds[nodeIdIndex++] : null;
+  // v2.8.5: 链式获取模式第二个获取节点
+  const dataNode2IdResolved = isChainMode ? nodeIds[nodeIdIndex++] : null;
   const addDataNodeId = hasAddDataNode ? nodeIds[nodeIdIndex++] : null;
   const initiateApprovalNodeId = hasInitiateApprovalNode ? nodeIds[nodeIdIndex++] : null;
   const updateDataNodeId = hasUpdateDataNode ? nodeIds[nodeIdIndex++] : null;
@@ -239,6 +368,7 @@ function buildViewJson(options) {
   const connectorCallNodeId = hasConnectorCallNode ? nodeIds[nodeIdIndex++] : null;
   const conditionNodeId = hasCondition ? nodeIds[nodeIdIndex++] : null;
   const cycleNodeId = hasCycle ? nodeIds[nodeIdIndex++] : null;
+  const cycleInitiateApprovalNodeIdResolved = hasCycleInitiateApprovalNode ? nodeIds[nodeIdIndex++] : null;
   const messageNodeId = includeMessageNode ? nodeIds[nodeIdIndex++] : null;
   const endNodeId = nodeIds[nodeIdIndex++];
 
@@ -288,9 +418,27 @@ function buildViewJson(options) {
     const nodeDisplayName = dataQueryIsMultiple ? '获取多条数据' : '获取单条数据';
 
     const isSubformSource = dataSourceType === 'subform';
-    const dataOriginalType = isSubformSource ? 'sub_table' : 'form';
-    const dataSourceIdValue = isSubformSource ? `#{${formUuid}}` : dataFormUuid;
-    const dataSubSourceIdValue = isSubformSource ? (dataSubFieldId || '') : '';
+    // v2.8.7: 目标表单子表直接获取模式（originalType=sub_table, sourceId=#{目标表单}, subSourceId=目标子表）
+    //  与 isSubformSource（触发数据子表）不同：这里 sourceId 指向【目标表单】而非触发表单
+    const isTargetSubTable = Boolean(isSubFormTarget) && dataSubSourceId !== '';
+    // v2.8.8 金标准：目标表单是流程表单时，GetSingleDataNode 用 'process_form'，GetBatchDataNode 用 'process'
+    //   （手工配置 viewJson 验证：单条=process_form，多条=process；普通表单目标=form）
+    const dataOriginalType = (isSubformSource || isTargetSubTable) ? 'sub_table'
+      : (dataFormType === 'process' ? (dataQueryIsMultiple ? 'process' : 'process_form') : 'form');
+    const dataSourceIdValue = isSubformSource ? `#{${formUuid}}`
+      : (isTargetSubTable ? `#{${dataFormUuid}}` : dataFormUuid);
+    const dataSubSourceIdValue = isSubformSource ? (dataSubFieldId || '')
+      : (isTargetSubTable ? dataSubSourceId : '');
+
+    // v2.8.6: 构建 rulesFilter 和 outputs（设计器需要这些字段来渲染字段下拉选项）
+    const dataFormDisplayName = dataFormName || dataFormUuid || '目标表单';
+    const isSubTableGet = isSubformSource || isTargetSubTable;
+    // v2.8.7: 目标子表直接获取时，rulesFilter 使用目标子表内字段（供设计器显示子表字段下拉）
+    const rulesFilterSource = isTargetSubTable
+      ? collectSubFields(dataFormSchema || [], dataSubSourceId)
+      : (dataFormSchema || []);
+    const { rulesFilter: dataRulesFilter, outputs: dataOutputs } =
+      isSubTableGet ? { rulesFilter: [], outputs: [] } : buildRulesFilterAndOutputs(rulesFilterSource);
 
     children.push({
       componentName,
@@ -303,27 +451,20 @@ function buildViewJson(options) {
         getData: {
           type: dataRetrieveType,
           originalType: dataOriginalType,
-          appType: isSubformSource ? '' : appType,
+          appType: isSubTableGet ? '' : appType,
           sourceId: dataSourceIdValue,
-          targetItem: isSubformSource ? {} : {
-            appType,
-            appName: '',
-            formItem: {
-              formType: 'receipt',
-              advanceProc: 'n',
-              formUuid: dataFormUuid,
-              title: '',
-              fields: null,
-              hasTableField: null,
-            },
+          targetItem: isSubTableGet ? {} : {
+            deep: 0,
+            value: dataFormUuid,
+            label: dataFormDisplayName,
           },
           subSourceId: dataSubSourceIdValue,
-          relativeItem: {},
+          relativeItem: isTargetSubTable ? { deep: 0, value: dataSubSourceId, label: findSubFieldLabel(dataFormSchema, dataSubSourceId) } : {},
           filterType: 'condition',
           condition: conditions,
           sort: { type: 'none', column: '' },
-          rulesFilter: [],
-          outputs: [],
+          rulesFilter: dataRulesFilter,
+          outputs: dataOutputs,
           quantity: dataRetrieveQuantity,
           dataRules: {
             rules: [
@@ -341,6 +482,64 @@ function buildViewJson(options) {
           assignments: [],
         },
         title: nodeDisplayName,
+      },
+    });
+  }
+
+  // v2.8.5: 链式获取第二个节点 - GetBatchDataNode
+  // v2.8.8: 修正 originalType 为 'sub_table'（设计器显示"从子表中获取"+上游节点+目标子表）
+  //   不是 'node'（旧错版显示"从数据节点中获取"，用户手工配置的金标准是 sub_table）
+  if (isChainMode && dataNode2IdResolved) {
+    const subConditions = dataSubConditions && dataSubConditions.length > 0
+      ? buildDataRetrieveCondition(dataSubConditions)
+      : { condition: 'AND', rules: [], ruleId: generateRuleGroupId(), conditionCode: '&&' };
+    const subFilterType = dataSubConditions && dataSubConditions.length > 0 ? 'condition' : 'all';
+
+    // v2.8.6: 构建子表的 rulesFilter/outputs 和中文名称
+    const subFieldLabel = findSubFieldLabel(dataFormSchema || [], dataSubSourceId);
+    const subFields = collectSubFields(dataFormSchema || [], dataSubSourceId);
+    const { rulesFilter: subRulesFilter, outputs: subOutputs } = buildRulesFilterAndOutputs(subFields, subFieldLabel);
+
+    children.push({
+      componentName: 'GetBatchDataNode',
+      id: dataNode2IdResolved,
+      props: {
+        nodeName: 'GetBatchDataNode',
+        name: '获取多条数据',
+        description: '请设置想要获取的数据',
+        type: 'batch',
+        getData: {
+          type: 'batch',
+          // v2.8.8: 修正为 sub_table（原值 'node' 是错的，导致 UI 显示"从数据节点中获取"而非"从子表中获取"）
+          // 设计器手工配置金标准：originalType='sub_table' + sourceId=前置节点ID + subSourceId=目标子表字段ID
+          originalType: 'sub_table',
+          appType: '',
+          sourceId: dataNodeId,
+          targetItem: { deep: 0, value: dataNodeId, label: '获取单条数据' },
+          subSourceId: dataSubSourceId,
+          relativeItem: { deep: 0, value: dataSubSourceId, label: subFieldLabel },
+          filterType: subFilterType,
+          condition: subConditions,
+          sort: { type: 'none', column: '' },
+          rulesFilter: subRulesFilter,
+          outputs: subOutputs,
+          quantity: Number(dataQuantity || 100),
+          dataRules: {
+            rules: [
+              {
+                componentName: '',
+                labe: '',
+                name: '',
+                required: false,
+                ruleId: generateDataRuleId(),
+                value: '',
+                valueType: 'literal',
+              },
+            ],
+          },
+          assignments: [],
+        },
+        title: '获取多条数据',
       },
     });
   }
@@ -444,7 +643,11 @@ function buildViewJson(options) {
   if (hasUpdateDataNode && updateDataNodeId) {
     const updateFormDisplayName = updateFormName || '目标表单';
     const updateTypeValue = updateType || 'direct_form';
-    const targetMainFormUuid = updateSourceId || updateFormUuid;
+    // cascade 模式下（--update-type node + 链式获取），sourceId 必须指向 GetBatchDataNode
+    // 才能逐行更新子表数据
+    const targetMainFormUuid = updateTypeValue === 'node' && isChainMode
+      ? (dataNode2IdResolved || updateFormUuid)
+      : (updateSourceId || updateFormUuid);
     const targetSubFieldId = updateSubSourceId || '';
     const hasSubUpdate = Boolean(targetSubFieldId);
 
@@ -460,7 +663,7 @@ function buildViewJson(options) {
       condition: mainCondition,
       subCondition,
       assignments: (updateAssignments || []).map((a) => {
-        const base = buildDataUpdateAssignments([a])[0] || {};
+        const base = buildDataUpdateAssignments([a], scriptNodeId, (scriptOutputs || []).map((o) => o.name))[0] || {};
         // 公式赋值需要三个字段（bundle handleDialogEnter 权威来源）：
 //   __display = "目标表字段.库存数量+入库明细.入库数量" 纯文本 — 设置面板输入框显示
 //   __source  = "#{FORM-xxx/fieldId}+#{fieldId}" 原始公式 — 公式编辑器弹窗重建
@@ -495,15 +698,27 @@ function buildViewJson(options) {
 
   // 删除数据节点（props 键为 deleteData，非 Rules 后缀；sourceId 指向前置获取节点画布 id）
   if (hasDeleteNode && deleteDataNodeId) {
+    // v2.8.8 金标准（手工配置 viewJson 验证）：
+    //   - 删除【子表行】（有 deleteSubSourceId）：deleteData.type="sub_table" + 无 appType + targetItem:{} + subSourceId
+    //   - 删除【整条主表记录】（无 deleteSubSourceId）：deleteData.type="node" + appType + sourceId
+    const deleteIsSubTable = Boolean(deleteSubSourceId);
     const deleteData = {
-      appType,
-      sourceId: dataNodeId,
-      type: 'node',
+      sourceId: isChainMode ? dataNode2IdResolved : dataNodeId,
+      type: deleteIsSubTable ? 'sub_table' : 'node',
     };
-    if (deleteSubSourceId) {
-      deleteData.subSourceId = deleteSubSourceId;
-    }
-    children.push({
+if (deleteSubSourceId) {
+deleteData.subSourceId = deleteSubSourceId;
+}
+if (deleteIsSubTable) {
+deleteData.targetItem = {};
+} else {
+deleteData.appType = appType;
+}
+if (deleteSubConditions && deleteSubConditions.length > 0) {
+deleteData.subCondition = buildDataRetrieveCondition(deleteSubConditions);
+deleteData.tableRulesFilter = deleteData.subCondition.rules || [];
+}
+children.push({
       componentName: 'DeleteDataNode',
       id: deleteDataNodeId,
       props: {
@@ -624,6 +839,16 @@ function buildViewJson(options) {
       ? buildConditionNodeProps(branchList, branchLogic)
       : { condition: 'AND', rules: [], ruleId: generateRuleGroupId(), conditionCode: '&&' };
 
+    // v2.8.27: conditions.description 是画布条件卡片的摘要文本（金标准="获取单条数据.实例ID有值"，
+    // 即 name+op 无空格拼接）。为空时画布显示"请设置条件"占位符，用户会误以为条件没配置。
+    // 摘要用 name（设计器生成的规则 name 即"节点.字段"中文名），多条件按 AND/OR 用"且/或"连接。
+    const summarizeCondition = (condObj) => {
+      const rules = (condObj && condObj.rules) || [];
+      if (!rules.length) { return ''; }
+      const sep = condObj.condition === 'OR' ? ' 或 ' : ' 且 ';
+      return rules.map((r) => `${r.name || r.__display || ''}${r.op || ''}`).join(sep);
+    };
+
     children.push({
       componentName: 'ConditionContainer',
       id: conditionNodeId,
@@ -643,7 +868,7 @@ function buildViewJson(options) {
               conditions: conditionObject,
               isDefault: false,
               priority: 1,
-              description: '',
+              description: summarizeCondition(conditionObject),
             },
           },
         },
@@ -707,7 +932,7 @@ function buildViewJson(options) {
     const cycleFormDisplayName = '目标表单';
 
       const cycleAssignments = (cycleUpdateAssignments || []).map((a) => {
-        const base = buildDataUpdateAssignments([a])[0] || {};
+        const base = buildDataUpdateAssignments([a], scriptNodeId, (scriptOutputs || []).map((o) => o.name))[0] || {};
         if (base.valueType === 'column' && base.value && typeof base.value === 'string') {
           const ff = buildFormulaFields(base.value, cycleUpdateFormSchema, triggerFormSchema);
           base.__display = ff.__display;
@@ -740,9 +965,66 @@ function buildViewJson(options) {
     };
   }
 
+  // 循环体内发起审批节点（可选）
+  // 场景：遍历触发子表行，逐行向目标流程表单发起审批
+  // viewJson 中 InitiateApprovalNode 的 props 必须嵌套 initiateApprovalRules（与主链一致）
+  // ⚠️ assignments[].value 必须使用 ${cycleNodeId}.fieldId 格式，__display 为源字段中文名（硬规则10）
+  let cycleInitiateApprovalNode = null;
+  if (hasCycleInitiateApprovalNode && cycleInitiateApprovalNodeIdResolved) {
+    // 从 triggerFormSchema 中查找字段中文名（支持子表字段）
+    function findFieldLabel(fieldId, schema) {
+      if (!Array.isArray(schema)) return fieldId;
+      for (const comp of schema) {
+        if (comp.props && comp.props.fieldId === fieldId) {
+          return comp.props.label || fieldId;
+        }
+        // 递归查找子表字段
+        if (comp.children && Array.isArray(comp.children)) {
+          const label = findFieldLabel(fieldId, comp.children);
+          if (label !== fieldId) return label;
+        }
+      }
+      return fieldId;
+    }
+
+    const cycleApprovalAssignments = (cycleInitiateApprovalAssignments || []).map(({ column, valueType, value }) => {
+      // 将源字段ID转换为 ${cycleNodeId}.fieldId 格式（硬规则10）
+      const transformedValue = `\${${cycleNodeId}}.${value}`;
+      // 查找源字段中文名用于 __display
+      const displayName = findFieldLabel(value, triggerFormSchema);
+      return {
+        column,
+        valueType,
+        value: transformedValue,
+        __display: displayName,
+        required: false,
+      };
+    });
+
+    cycleInitiateApprovalNode = {
+      componentName: 'InitiateApprovalNode',
+      id: cycleInitiateApprovalNodeIdResolved,
+      props: {
+        nodeName: 'InitiateApprovalNode',
+        name: '发起审批',
+        description: `在 [${cycleInitiateApprovalFormUuid}] 中发起一条审批`,
+        initiateApprovalRules: {
+          type: 'single',
+          initiator: cycleInitiateApprovalInitiator || { type: 'select_user', value: '' },
+          assignments: cycleApprovalAssignments,
+          formUuid: cycleInitiateApprovalFormUuid,
+          processCode: processCode || '',
+          formTitle: '',
+          appType,
+        },
+      },
+      title: '发起审批',
+    };
+  }
+
   // 循环容器：children 为循环体节点，sourceId 只能指向前置 GetBatchDataNode
   if (hasCycle && cycleNodeId) {
-    const cycleBodyNode = cycleUpdateNode || messageNode;
+    const cycleBodyNode = cycleInitiateApprovalNode || cycleUpdateNode || messageNode;
     children.push({
       componentName: 'CycleContainer',
       id: cycleNodeId,
@@ -760,6 +1042,8 @@ function buildViewJson(options) {
     });
   } else if (messageNode) {
     children.push(messageNode);
+  } else if (cycleInitiateApprovalNode) {
+    children.push(cycleInitiateApprovalNode);
   } else if (cycleUpdateNode) {
     children.push(cycleUpdateNode);
   }
@@ -771,6 +1055,35 @@ function buildViewJson(options) {
       name: { en_US: 'end', zh_CN: '结束', type: 'i18n' },
     },
   });
+
+  const hasNestedUpdate = Boolean(nestedUpdate);
+
+  // v2.8.17: conditionalUpsert 模式修正画布分支嵌套——
+  //   此前 ConditionContainer 与「发起审批」「更新数据」平铺在主干（ConditionNode.children 为空），
+  //   设计器把两个动作画在主干上、分支内无节点（画布实证：trigger→getSingle→分支(空)→发起审批→更新数据→结束）。
+  //   宜搭设计器渲染「分支内动作」依赖 viewJson 层级：动作节点必须作为 ConditionNode 的 children 嵌套，
+  //   仅靠 processJson nextId 接线（条件1→更新数据、其他情况→发起审批）不足以让画布把节点画进分支内。
+  //   这里把容器挪到「获取单条数据」之后，并把更新数据节点嵌入「条件1」children、发起审批节点嵌入「其他情况」children。
+  // 【新增】v2.0.33: nestedUpdate 模式——同上处理，但无发起审批节点；更新数据嵌入「条件1」children。
+  if (conditionalUpsert || hasNestedUpdate) {
+    const containerIdx = children.findIndex((c) => c.componentName === 'ConditionContainer');
+    const getIdx = children.findIndex((c) => c.componentName === 'GetSingleDataNode');
+    if (containerIdx > -1 && getIdx > -1 && containerIdx > getIdx) {
+      const [container] = children.splice(containerIdx, 1);
+      children.splice(getIdx + 1, 0, container);
+    }
+    // 找到动作节点并摘出（此时它们还平铺在 children 主干上）
+    const updIdx = children.findIndex((c) => c.componentName === 'UpdateDataNode');
+    const updNode = updIdx > -1 ? children.splice(updIdx, 1)[0] : null;
+    const initIdx = children.findIndex((c) => c.componentName === 'InitiateApprovalNode');
+    const initNode = initIdx > -1 ? children.splice(initIdx, 1)[0] : null;
+    const container2 = children.find((c) => c.componentName === 'ConditionContainer');
+    if (container2 && Array.isArray(container2.children)) {
+      // 条件1（命中，有值）→ 更新数据；其他情况（默认，没值）→ 发起审批
+      if (updNode && container2.children[0]) container2.children[0].children = [updNode];
+      if (initNode && container2.children[1]) container2.children[1].children = [initNode];
+    }
+  }
 
   return {
     schema: {

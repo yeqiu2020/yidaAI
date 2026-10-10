@@ -13,6 +13,11 @@ description: 宜搭API客户端，提供静默式登录、创建应用、创建�
 1. **saveFormSchema仅允许对新建表单调用** — 严禁对已有表单调用
 2. **deleteForm仅允许在创建失败回滚时调用** — 禁止删除业务表单
 3. **Cookie持久化与simulated-login共用** — 统一使用根目录.cookies.json
+4. **【强制·v1.1.0】WAF 误拦判定与规避** — 发布/提交类写接口（saveFormSchema、saveOrUpdatePermit、连接器动作保存等）返回 **HTTP 200 但响应体不是 JSON 且包含 `waf_block`** 时，判定为平台安全（WAF）拦截，**不是未知错误**：
+   - **处理**：用**二分法**定位本次提交内容中命中 WAF 规则的片段（每次注释掉一半内容重试提交，约 log2 次即可定位到最小命中片段），改写该片段后重试
+   - **规避写法**：命中片段避免——正则字面量（如 `/<script>/`）、危险 HTML/script 字符串（`<script>`、`javascript:`、`onerror=` 等）、SQL/命令注入特征串（`' OR 1=1`、`; DROP TABLE` 等）
+   - **适用范围**：仅发布/提交类写接口适用；常规生成、查询类接口**不套用**（查询被拦通常是登录态问题，先查 Cookie）
+   - **禁止**：把 WAF 拦截当未知错误反复原样重试（同时违反 P0-4 停止规则）
 
 ---
 
@@ -194,6 +199,7 @@ const result = await formManager.createForm(appType, formTitle, fields);
 ## 检查清单
 
 ### 执行前确认
+- [ ] 【v1.2.0·P5-3】可选统一预检：`node .agents/skills/server-manager/scripts/agent_capabilities.js` → JSON 摘要含 `loginState`（valid/expired/missing），expired 时先走登录流程
 - [ ] 确认Cookie文件路径指向项目根目录.cookies.json（规则26）
 - [ ] 确认首次登录时已打开浏览器供用户扫码
 - [ ] 确认已获取有效的csrf_token
@@ -207,6 +213,17 @@ const result = await formManager.createForm(appType, formTitle, fields);
 ---
 
 ## 版本信息
+
+**SKILL.md v1.2.0** (2026-09-28)
+- 执行前确认清单接入统一预检（P5-3）：`server-manager/scripts/agent_capabilities.js` 输出登录态/服务/配置摘要，expired 退出码 1
+
+**SKILL.md v1.1.0** (2026-09-28)
+- 新增专属硬规则第 4 条「WAF 误拦判定与规避」（P0-6）：发布/提交类接口 HTTP 200 + 响应体非 JSON + 含 `waf_block` → 判定平台 WAF 拦截，二分法定位命中片段并按规避写法改写（避免正则字面量/危险 HTML-script 字符串/注入特征串）；仅写接口适用，查询类先查登录态。依据：OpenYida 借鉴改造清单 P0-6（官方 Changelog 2026.9.22 原义）
+
+**login_manager.js v1.0.1** (2026-08-17)
+- 修复"刷新登录态"卡顿十几~二十秒的问题：网络方式验证 Cookie 的 fetchPageInfo 由 `waitUntil: 'networkidle'`（timeout 60s）改为 `domcontentloaded`（timeout 15s）
+- **根因**：宜搭是 SPA，页面一旦加载便持续有后台请求，`networkidle` 永远等不到"网络空闲"，每次都耗尽超时（实测 60s 超时被疯狂拉长到十几二十秒）才继续
+- **防复发**：凡访问宜搭页面**禁用 `waitUntil: 'networkidle'`**，一律 `domcontentloaded` + 等待目标元素/文本或 `waitForFunction`；csrf_token 是页面早期 DOM 的隐藏 input，`domcontentloaded` 即可拿到
 
 **form_manager.js v1.14.0** (2026-07-06)
 - 加固检测逻辑防失效：getNavList 失败时重试3次后抛错（不返回空数组），createForm 检测失败时抛错（不"继续创建"），彻底杜绝重跑产生重复表单/分组

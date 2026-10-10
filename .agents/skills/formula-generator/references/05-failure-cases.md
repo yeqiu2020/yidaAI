@@ -61,6 +61,64 @@ fields: [
 - 宜搭数组索引**从1开始**
 - `COUNT` 只用于统计表单提交数，不用于子表
 
+### 案例3：TODAY()/NOW() 与 DATE() 的本质区别 — 严格日期对象 vs 宽松日期值
+
+**需求**：判断入库日期是否超过需到货日期（逾期判断）
+
+**错误公式**：
+```
+GT(TODAY(), DATE(​需到货日期​))              // ❌ 第一参数类型不合法
+TIMECOMPARE(DATE(​入库日期​), TODAY())        // ❌ 第二参数类型不合法
+TIMECOMPARE(TODAY(), DATE(​需到货日期​))      // ❌ 第一参数类型不合法
+```
+
+**测试验证**：
+
+| 写法 | 结果 | 说明 |
+|------|:----:|------|
+| `GT(DATE(A), DATE(B))` | ✅ | DATE() 创建严格日期对象，可用于比较函数 |
+| `GT(TODAY(), DATE(B))` | ❌ | TODAY() 不是严格日期对象 |
+| `TIMECOMPARE(DATE(A), TODAY())` | ❌ | TODAY() 不是严格日期对象 |
+| `TIMECOMPARE(TODAY(), DATE(B))` | ❌ | TODAY() 不是严格日期对象 |
+| `IF(TODAY(), "真", "假")` | ✅ | 非比较函数，TODAY() 可用 |
+| `YEAR(NOW())` | ✅ | 非比较函数，NOW() 可用 |
+| `GT(TIMESTAMP(TODAY()), dateField)` | ✅ | TODAY() → 时间戳（数值），可用 |
+| `GT(DATE(TIMESTAMP(TODAY())), dateField)` | ✅ | 双重转换，得到严格日期对象 |
+
+**根因分析**：
+
+宜搭公式引擎中有**两种"日期类型"**：
+
+| 类型 | 创建方式 | 可用于 |
+|------|---------|--------|
+| **严格日期对象** | 仅由 `DATE()` 函数创建 | 所有函数，包括 `GT`/`LT`/`TIMECOMPARE` 等比较函数 |
+| **宽松日期值** | 由 `TODAY()`/`NOW()` 返回 | `YEAR()`/`MONTH()`/`TEXT()`/`IF()` 等非比较函数 |
+
+`TODAY()`/`NOW()` 返回的"日期值"缺少比较函数所要求的内部类型标签，因此在 `GT`/`LT`/`TIMECOMPARE` 中报"参数类型不合法"。
+
+**正确方案**：
+
+```
+// 方案1：TODAY() 转时间戳（推荐，简洁）
+GT(TIMESTAMP(TODAY()), DATE(​需到货日期​))
+
+// 方案2：双重转换，得到严格日期对象
+GT(DATE(TIMESTAMP(TODAY())), DATE(​需到货日期​))
+
+// 方案3：TIMESTAMP 比较两个日期
+TIMECOMPARE(DATE(TIMESTAMP(TODAY())), DATE(​需到货日期​))
+
+// 方案4：纯时间戳比较（dateField 本身就是时间戳）
+GT(​入库日期​, ​需到货日期​)
+```
+
+**经验教训**：
+- `DATE()` 是**唯一**创建严格日期对象的函数
+- `TODAY()`/`NOW()` 返回的是宽松日期值，**不能**用于 `GT`/`LT`/`TIMECOMPARE`
+- 需要比较 `TODAY()` 时，用 `TIMESTAMP(TODAY())` 转成数值，或 `DATE(TIMESTAMP(TODAY()))` 双重转换
+- 比较两个 dateField 时，直接 `GT(字段A, 字段B)` 最简洁（时间戳比较）
+- **这是宜搭公式引擎的内部类型系统限制，不是公式语法问题**
+
 ---
 
 ## 二、建议转 JS 实现的话术模板

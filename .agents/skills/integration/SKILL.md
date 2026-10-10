@@ -1,6 +1,6 @@
 ---
 name: integration
-description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集成自动化'、'创建自动化'、'逻辑流'、'创建逻辑流'、'自动化规则'、'表单触发'、'消息通知'、'连接器调用'、'获取自身'、'发起审批'、'体检逻辑流'、'检查自动化配置'时触发。通过API创建、修改、查询、启停集成自动化，支持表单事件触发、获取自身、获取单条/多条数据、新增数据、发起审批、连接器调用、消息通知等节点。自带保存前体检门禁（拦截占位符/空壳节点/空公式/断链），并可审计任意已有逻辑流（含其他AI/设计器创建的）。禁止手写 processJson/viewJson 或直调 saveProcess 接口。
+description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集成自动化'、'自动化'、'自动化规则'、'创建自动化'、'逻辑流'、'创建逻辑流'、'体检逻辑流'、'检查自动化配置'、'表单触发'、'消息通知'、'连接器调用'、'获取自身'、'发起审批'时触发。通过API创建、修改、查询、启停集成自动化，支持表单事件触发、获取自身、获取单条/多条数据、新增数据、发起审批、连接器调用、消息通知等节点。自带保存前体检门禁（拦截占位符/空壳节点/空公式/断链），并可审计任意已有逻辑流（含其他AI/设计器创建的）。🔴 与 business-rule（业务关联规则）严格区分：说'业务规则'、'业务关联规则'（表单事件/流程节点提交规则里的跨表增删改）时触发 business-rule，不要触发本Skill；同一场景两类机制并存会双重执行。禁止手写 processJson/viewJson 或直调 saveProcess 接口。
 ---
 
 ## 硬规则（绝对不可违反）
@@ -13,12 +13,14 @@ description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集
 1. **配置前必读「节点 componentName 权威对照表」（本文三·五）+ [references/node-playbook.md](references/node-playbook.md)（避坑清单/黄金配方/兜底路径）** — 所有节点 componentName / props 形状已从真实设计器引擎核实固化，禁止再凭空猜测节点名或 props 结构（猜错曾导致设计器白屏崩溃、保存报"转换xml失败"，白白浪费整天时间与费用）
 2. **脚本(JavaScriptNode)/条件分支/循环容器：API 直建已回归验证（2026-07-28）** — 与更新数据/删除数据/子表新增一样均可由 `integration-create.js` 直建（3 条回归流保存成功 + 设计器回读通过，见「十、已知限制」）；仅并行分支仍需走设计器路径；Groovy 已 CLI 封装（离线断言通过，线上直建待回归）
 3. **修改模式必须展示当前配置供确认** — 修改已有逻辑流时先展示当前配置
-4. **🔴 配置数据节点前必须校验「目标表单类型」匹配** — 新增数据(AddDataNode)只能选普通表单(receipt)，发起审批(InitiateApprovalNode)只能选流程表单(process)。类型不对，设计器必报"表单不存在/无效表单"。create 脚本已内置 `assertFormType` 硬拦截，禁止绕过（详见 node-playbook.md 避坑清单第 9 条）
+4. **🔴 配置数据节点前必须校验「目标表单类型」匹配 + 流程表单自动降级** — 新增数据(AddDataNode)只能选普通表单(receipt)，发起审批(InitiateApprovalNode)只能选流程表单(process)。类型不对，设计器必报"表单不存在/无效表单"。create 脚本已内置**自动降级**：当 `--add-data-form-uuid` 指向流程表单时，自动切换为「发起审批」节点（发起人默认使用**触发数据的提交人** `form_inst_creator`，type=`form_field_list`，bundle 逆向确认）；反向同理（`--initiate-approval-form-uuid` 指向普通表单时自动切换为「新增数据」节点）。无需手动指定发起人，无需手动切换节点类型。（详见 node-playbook.md 避坑清单第 9/21 条）
 5. **🔴 公式赋值三字段格式（viewJson `assignments[]`）** — `valueType=column` 的赋值规则必须同时写入三个字段，缺一或多改都会导致设计器 UI 异常：
    - `__display`：**纯文本字符串**（如 `"目标表字段.库存数量+入库明细.入库数量"`），用于设置面板输入框显示。❌ 不能是 JSON 对象（显示 `[object Object]`）、❌ 不能是 `JSON.stringify` 字符串（显示 JSON 原文）、❌ 不能省略（设置面板显示空）
    - `__source`：**与 CLI 传入公式完全相同**（如 `"#{FORM-xxx/fieldId}+#{fieldId}"`），用于公式编辑器弹窗重建编辑器状态。❌ 跨表引用不能用 `//`（双斜杠），direct_form 模式下目标表单是 `targetForm` 类型，`formSuffix="/"`（单斜杠），双斜杠会导致验证器报"类型不合法"；❌ 触发表单字段不能加 `//` 后缀（formSuffix=""，加后缀会导致弹窗标记 invalid:true "无效字段"）
    - `value`：**与 `__source` 完全相同**，不做任何转换。❌ 不需要做点号转换（`#{FORM-xxx}.fieldId` 是多余且错误的）
    - bundle 逆向佐证：`parseListFieldsToVars` 中 `formSuffix = "Object"===type ? "//" : "targetForm"===type ? "/" : ""`；`handleDialogEnter` 的 value 转换只处理 `//`（双斜杠），不处理 `/`（单斜杠），所以单斜杠格式的 `__source` 会原样保留到 `value`
+6. **【强制·v2.9.0】更新禁区——已有逻辑流禁止盲改** — 官方路由规则原义（raw 直链已核实）：*「集成自动化从上游节点子表取数或新增一行」应使用新建路径；不要用 update 或现网 replace*。落地三则：①修改已有逻辑流仅限既有 `--process-code` 模式，且修改前必须回读展示当前配置供确认（专属硬规则 3）；②「从上游节点子表取数或新增一行」场景一律走**新建**（推荐 spec 模式）；③既有沉淀规则**原样保留**：「字段方式无法引用目标字段时用公式方式赋值」「触发子表→目标子表走中间表两段式」（硬规则 20）等，本条为补充而非替代
+7. **【强制·v2.9.0】复杂逻辑流创建优先 spec 模式** — 多节点/多条件/多赋值的创建一律用 `--spec <文件>` 声明式 JSON 规格驱动（AI 生成 spec → 脚本提交），禁止在对话里逐字段拼装长 CLI 命令。spec 翻译为既有 CLI 参数后走**同一构建链**，体检门禁/Schema 校验全部保留。仅简单单节点场景（如最简消息通知）可直接用 CLI。Schema 与节点枚举见 [references/integration-spec.schema.json](references/integration-spec.schema.json)
 
 ---
 
@@ -34,6 +36,7 @@ description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集
 | [references/canonical-node-shapes.md](references/canonical-node-shapes.md) | 需要各节点 viewJson 完整原始形状 + processJson 序列化规则佐证时 |
 | [references/cli-examples.md](references/cli-examples.md) | 组装复杂 CLI 参数（子表upsert/连接器/分支/循环等约 20 个完整示例）时 |
 | [references/集成自动化硬规则.md](references/集成自动化硬规则.md) | 跨 AI 硬规则权威源（唯一可手改；改后运行 `node scripts/sync-hard-rules.js` 分发到 AGENTS.md/CLAUDE.md/.trae/.cursor） |
+| [references/integration-spec.schema.json](references/integration-spec.schema.json) | 组装/校验 --spec 声明式规格（P4-2）：节点类型枚举、条件/赋值结构、extraArgs 逃生舱口 | 用 spec 模式创建逻辑流前 |
 | [references/version-history.md](references/version-history.md) | 需要了解某能力何时引入/修复了什么时 |
 
 ## 一、核心能力
@@ -44,9 +47,11 @@ description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集
 | **修改集成自动化** | 修改已有逻辑流的节点配置 | `integration-create.js --process-code` |
 | **查询逻辑流列表** | 查询应用内所有逻辑流，支持筛选 | `integration-list.js list` |
 | **启用/停用逻辑流** | 控制逻辑流的开关状态 | `integration-list.js enable/disable` |
-| **检查运行日志** | 查询运行日志，排查异常；`--output` 可导出 Excel 报告 | `integration-check.js` |
+| **检查运行日志** | 查询运行日志，排查异常；`--output` 可导出 Excel 报告；**v2.10.0 起自动检测「启用中但无执行记录」的静默失败候选（`--no-silent` 关闭）** | `integration-check.js` |
 | **回读逻辑流配置** | 回读并展示已有逻辑流的节点结构（修改前查看/排查） | `integration-get.js` |
 | **体检逻辑流配置** | 审计任意已有逻辑流（含其他工具/AI 创建的）：占位符、空壳节点、空公式、断链 | `integration-validate.js` |
+| **删除逻辑流** | 删除指定逻辑流（已启用的流程需 `--force` 自动停用后删除） | `integration-delete.js` |
+| **设计器面板修复** | Playwright 打开设计器，点击节点触发重渲染并保存（修复循环容器内发起审批面板空白） | `integration-designer-fix.js` |
 
 ## 二、支持的节点类型
 
@@ -74,7 +79,7 @@ description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集
 | 脚本(Groovy) | `GroovyNode` | `--script-code` + `--script-lang groovy`（镜像 JS 兄弟节点） | ✅ CLI 已封装 + 离线断言通过（线上直建待回归） |
 | 条件分支 | `ConditionContainer` + 子 `ConditionNode` | 单条件：`--branch-field/--branch-operator/--branch-value/--branch-field-name`；多条件：可重复 `--branch-condition` + `--branch-logic and|or` | ✅ API 直建已回归（回归F）；默认分支已修复为直达结束 |
 | 并行分支 | `ConditionContainer`(type:parallel) + 子 `ParallelNode` | — | 设计器可用；API 直建待回归 |
-| 循环容器 | `CycleContainer` | `--cycle`（需 `--data-query-type multiple` + 消息节点） | ✅ API 直建已回归（回归G，只能遍历「获取多条数据」输出） |
+| 循环容器 | `CycleContainer` | `--cycle`（需 `--data-query-type multiple` + 循环体节点：消息通知/更新数据/发起审批） | ✅ API 直建已回归（回归G，只能遍历「获取多条数据」输出） |
 
 > 2026-07-30：view-builder 已与 process-builder/create.js 完成对齐重写（nodeIds 消费顺序、GroovyNode/JavaScriptNode、GetBatchDataNode、ConditionContainer+ConditionNode、CycleContainer、DeleteDataNode、InitiateApprovalNode、userFields 默认 form_inst_creator），离线断言 `integration-builder.test.js` 34 用例全绿，含 viewJson/processJson 节点 ID 一一对应校验。
 
@@ -166,6 +171,8 @@ integration/
 │   ├── integration-check.js                    # 运行日志检查（支持 --output 导出 Excel）
 │   ├── integration-get.js                      # 回读逻辑流节点结构
 │   ├── integration-validate.js                 # 保存前体检门禁 + 已有流审计 CLI
+│   ├── integration-delete.js                   # 删除逻辑流（--force 自动停用后删除）
+│   ├── integration-designer-fix.js             # Playwright 设计器面板修复（循环内发起审批）
 │   ├── dump-node-catalog.js                    # 从公开 bundle 提取全 16 节点权威定义
 │   ├── integration-builder.test.js             # 离线断言测试（node 直接运行）
 │   └── connector-presets/
@@ -181,27 +188,54 @@ integration/
 node .agents/skills/integration/scripts/integration-create.js <appType> <formUuid> <flowName> [选项]
 ```
 
-**★ 方案选择决策树（选错方案=白建逻辑流，务必先看）**：
+**★ 方案选择决策树（判别标准=动作类型，不是数据拓扑；选错方案=白建逻辑流，务必先看）**：
+
+> 🔴 **第一入口：硬规则 17「全场景组合总决策矩阵」（4 数据拓扑 × 3 操作 × 2 目标类型 = 24 格）**——任何需求先按"主表→主表/子表→主表/主表→子表/子表→子表 × 新增/更新/删除 × 普通/流程表单"对号入座，矩阵中已标注每格的标准方案与模板出处；目标=流程表单的删除场景注意"流程状态条件写法待金标准确认"（缺口1）。下方决策树是矩阵的展开视图：
 
 ```
-触发单据审批通过后，需要同步更新另一张表的数据？
-├─ 触发表单【主表字段】→ 目标表单【主表字段】（如：采购入库主表→库存信息主表）
-│  ✅ 首选方案：direct_form 直接更新（3 节点：触发→更新→结束）
-│     --update-form-uuid + --update-condition + --update-assignment + --update-none-operation add
-│     ⚠️ 禁止用循环容器！直接更新引擎自动处理，无需获取节点、无需循环
+触发后需要对另一张表做什么？
+├─ 数据同步/累加/upsert（更新或新增目标表数据）
+│  ✅ 一律 direct_form 更新数据节点（3 节点：触发→更新→结束），
+│     无论触发数据来自主表字段还是子表明细行！
+│  ├─ 目标是主表字段（如：采购入库.入库明细/主表→库存信息主表，已实际验证）
+│  │  --update-form-uuid + --update-condition + --update-assignment + --update-none-operation add
+│  │  引擎自动对触发子表明细逐行迭代匹配，无需获取节点、无需循环
+│  └─ 目标是子表行（如：采购入库.入库明细→采购订单.采购明细.已入库数量）
+│     追加 --update-sub-source-id + --update-sub-condition
+│  ⚠️ 任何数据同步场景禁止用循环容器！（同一根因已两次把"采购入库同步库存"误建成5节点循环流）
+│  ⚠️ 如果目标表单是流程表单且需要新增记录，见下方"发起审批"分支！
 │
-├─ 触发表单【子表行】→ 目标表单【子表行】（如：采购入库.入库明细→采购订单.采购明细.已入库数量）
-│  ✅ 首选方案：direct_form 子表更新（3 节点：触发→更新→结束）
-│     --update-sub-source-id + --update-condition + --update-sub-condition + --update-assignment
-│     ⚠️ 禁止用循环容器！引擎对子表数组逐行迭代匹配，无需手动循环
+├─ 目标表单是流程表单（插入/更新/删除全部可实现，按此对号入座直接执行，
+│  禁止停下来问用户"改普通表单/放弃操作"等方案选择题 — 硬规则 13.1 决策表）
+│  ├─ 插入新数据（仅主表字段）→ 发起审批节点 --initiate-approval-form-uuid（硬规则 13）
+│  ├─ 插入新数据（含子表）→ 「发起审批 + 更新数据」两步方案（4 节点，见下方模板）
+│  │     发起审批节点不支持子表字段赋值！只能赋值主表字段创建流程实例，
+│  │     再用更新数据节点向子表插入数据。（硬规则 13、14）
+│  │     --initiate-approval-form-uuid + --initiate-approval-assignment（仅主表字段）
+│  │     --update-form-uuid + --update-condition + --update-sub-source-id
+│  │     + --update-sub-condition + --update-assignment + --update-none-operation add
+│  │     ⚠️ noneOperation 必须用 add（不能用 ignored，子表初始为空）
+│  │     ⚠️ 子表字段必须同时出现在 sub-condition 和 assignment 中
+│  ├─ 更新已有数据 → 更新数据节点 direct_form（同上方黄金配方）
+│  │     ⚠️ --update-none-operation 必须用 ignored（默认）——禁止 add：
+│  │     匹配不到时会插入无流程实例的脏数据（打不开）
+│  │     匹配条件用已有记录的业务键（如名称）定位
+│  └─ 删除已有数据 → 获取数据节点 + --delete-data
+│        ⚠️ 获取节点过滤条件必须含 流程状态="已完成"（硬规则 9，流程进行中不允许删）
+│        只删子表行时按硬规则 16 模式 A/B 选一种
 │
-├─ 触发表单【子表行】→ 目标表单【主表记录】（如：采购入库.入库明细各行→各自对应的库存信息主表记录）
-│  ⚠️ 仅此场景才用循环容器（5 节点：触发→获取多条→循环→循环体内更新→结束）
-│     --data-source-type subform + --cycle + --cycle-update-*
-│     ❗ 这是唯一需要循环容器的场景，其他场景一律用 direct_form
-│
-└─ 不确定？默认用 direct_form（直接更新），能覆盖 90% 的同步场景
+└─ 逐条执行非更新类动作（对获取多条的每条结果分别执行以下动作）
+   ⚠️ 仅此类场景才用循环容器（--cycle，需前置获取多条节点）；
+   它不是数据同步的备选方案。
+   ├─ 发起审批（如：任务分派子表逐行→任务执行发起审批，必须用循环+InitiateApprovalNode）
+   │  ⚠️ "发起审批" ≠ "新增数据"！发起审批是创建流程实例，不是更新/新增数据记录。
+   │  --cycle --cycle-initiate-approval-form-uuid --cycle-initiate-approval-assignment
+   │  assignment 格式：目标字段ID:processVar:源字段ID（两个冒号，一个冒号会静默丢失）
+   ├─ 消息通知（对每条结果发消息）
+   └─ 连接器调用（对每条结果调API）
 ```
+
+> 已验证成功的库存同步完整配置见 `docs/采购入库同步库存-集成自动化配置指南.md`。
 
 **代表性示例**（约 20 个完整示例见 [references/cli-examples.md](references/cli-examples.md)）：
 
@@ -220,6 +254,21 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGG
   --update-none-operation add \
   --publish
 
+# 循环内发起审批（任务分派子表逐行→任务执行发起审批）
+# 场景：A表审批通过后，遍历A表子表行，逐行在B表(流程表单)发起审批
+# 架构：4 节点（触发→获取多条数据→循环[含发起审批]→结束）
+# ⚠️ assignment格式必须用两个冒号：目标字段ID:processVar:源字段ID
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后循环发起审批" \
+  --events processFinish --approval-actions agree \
+  --data-source-type subform --data-sub-field-id tableField_xxx \
+  --cycle \
+  --cycle-initiate-approval-form-uuid FORM-TARGET \
+  --cycle-initiate-approval-assignment "textField_target1:processVar:textField_source1" \
+  --cycle-initiate-approval-assignment "employeeField_target2:processVar:employeeField_source2" \
+  --cycle-initiate-approval-assignment "dateField_target3:processVar:dateField_source3" \
+  --publish
+# 创建后必须执行：node .agents/skills/integration/scripts/integration-designer-fix.js APP_XXX <processCode> --save
+
 # 消息通知（最简）
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "新数据通知" \
   --events insert --receivers "user001,user002" --title "有新数据提交" --content "请及时查看"
@@ -235,19 +284,13 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
   --update-assignment "numberField_qty:column:#{FORM-ZZZ/numberField_qty}+#{numberField_src}" \
   --update-none-operation add
 
-# ⚠️ 循环容器（仅限：触发表子表各行 → 各自对应的目标表主表记录，每行需独立 UPSERT）
-# ❗ 这是唯一需要循环容器的场景！库存同步等常见场景请用上面的 direct_form 方案
-# bundle 验证：GetBatchDataNode originalType=sub_table 从触发子表获取多条数据
-# CycleContainer 遍历每行，循环体内 UpdateDataNode 逐行 UPSERT 目标表单
-node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "子表逐行入库" \
+# ⚠️ 循环容器（仅限：对「获取多条数据」的每条结果逐条执行非更新类动作，如逐条发消息通知）
+# ❗ 数据同步/累加/upsert（含子表明细→目标主表，如库存同步）一律用上面的 direct_form 方案，禁止用循环容器！
+node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "逐条通知" \
   --events processFinish --approval-actions agree \
-  --data-form-uuid FORM-XXX --data-query-type multiple \
-  --data-source-type subform --data-sub-field-id tableField_sub \
+  --data-form-uuid FORM-YYY --data-query-type multiple \
   --cycle \
-  --cycle-update-form-uuid FORM-ZZZ \
-  --cycle-update-condition "textField_target:目标匹配字段:textField_sub_trig" \
-  --cycle-update-assignment "numberField_qty:column:#{FORM-ZZZ/numberField_qty}+#{numberField_sub_src}" \
-  --cycle-update-none-operation add
+  --receivers "user001" --title "逐条提醒" --content "请处理"
 
 # 修改已有逻辑流（传入 --process-code）
 node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "修改流程" \
@@ -276,18 +319,18 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
 | `--get-self-field` | 覆盖触发事件系统字段（默认__masterdata_form_inst_id） | 否 |
 | `--get-self-query-field` | 覆盖查询系统字段（默认pid） | 否 |
 | `--data-form-uuid` | 获取数据目标表单UUID | 否 |
-| `--data-condition` | 获取数据过滤条件（可多次）：bFieldId:bFieldName:aFieldId[:componentType[:opCode[:valueType]]] | 否 |
+| `--data-condition` | 获取数据过滤条件（可多次）：bFieldId:bFieldName:aFieldId[:componentType[:opCode[:valueType]]]。**valueType 用单冒号** `...:Contain:literal`（双冒号 `::literal` 也会被 pickValueType 兼容，但供度优先单冒号） | 否 |
 | `--data-query-type` | 获取数据查询类型：single(默认)/multiple | 否 |
 | `--data-quantity` | 多条数据时获取数量（默认100） | 否 |
 | `--add-data-form-uuid` | 新增数据目标表单UUID | 否 |
-| `--add-data-assignment` | 新增数据字段赋值（可多次）：目标字段ID:valueType:value | 否 |
+| `--add-data-assignment` | 新增数据字段赋值（可多次，格式：目标字段ID:valueType:value。valueType 可选 `processVar`=引用触发表单字段值、`literal`=固定值） | 否 |
 | `--add-data-insert-type` | 新增方式：form(默认,表单中新增)/sub_table(在子表中新增) | 否 |
 | `--add-data-sub-form-uuid` | 子表新增时目标子表字段ID（tableField_xxx） | sub_table时必填 |
 | `--add-data-type` | 新增条数：single(默认)/batch(新增多条) | 否 |
 | `--add-data-source-id` | batch时数据源：触发子表字段ID，或 `get`（自动解析为前置获取多条节点） | batch时必填 |
 | `--initiate-approval-form-uuid` | 发起审批目标流程表单UUID | 否 |
-| `--initiate-approval-initiator-user` | 发起审批的发起人 userId[:name] | 发起审批时必填 |
-| `--initiate-approval-assignment` | 发起审批字段赋值（可多次） | 否 |
+| `--initiate-approval-initiator-user` | 发起审批的发起人 userId[:name]（**可省略**：缺省=当前登录用户/开发者，CLI 自动读 `.cookies.json`，v2.8.12） | 否 |
+| `--initiate-approval-assignment` | 发起审批字段赋值（可多次，格式：column:valueType:value。valueType 可选：`processVar`=引用触发表单字段值、`literal`=固定值） | 否 |
 | `--connector-id` | 连接器ID | 否（需与--action-id同时使用） |
 | `--action-id` | 连接器动作ID | 否 |
 | `--connector-name` | 连接器显示名称 | 否 |
@@ -299,7 +342,7 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
 | `--connector-assignment` | 连接器入参映射（可多次）：column:valueType:value | 否 |
 | `--update-form-uuid` | 更新数据目标表单UUID | 否 |
 | `--update-condition` | 更新数据主条件（可多次，定位主表记录） | 否 |
-| `--update-assignment` | 更新数据字段赋值（可多次，valueType=column 为公式累加） | 否 |
+| `--update-assignment` | 更新数据字段赋值（可多次，格式：column:valueType:value。valueType 可选：`processVar`=引用触发表单字段值、`column`=公式表达式如 `#{目标/fieldId}+#{触发/fieldId}`、`literal`=固定值） | 否 |
 | `--update-type` | 更新模式：direct_form(默认,直接更新)/node(按前置获取节点更新) | 否 |
 | `--update-sub-source-id` | 更新子表时目标子表字段ID（tableField_xxx） | 否 |
 | `--update-sub-condition` | 子表更新时子条件（可多次，引擎逐行匹配；不传则每行都命中） | 建议必填 |
@@ -315,13 +358,18 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
 | `--branch-field-name` | 条件分支字段中文名（面板回显用） | 否 |
 | `--branch-condition` | 条件分支的单条条件，可重复以组合多条件：fieldId:fieldName:opCode:value[:componentType[:valueType]] | 否 |
 | `--branch-logic and\|or` | 多条件分支的逻辑关系，默认 `and` | 否 |
-| `--cycle` | 循环容器(CycleContainer)：需 `--data-query-type multiple` + 消息节点（作为循环体）（API 直建已回归） | 否 |
-| `--data-source-type` | 获取数据来源：`form`(默认,表单查询) / `subform`(从触发数据子表获取，bundle 验证 originalType=`sub_table`)。subform 时需 `--data-sub-field-id` | 否 |
-| `--data-sub-field-id` | 子表来源时的触发子表字段ID（tableField_xxx） | 否 |
-| `--cycle-update-form-uuid` | 循环体内更新数据目标表单UUID（逐行 UPSERT，配合 `--cycle` + `--data-source-type subform` 使用） | 否 |
+| `--conditional-upsert` | **条件分支upsert模式（v2.8.13）**：单条逻辑流内"获取单条→条件判断→[有值:更新 / 没有值:发起审批]"。需 `--data-form-uuid`+`--data-query-type single`+`--initiate-approval-form-uuid`+`--update-form-uuid`+≥1 个 `--data-condition`；自动生成 HasValue 条件（字段引用 `${dataNodeId}.fieldId`），无需手动传 `--branch-*`。典型场景：流程表单目标，名称匹配则更新、无匹配则发起审批（避免两条独立流同时执行） | 否 |
+| `--cycle` | 循环容器(CycleContainer)：需 `--data-query-type multiple` + 循环体节点（消息通知/更新数据/发起审批）；⚠️ 数据同步场景禁用循环容器，一律用 direct_form `--update-*`（API 直建已回归） | 否 |
+| `--data-source-type` | 获取数据来源：`form`(默认,表单查询) / `subform`(从触发数据子表获取，bundle 验证 originalType=`sub_table`，sourceId=`#{触发表单}`)。subform 时需 `--data-sub-field-id` | 否 |
+| `--data-sub-field-id` | subform 子表来源时的触发子表字段ID（tableField_xxx） | 否 |
+| `--data-sub-source-id` | **目标表单子表直接获取（v2.8.7，单独使用无 `--data-sub-condition` 时）**：获取节点 `originalType="sub_table"` + `sourceId=#{目标表单}` + `subSourceId=该值`，从目标表单子表直接查匹配行（设计器显示"从子表中获取"）。若同时配 `--data-sub-condition` 则变为 5 节点 cascade（从数据节点中获取） | 否 |
+| `--cycle-update-form-uuid` | 循环体内更新数据目标表单UUID（⚠️ 数据同步场景禁用此方案，一律用 direct_form `--update-*`；仅保留给确需逐条独立处理的特殊拓扑） | 否 |
 | `--cycle-update-condition` | 循环体更新主条件（可多次，格式同 `--update-condition`：bFieldId:bFieldName:aFieldId[:componentType[:opCode[:valueType]]]） | 否 |
-| `--cycle-update-assignment` | 循环体更新赋值（可多次，格式同 `--update-assignment`：column:valueType:value） | 否 |
+| `--cycle-update-assignment` | 循环体更新赋值（可多次，格式同 `--update-assignment`：column:valueType:value，valueType 可选 `processVar`/`column`/`literal`） | 否 |
 | `--cycle-update-none-operation` | 循环体未匹配处理：`ignored`(跳过) / `add`(新增=upsert，默认) | 否 |
+| `--cycle-initiate-approval-form-uuid` | 循环体内发起审批目标流程表单UUID（场景：遍历子表行逐行发起审批） | 否 |
+| `--cycle-initiate-approval-assignment` | 循环体发起审批字段赋值（可多次，格式：`目标字段ID:processVar:源字段ID`，两个冒号，一个冒号会静默丢失） | 否 |
+| `--cycle-initiate-approval-initiator` | 循环体发起审批发起人（⚠️ 该参数及"自动查找 EmployeeField"机制在代码中未实现，见下方 v2.8.12 纠偏；发起人缺省=当前登录用户/开发者） | 否 |
 | `--publish` | 创建后直接发布 | 否 |
 
 **字段赋值 valueType 说明（⚠️ valueType 是值类型枚举 token，不是数据值，严禁把 token 本身写进值槽位）：**
@@ -331,6 +379,39 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
 | `processVar` | 引用触发表单字段 | 表单字段ID（如 textField_xxx 的真实字段ID） |
 | `literal` | 固定值 | 字面量（如 "已完成"、100 的真实业务值） |
 | `column` | 公式 | 公式表达式（跨表 `#{formUuid/fieldId}`、触发字段 `#{fieldId}`） |
+
+### 1.5 spec 模式（声明式 JSON 规格，v2.9.0 新增·推荐）
+
+**用法**：AI 按需求生成 spec JSON 文件（保存到逻辑流目录，如 `集成自动化/<名称>.spec.json`），一条命令提交：
+
+```bash
+node .agents/skills/integration/scripts/integration-create.js --spec <spec文件路径>
+# appType/formUuid/flowName 可在命令行位置参数覆盖 spec 内声明
+```
+
+**spec 示例**（验收场景：获取自身→更新数据，对应 Schema 文件内示例）：
+
+```json
+{
+  "specVersion": "1.0",
+  "appType": "APP_XXX",
+  "flowName": "提交后同步更新目标表",
+  "trigger": { "formUuid": "FORM-TRIGGER", "events": ["insert"] },
+  "nodes": [
+    { "type": "getSelf" },
+    { "type": "updateData", "formUuid": "FORM-TARGET", "noneOperation": "ignored",
+      "conditions": [
+        { "target": "textField_target_key", "targetName": "名称", "source": "textField_trig_key", "componentType": "TextField", "op": "Equal", "valueType": "processVar" }
+      ],
+      "assignments": [
+        { "target": "numberField_target_val", "valueType": "processVar", "value": "numberField_trig_val" }
+      ] }
+  ],
+  "publish": true
+}
+```
+
+**规则**：①specVersion 固定 `"1.0"`；②节点类型枚举：getSelf / getFormData / addData / initiateApproval / updateData / deleteData / message（循环/分支/连接器/脚本等未建模能力走 `extraArgs` 原样透传 CLI 参数）；③valueType 是枚举 token 不是数据值（硬规则 3）；④事件与目标表单类型约束同 CLI（硬规则 4/15 自动检测仍生效）；⑤**更新禁区**见专属硬规则 6。
 
 ### 2. 其他子命令（完整选项示例见 [references/cli-examples.md](references/cli-examples.md)）
 
@@ -349,6 +430,12 @@ node .agents/skills/integration/scripts/integration-get.js <appType> <processCod
 
 # 体检逻辑流（线上流有错误时退出码1；--file 体检本地 processJson）
 node .agents/skills/integration/scripts/integration-validate.js <appType> <processCode>
+
+# 设计器面板修复（Playwright 打开设计器，点击节点触发重渲染；--save 保存）
+node .agents/skills/integration/scripts/integration-designer-fix.js <appType> <processCode> [--save] [--screenshot]
+
+# 删除逻辑流（已启用的流程需 --force 自动停用后删除）
+node .agents/skills/integration/scripts/integration-delete.js <appType> <formUuid> <processCode> [--force]
 ```
 
 ### 3. 保存前体检门禁与已有流审计（integration-validate.js）
@@ -399,7 +486,11 @@ node .agents/skills/integration/scripts/integration-validate.js <appType> <proce
 1. **查询现有逻辑流**：使用 `integration-list.js list` 获取 processCode
 2. **确认修改内容**：先用 `integration-get.js` 回读展示当前配置，与用户确认要修改的节点和配置
 3. **执行修改**：使用 `--process-code` 参数调用 `integration-create.js`
-4. **验证结果**：检查输出确认修改成功
+4. **回读验证（强制）**：修改后立即用 `integration-get.js` 回读节点树，核对本轮修改的节点配置与预期一致，再用 `integration-validate.js` 体检；**接口返回 success 但回读内容与写入值不一致时按失败处理**并向用户说明差异，不得只凭保存接口的成功响应汇报完成
+
+### 启用/停用后回读（强制·v2.8.30）
+
+使用 `integration-list.js enable/disable` 后，必须用 `integration-list.js list --status y|n`（或 `integration-get.js`）回读确认目标逻辑流状态已真实切换；接口返回成功但状态未变化的按失败处理并说明，不得汇报「已启用/已停用」。**背景**：本项目已知「内嵌节点配置错误时无执行日志」的坑——保存/启用后的回读是运行前排错的前置防线。
 
 ## 八、获取自身节点（`--get-self`）
 
@@ -409,7 +500,7 @@ node .agents/skills/integration/scripts/integration-validate.js <appType> <proce
 ## 九、发起审批节点
 
 - 目标表单必须是流程表单（formType=process），普通表单请使用 `--add-data-form-uuid`
-- `--initiate-approval-initiator-user` 必须提供，格式为 `userId[:name]`
+- **【默认发起人·禁止询问】`--initiate-approval-initiator-user` 可省略**：缺省时 CLI 自动使用当前登录用户（开发者本人，读 `.cookies.json` 的 login_user）作为发起人（v2.8.12）。禁止为"发起人用谁"询问用户；仅用户主动指定时才传该参数（硬规则 12）
 - 字段赋值格式与 `--add-data-assignment` 相同；完整示例见 [cli-examples.md](references/cli-examples.md)，详解见 [node-playbook.md](references/node-playbook.md) 第 7 节
 
 连接器预设（钉钉待办 connectorId/actionId + 6 项必填入参表）见 [node-playbook.md](references/node-playbook.md) 第 5 节；API 接口 + processJson/viewJson 结构见第 4 节。
@@ -419,11 +510,38 @@ node .agents/skills/integration/scripts/integration-validate.js <appType> <proce
 1. **更新/删除/子表新增节点 API 直建已全部回归验证（2026-07-28）**：四大类场景 × insert/update/delete/upsert 共 7 条真实逻辑流保存成功且设计器回读完整。关键：processJson 的 dataUpdate 必须扁平展开、viewJson 多条获取组件名必须是 GetBatchDataNode（避坑清单 10/11 条）。
 2. **脚本节点 API 直建已回归（回归E）**：componentName=`JavaScriptNode`，processJson type=`CodeExecutor`；输出变量名=`<节点id>_<var>`。Groovy 已 CLI 封装且离线断言通过（GroovyNode + props.groovy），线上直建待回归。
 3. **条件分支 API 直建已回归（回归F）**：route 容器+两 condition 子分支；分支子节点 ID 必须 processJson/viewJson 一致（create.js 统一生成）。并行分支/多分支仍待回归。
-4. **循环容器 API 直建已回归（回归G）**：只能遍历「获取多条数据」输出，循环体不能为空（CLI 强制要求消息节点）。
-5. **连接器预设有限**：仅内置钉钉待办预设，其他连接器需传入 `--connector-inputs`。
-6. **组合场景测试已全部通过（2026-07-28）**：4 个复杂场景 API 直建均成功 + 设计器保存均通过（ConnectorNode currentStep、EmployeeField literal 数组、连接器必填入参，详见 node-playbook.md 避坑清单 13-15 条）。
+4. **循环容器 API 直建已回归（回归G）**：只能遍历「获取多条数据」输出，循环体不能为空（CLI 强制要求循环体节点：消息通知/更新数据/发起审批）。
+5. **发起审批节点分主链/循环内两套 viewJson 格式（v2.8.0 实测确认 + 修复，标准支持功能）**：
+   - **主链发起审批** setter 期望格式（实测金标准：手动配置的兄弟流 LPROC-KX966O71UT383IQEK2A0QA0GA40335AB56HSM01）：
+     - 无 `signAction` 顶层字段
+     - `assignments[].value` = 裸字段 componentId（如 `textField_ltdu4ayu`）
+     - `initiator.type='form_field_list'` + `initiator.value='["form_inst_creator"]'`
+     - **setter UI 表现**："目标字段"名显示 + 值下拉显示"字段"占位符 + "表单成员字段"radio 未选中（**这是宜搭正常 UI 行为，不影响功能**）
+   - **循环内发起审批** setter 期望格式（v2.8.0 实测金标准：设计器 setter tree 选择器逆向确认）：
+     - `signAction='one_by_one'` 顶层字段（必须）
+     - `assignments[].value` = **`${cycleNodeId}.fieldId`** 格式（如 `${node_xxx}.textField_570rac0i`）—— setter tree 选择器中"当前循环执行的数据"展开后子选项的 value 就是此格式。❌ v2.6.0 用裸 cycleNodeId → setter 全部显示"当前循环执行的数据"整体；❌ v2.7.0 用 cycleNodeId//fieldId → setter 不识别保存后回退为空。✅ v2.8.0 用 `${cycleNodeId}.fieldId` → setter 正确显示各字段名。
+     - `assignments[].__display` = **源字段中文名**（如 `"任务名称"`）—— setter 在未加载 `getFormVariables.json` API 时用此字段显示，缺少则显示"请配置字段/变量"（空白）。view-builder 通过 `lookupFieldLabel(triggerFormSchema, fieldId)` 自动查找。
+     - `initiator.type='form_field'` + `initiator.value=<真实 EmployeeField 字段ID>`（如 `employeeField_lus0jwc4`）—— **不是 form_field_list+form_inst_creator**！❌ `form_inst_creator` 虽然能保存但设计器显示原始文本而非友好名称；✅ 真实 EmployeeField 设计器显示字段中文名（如"项目经理"）。CLI `findSubmitterFieldId` 三级回退：①label含"提交"的EmployeeField → ②主表第一个EmployeeField → ③`form_inst_creator`（最后手段）。可通过 `--cycle-initiate-approval-initiator <fieldId>` 手动指定。
+     - **setter UI 表现**：完整显示字段名（如"任务名称→任务名称"）+ 发起人选中（表单成员字段=提交成员）
+   - **view-builder 实现**：主链保留 form_field_list+form_inst_creator 格式；循环内用 v2.8.0 金标准格式（assignments[].value=`${cycleNodeId}.fieldId` + `__display`=源字段中文名, initiator=form_field+提交成员字段, signAction=one_by_one）。create.js `findSubmitterFieldId(triggerFormSchema)` 自动从触发表单 schema 中找"提交成员"字段。
+     - ⚠️ **v2.8.12 现状纠偏**：`findSubmitterFieldId` 只存在于文档描述，**代码中从未实现**（全项目 .js 无此函数）；当前主链实际机制=显式传 `--initiate-approval-initiator-user` 生成 `select_user` 格式，v2.8.12 起缺省自动取 `.cookies.json` 当前登录用户。循环内 initiator 相关描述为设计目标，未落地，以硬规则 12 为准。
+   - **v2.8.0 Playwright 设计器修复 + 工具栏保存**：循环内发起审批节点首次点击时设计器不调用 `getFormVariables.json` API 导致面板空白，但点击前置 GetBatchDataNode 再点回即可触发重渲染。**关键**：面板内"保存"按钮只应用到本地画布，必须点击页面顶部工具栏的 `simple-flow-canvas-save` 按钮才触发 `saveProcess` API 持久化到服务器。创建循环内发起审批流后应执行 `integration-designer-fix.js --save` 修复设计器面板：`node .agents/skills/integration/scripts/integration-designer-fix.js <appType> <processCode> --save`
+   - 详见 node-playbook.md 避坑清单第 21/23 条 + canonical-node-shapes.md InitiateApprovalNode 章节。
+   - **v2.8.0 历史事故**：折腾多天，根因是 `assignments[].value` 格式经历了三轮试错（裸 cycleNodeId → cycleNodeId//fieldId → ${cycleNodeId}.fieldId），每次都"保存成功"但设计器显示不正确。最终通过 Playwright 逆向 setter tree 选择器确认正确格式，并发现缺少 `__display` 导致首次加载空白、面板保存不等于服务器保存三个问题叠加。
+   - **v2.8.2 历史事故**：发起人(initiator)为空导致设计器保存弹窗"假保存" + `form_inst_creator` 显示不友好。三阶段修复：①空值→回退 `form_inst_creator`（能保存但显示原始文本）②`findSubmitterFieldId` 增加二级回退——主表第一个 EmployeeField（设计器显示字段中文名）③新增 `--cycle-initiate-approval-initiator` CLI 参数。正确保存流程：面板保存(React onClick)→检查弹窗→退出→发布(React onClick)→检查弹窗→等待API。详见硬规则 10/12。
+6. **连接器预设有限**：仅内置钉钉待办预设，其他连接器需传入 `--connector-inputs`。
+7. **组合场景测试已全部通过（2026-07-28）**：4 个复杂场景 API 直建均成功 + 设计器保存均通过（ConnectorNode currentStep、EmployeeField literal 数组、连接器必填入参，详见 node-playbook.md 避坑清单 13-15 条）。
 
 > 3 条回归流：LPROC-N7C6...SMP5 / LPROC-9K96...SM24 / LPROC-3Y86...SME4，均保存成功+设计器面板回读正常；仅并行分支/Groovy/复杂拓扑需走设计器路径（见 node-playbook.md 第 3 节）。
+
+## 十一、停止规则（防试错死循环，v2.8.29 新增）
+
+> 依据：OpenYida 官方 Changelog 2026.9.23「停止规则」原义（*"输入未修改时不重复执行，连续两次修复仍返回相同错误集合时停止并说明原因"*）+ 本项目「试错 5 轮 100+ 积分」事故教训（硬规则 20）。与「中间表两段式」等已沉淀替代架构是**互补关系**：停止规则决定"何时停"，替代架构决定"停了之后换什么"。
+
+1. **输入未修改时不重复执行** — 同一命令/体检在输入（参数、配置、Schema、代码）未发生任何修改时，禁止原样重跑期待不同结果。
+2. **连续 2 次修复失败即停止** — 对同一错误集合连续 2 轮修复后仍返回相同错误 → **停止修复**，向用户完整说明：已尝试的方案清单、每轮失败原因、建议的人工/替代路径。严禁第 3 轮起继续盲试烧积分。
+3. **引擎级异常直接切换架构** — 遇到引擎级异常（如 AD batch 的 JSONArray cast 崩溃、级联获取静默空转、触发子表引用限制）**不在同一路径上反复重试**——对照硬规则 17「全场景组合总决策矩阵」/ 硬规则 20 判据，直接切换已沉淀的替代架构（如中间表两段式）。"再试一次"不是方案。
+4. **与体检门禁的关系** — 体检 [ERROR] 必须修复后重建（不是可跳过的警告，`--force-save` 仅限用户明确批准）；但修复必须换思路（对照决策矩阵 / node-playbook.md 避坑清单），禁止在同一配置上微调重试。
 
 ## 十二、禁止事项
 
@@ -432,8 +550,42 @@ node .agents/skills/integration/scripts/integration-validate.js <appType> <proce
 - 禁止在修改模式下省略 `--process-code` 参数
 - 禁止在审批事件触发时省略 `--approval-actions` 参数
 - 禁止在 activityTask 事件时省略 `--approval-node-ids` 参数
-- 禁止在发起审批时省略 `--initiate-approval-initiator-user` 参数
+- 禁止为"发起审批的发起人用谁"询问用户（v2.8.12 起缺省=当前登录用户/开发者，硬规则 12）；仅用户主动指定发起人时才传 `--initiate-approval-initiator-user`
 - 禁止手写 processJson/viewJson、直接调 saveProcess.json、用浏览器拖节点拼流程（AGENTS.md 硬规则 1）
+- 禁止在用户未明确要求数据过滤时为获取多条数据节点添加 `--data-condition` 参数（v2.7.0：无过滤条件时 filterType='all' 即"全部数据"，不要用"按条件过滤"）
+
+## 十三、运维排查（check + diagnose，v2.10.0 对齐官方运维能力）
+
+> 对齐 OpenYida 官方 yida-integration 的 check（运行后排查）/ diagnose（运行前诊断）双能力。本项目**已有能力即对应实现**，本节明确映射关系与标准工作流，不重复造轮子。
+
+### check — 运行后排查（`integration-check.js`）
+
+```bash
+# 异常日志清单（默认筛 exception；--output 导出 Excel 报告）
+node .agents/skills/integration/scripts/integration-check.js <appType> [appType2 ...] [--status exception|success|running] [--output report.xlsx]
+
+# v2.10.0 静默失败检测（默认开启，--no-silent 关闭）
+# 输出「启用中但无任何执行记录」的逻辑流清单 = 内嵌节点配置错误/触发条件永不满足的候选
+node .agents/skills/integration/scripts/integration-check.js <appType>
+```
+
+### diagnose — 运行前/离线诊断（`integration-validate.js`）
+
+```bash
+# 体检线上已有逻辑流（含其他 AI/设计器创建的）——占位符/空壳节点/空公式/断链
+node .agents/skills/integration/scripts/integration-validate.js <appType> <processCode>
+
+# 体检本地 processJson 文件（保存前离线诊断）
+node .agents/skills/integration/scripts/integration-validate.js --file <processJson文件>
+```
+
+### 标准排查工作流（"逻辑流没反应"类问题）
+
+1. **check 异常日志**：`integration-check.js <appType>`——有异常日志 → 按失败节点/错误信息定位
+2. **看静默候选**：同一命令输出的「启用中但无执行记录」清单——命中 → 大概率触发条件永不满足或内嵌节点配置错误
+3. **diagnose 体检**：对候选流跑 `integration-validate.js`（空壳/占位符/断链类问题在此暴露）
+4. **回读核对**：`integration-get.js` 对照预期节点树（P0-5 回读闭环）
+5. **"内嵌节点配置错误时无执行日志"**（本项目已知坑）：这类坏流在 check 里表现为**零执行记录**而非异常日志——必须靠第 2/3 步的静默检测 + 体检暴露，修复后重建（不要原流盲改，见硬规则 6 更新禁区）
 
 ## 检查清单
 
@@ -441,7 +593,7 @@ node .agents/skills/integration/scripts/integration-validate.js <appType> <proce
 - [ ] 确认登录态有效（Cookie未过期）
 - [ ] 确认应用ID和表单UUID从系统配置清单.md读取真实值，严禁占位符
 - [ ] 确认已识别节点类型（componentName 照三·五对照表，不猜测）
-- [ ] 确认数据节点目标表单类型匹配（AddData→receipt、InitiateApproval→process）
+- [ ] 确认数据节点目标表单类型匹配（AddData→receipt、InitiateApproval→process；**类型不匹配时脚本自动降级，无需手动处理**）
 - [ ] 确认修改模式下已展示当前配置供用户确认
 
 ### 执行后确认
@@ -466,8 +618,9 @@ node .agents/skills/integration/scripts/integration-validate.js <appType> <proce
 
 ## 版本历史
 
-- **v2.5.2 (2026-07-31)**：修复公式赋值三字段格式（__source 跨表引用误用 `//` 双斜杠 → 验证器报"类型不合法"；__display 误存为 JSON 对象/字符串 → 设置面板显示 `[object Object]`；value 误做点号转换 → 与 __source 不一致）。根因：bundle `parseListFieldsToVars` 中 `targetForm` 类型 `formSuffix="/"`（单斜杠），而代码误用了 `Object` 类型的 `"//"`。修复后 __source 和 value 直接用原始公式，__display 为纯文本。新增方案选择决策树+direct_form 黄金配方示例+强化硬规则 5.1 方案选择（禁止库存同步用循环容器）。
-- **v2.5.1 (2026-07-31)**：修复 subform 模式下 hasDataNode 判断错误（dataFormUuid 为 null 时未创建 GetBatchDataNode 导致循环节点缺失 sourceId）；修复循环体内 __display 未替换触发表单字段ID（新增 triggerFormSchema 获取+triggerFieldLabelMap 构建）
-- **v2.5.0 (2026-07-29)**：保存前体检门禁 + 已有流审计 + 跨 AI 硬规则分发
+- **v2.10.0 (2026-09-28)**：【运维排查对齐官方 check/diagnose（P4-1）】①`integration-check.js` 新增**静默失败检测**（默认开启，`--no-silent` 关闭）——输出「启用中但无任何执行记录」的逻辑流清单，专治本项目已知坑「内嵌节点配置错误时无执行日志」；②SKILL.md 新增「十三、运维排查」章节，明确官方 check→integration-check / diagnose→integration-validate 的映射与五步标准排查工作流。真机验证：测试应用（有执行记录）不误报，进销存一条启用中零执行记录的流程被精准抓出。
+- **v2.9.0 (2026-09-28)**：【spec 声明式规格 + 更新禁区（P4-2）】①新增 `integration-spec.js` 翻译模块 + `integration-create.js --spec <文件>` 入口——spec JSON（Schema 见 references/integration-spec.schema.json）翻译为既有 CLI 参数后走同一构建链，体检门禁/Schema 校验全保留；节点枚举 getSelf/getFormData/addData/initiateApproval/updateData/deleteData/message，未建模参数走 extraArgs 透传；离线断言 15/15 通过（金标准=硬规则 5/14/16 文档模板逐字符比对）+ 既有 builder 测试 37/37 无回归。②新增专属硬规则 6「更新禁区」——官方路由规则原义（从上游节点子表取数或新增一行必须新建，禁止 update/replace 盲改），既有中间表两段式等规则原样保留；③新增专属硬规则 7「复杂逻辑流创建优先 spec 模式」。真机 E2E 见当日验收记录。
+- **v2.8.30 (2026-09-28)**：【保存后回读验证强化（P0-4/P0-5）】①「修改集成自动化」第 4 步从"检查输出确认修改成功"升级为强制回读验证——必须 `integration-get.js` 回读核对节点配置与预期一致 + `integration-validate.js` 体检，回读不一致按失败处理；②新增「启用/停用后回读」小节——enable/disable 后必须 `integration-list.js list --status` 回读确认状态真实切换。依据：OpenYida 借鉴改造清单 P0-5（官方 Changelog 2026.9.21「导航设置保存后再次核实」原义）；背景坑：内嵌节点配置错误时无执行日志，回读是唯一前置防线。
+- **v2.8.29 (2026-09-28)**：【新增「十一、停止规则」】防 AI 试错死循环——①输入未修改不重复执行；②连续 2 次修复仍返回相同错误集合即停止并向用户说明已试方案/失败原因/替代路径；③引擎级异常（JSONArray cast 崩溃、静默空转等）不重试同路径，直接按硬规则 17 决策矩阵切换替代架构（如中间表两段式）；④与体检门禁互补（[ERROR] 必修，但修复必须换思路）。依据：OpenYida 借鉴改造清单 P0-4（官方 Changelog 2026.9.23 停止规则原义 + 本项目试错 5 轮 100+ 积分事故）。
 
 完整版本历史见 [references/version-history.md](references/version-history.md)。

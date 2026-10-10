@@ -483,5 +483,61 @@ try {
 
 ---
 
-*文档版本：v2.0.0*
-*更新内容：补充子表动态校验与时序问题实战经验*
+## 九、⚠️ 子表空行问题（minItems 默认空行）
+
+> 实战坑点（2026-08-01「跟进人员拆分到子表」案例）：拆分后子表第一行出现空行
+
+### 9.1 问题描述
+
+**子表配置了 `minItems: 1`（最少行数=1）时，当子表无数据，`getValue()` 会返回一个空行对象**（如 `[{}]` 或仅含 `rowId` 的空对象行）。
+
+在"清空旧数据后重建子表"的场景中，若仅过滤业务特征行，空行会因**不满足过滤特征**而被保留，导致重建后子表首行残留空行。
+
+### 9.2 典型错误
+
+```javascript
+// ❌ 错误：只过滤"拆分行"，空行被保留
+var keptRows = [];
+for (var i = 0; i < tableData.length; i++) {
+  if (!isSplitRow(tableData[i])) {  // 空行不满足特征 → 被保留
+    keptRows.push(tableData[i]);
+  }
+}
+subTable.setValue(keptRows, { triggerChange: false }); // 首行是空行
+```
+
+### 9.3 正确解决方案：只检查业务字段（不能遍历所有 key）
+
+**⚠️ 关键教训（v1.0.1 → v1.0.2 二次修复）**：
+空行对象里除了 `rowId` 还可能有 `$$__index: 0` 等**内部字段**。若用 `Object.keys` 遍历所有字段并判断"是否有值"，数字 `0` 会被 `hasValue` 误判为"有值"，导致空行被保留。因此**必须只检查已知业务字段**。
+
+```javascript
+// ✅ 正确：只检查业务字段，彻底忽略 rowId/$$__index 等内部字段
+// 业务字段全空 = 需清除的行（含空行 和 仅跟进人有值的拆分行）
+function isBlankRow(row) {
+  if (!row) return true;
+  var fields = CONFIG.BUSINESS_FIELDS;  // 子表所有业务字段ID数组
+  for (var i = 0; i < fields.length; i++) {
+    if (hasValue(row[fields[i]])) return false;
+  }
+  return true;
+}
+
+// ✅ 正确：过滤空行和拆分行，保留有业务数据的行
+var keptRows = [];
+for (var i = 0; i < tableData.length; i++) {
+  if (!isBlankRow(tableData[i])) {
+    keptRows.push(tableData[i]);
+  }
+}
+```
+
+### 9.4 检查清单
+
+- [ ] 子表重建/覆盖场景是否过滤了空行（`minItems: 1` 时 `getValue()` 会返回空行对象）？
+- [ ] 空行判断是否**只检查业务字段**（不能用 `Object.keys` 遍历，内部字段 `$$__index: 0` 会误判）？
+
+---
+
+*文档版本：v2.1.1*
+*更新内容：修正子表空行判断方案 — 只检查业务字段，避免 $$__index 等内部字段误判*

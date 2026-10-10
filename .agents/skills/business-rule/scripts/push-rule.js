@@ -174,10 +174,10 @@ function parseMdMetadata(mdPath) {
   const content = fs.readFileSync(mdPath, 'utf-8');
   const meta = {};
 
-  const formMatch = content.match(/触发表单UUID\s*\|\s*(FORM-[A-Z0-9]+)/);
+  const formMatch = content.match(/触发表单UUID[^|]*\|\s*(FORM-[A-Z0-9]+)/i);
   if (formMatch) meta.formUuid = formMatch[1];
 
-  const processMatch = content.match(/(?:流程Code|processCode)\s*\|\s*(TPROC--[A-Z0-9]+)/i);
+  const processMatch = content.match(/(?:流程Code|processCode)[^|]*\|\s*(TPROC--[A-Z0-9]+)/i);
   if (processMatch) meta.processCode = processMatch[1];
 
   const titleMatch = content.match(/^#\s+业务关联规则：(.+)$/m);
@@ -1896,15 +1896,23 @@ async function main() {
       console.log(`   ${nodeTypeResult.alreadySelected ? '已默认选中结束 ✅' : '✅ 已切换到结束'}`);
       await page.waitForTimeout(500);
 
+      // 从 MD 文件中提取节点动作，允许命令行 --node-action 覆盖
+      let nodeAction = opts.nodeAction || '同意';
+      if (!opts.nodeAction) {
+        try {
+          const mdFileContent = fs.readFileSync(mdPath, 'utf-8');
+          const mdNodeActionMatch = mdFileContent.match(/节点动作[：:]\s*(\S+)/);
+          if (mdNodeActionMatch) nodeAction = mdNodeActionMatch[1].trim();
+        } catch (_) { /* MD 文件不可读时保持默认 */ }
+      }
+
       // 步骤5.6: 🔴 选择节点动作（结束节点也必填）
-      // 实际验证（2026-07-17）：结束节点同样要求选择"节点动作"，默认三个选项（同意/拒绝/撤销/终止）全未勾选
-      // 业务含义：流程正常结束（审批通过）对应"同意"动作，规则在流程通过后触发
-      console.log(`\n📍 步骤5.6: 选择节点动作为"同意"...`);
-      const nodeActionResult = await page.evaluate(() => {
+      console.log(`\n📍 步骤5.6: 选择节点动作为"${nodeAction}"...`);
+      const nodeActionResult = await page.evaluate((action) => {
         const wrappers = document.querySelectorAll('#activityAction .next-checkbox-wrapper');
         for (const wrapper of wrappers) {
           const labelText = wrapper.querySelector('.next-checkbox-label')?.textContent?.trim();
-          if (labelText === '同意') {
+          if (labelText === action) {
             const isChecked = wrapper.classList.contains('checked') ||
                               !!wrapper.querySelector('.next-checkbox.checked');
             if (isChecked) return { ok: true, alreadySelected: true };
@@ -1913,14 +1921,14 @@ async function main() {
           }
         }
         return { ok: false };
-      });
+      }, nodeAction);
       if (!nodeActionResult.ok) {
-        console.error('   ❌ 未找到"同意"节点动作，停止推送');
+        console.error(`   ❌ 未找到"${nodeAction}"节点动作，停止推送`);
         await page.screenshot({ path: path.join(screenshotDir, 'push-node-action-missing.png') });
         await browser.close();
         process.exit(5);
       }
-      console.log(`   ${nodeActionResult.alreadySelected ? '已默认选中同意 ✅' : '✅ 已选中同意'}`);
+      console.log(`   ${nodeActionResult.alreadySelected ? '已默认选中'+nodeAction+' ✅' : '✅ 已选中'+nodeAction}`);
       await page.waitForTimeout(500);
     }
 

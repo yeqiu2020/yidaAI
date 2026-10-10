@@ -289,9 +289,11 @@ function httpRequest(method, baseUrl, apiPath, postData, cookieStr) {
       opts.headers['Content-Length'] = Buffer.byteLength(postData);
     }
     var req = reqModule.request(opts, function(res) {
-      var body = '';
-      res.on('data', function(chunk) { body += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', function(chunk) { chunks.push(chunk); });
       res.on('end', function() {
+        const body = Buffer.concat(chunks).toString('utf-8');
         try { resolve(JSON.parse(body)); }
         catch(e) { resolve({ success: false, errorMsg: 'JSON parse error', raw: body.substring(0, 300) }); }
       });

@@ -1055,7 +1055,52 @@ var totalCount = res.totalCount || 0;
 
 ---
 
-*文档版本：v1.10.0*
+## 案例 23：成员字段 label 为 i18n 对象导致 EmployeeField 渲染崩溃（React error #31）
+
+### ❌ 错误现象
+跨表查询填充成员字段（业务员等）后，页面弹红条「组件 EmployeeField 渲染错误」，控制台报
+`Minified React error #31: Objects are not valid as a React child`，组件树崩溃。
+
+### ❌ 错误代码
+```javascript
+// getFormDataById 返回的 instValueMap 中，成员字段的 label 可能是 i18n 对象：
+// [{ value: "024965...", label: { zh_CN: "张三", en_US: "" } }]
+entry = {
+  value: item.value || '',
+  label: item.label || '',   // ← label 是 {zh_CN: "张三"} 对象，直接塞入
+  key: item.key || ''
+};
+```
+
+### ✅ 正确代码
+```javascript
+// value/label/key 必须全部提取为纯字符串再 setValue
+function toText(v) {
+  if (v === undefined || v === null || v === '') return '';
+  if (typeof v === 'string') return v;
+  if (typeof v === 'object') {
+    if (v.zh_CN !== undefined && v.zh_CN !== '') return String(v.zh_CN);
+    if (v.en_US !== undefined && v.en_US !== '') return String(v.en_US);
+  }
+  return String(v);
+}
+entry = {
+  value: toText(item.value || ''),
+  label: toText(item.label || item.name || ''),
+  key: toText(item.key || '')
+};
+// 并过滤 value/label 均为空的无效项
+```
+
+### 关键要点
+1. **成员字段的 label 可能是 i18n 对象** — 与案例 20（instValueMap 值可能是对象）同族坑，但发生在 label 属性上
+2. **React error #31 = 把对象当 React 子节点渲染** — EmployeeField 的 label 会被直接渲染为文本，对象必崩
+3. **setValue 前必须保证 value/label/key 均为纯字符串**，并过滤空项
+4. **参考版本**：销售出库·多订单合并出库填充明细 v1.0.0 → v1.0.1（修复实录）
+
+---
+
+*文档版本：v1.11.0*
 *更新内容：
-- 案例 20 增加要点：instValueMap[fieldId] 可能是对象格式，订单号优先用 res.serialNo，避免 setValue 后显示 [object Object]
-- 参考采购订单填充入库明细开发经验（v1.0.0 → v1.4.0，直播翻车实录）*
+- 新增案例 23：成员字段 label 为 i18n 对象导致 EmployeeField 渲染崩溃（React error #31），value/label/key 必须提取为纯字符串
+- 参考销售出库·多订单合并出库填充明细开发经验（v1.0.0 → v1.0.1）*

@@ -1,8 +1,16 @@
 /**
  * 宜搭数据提交引擎 - 整合版
- * 版本: 3.6.1
+ * 版本: 3.7.4
  * 创建时间: 2026-05-11
  *
+ * 🔴 v3.7.4 【新增流程审批能力】approveTask()/getTodoTasks()
+ *   背景：验证"流程表单提交→审批通过→触发逻辑流(processFinish)"这类集成自动化时，
+ *   data-tester 只有 startInstance（发起流程，进入 RUNNING），无法让流程走到"结束"，
+ *   无法触发依赖 processFinish + agree 的逻辑流。手工用 report 的 executeTask 又太绕。
+ *   修复：新增 approveTask(appId, processInstanceId, taskId, {outResult}) 调
+ *   /v1/task/executeTask.json 放行任务（AGREE 通过 / DISAGREE 驳回），
+ *   新增 getTodoTasks(appId, {processCode}) 查当前用户待办任务拿 taskId。
+ *   executeTask 需 taskId + procInstId + _csrf_token（与删除同类，必须带 CSRF）。
  * 🔴 v3.6.1 【地址字段本地预校验 + 失败载荷直出】
  *   背景（2026-07-25 事故）：AI 编造不存在的武汉区划代码（蔡甸区误写 420122，正确
  *   420114），服务端仅返回笼统报错，AI 为定位问题编写多个临时调试脚本，耗时 10+ 分钟。
@@ -151,9 +159,11 @@ function postRequest(hostname, path, params, cookies) {
     };
 
     const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try {
           const json = JSON.parse(data);
           resolve(json);
@@ -200,9 +210,11 @@ async function syncFormSchema(appId, formUuid, cookies) {
       };
 
       const req = https.request(options, (res) => {
-        let responseData = '';
-        res.on('data', (chunk) => responseData += chunk);
+        // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+        const chunks = [];
+        res.on('data', (chunk) => chunks.push(chunk));
         res.on('end', () => {
+          const responseData = Buffer.concat(chunks).toString('utf-8');
           try {
             const result = JSON.parse(responseData);
             if (result.success && result.content) {
@@ -1056,9 +1068,11 @@ function getRequest(hostname, requestPath, cookies, csrfToken) {
     };
 
     const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try {
           const json = JSON.parse(data);
           resolve(json);
@@ -1168,8 +1182,9 @@ function parseInstValue(record) {
  * @param {string} appId - 应用ID
  * @param {string} formUuid - 表单UUID
  * @param {Object} [options] - 可选参数
- * @param {number} [options.pageSize=100] - 每页条数
+ * @param {number} [options.pageSize=100] - 每页条数（平台硬上限100，传200静默返回0条）
  * @param {number} [options.currentPage=1] - 当前页码
+ * @param {Object} [options.dynamicOrder=null] - 服务端稳定排序（如 { "dateField_xxx": "-" } 降序 / { "numberField_xxx": "+" } 升序）。需要分页、对比、配对的查询必须显式传，不传不保证顺序稳定（P0-3 三项硬规范）
  * @returns {Promise<Array<Object>>} 记录数组，每条记录包含formInstId, title, formData等字段
  *
  * @example
@@ -1178,9 +1193,12 @@ function parseInstValue(record) {
  * // records[0].formInstId = "FINST-xxx"
  * // records[0].title = "武汉光谷中心仓"
  * // records[0].formData = { textField_xxx: "武汉光谷中心仓", ... }
+ *
+ * // 需要分页/对比/配对的查询：显式传 dynamicOrder 稳定排序
+ * const ordered = await searchFormDatas(appId, orderFormUuid, { pageSize: 50, dynamicOrder: { "dateField_xxx": "-" } });
  */
 async function searchFormDatas(appId, formUuid, options = {}) {
-  const { pageSize = 100, currentPage = 1, maxPages = 50 } = options;
+  const { pageSize = 100, currentPage = 1, maxPages = 50, dynamicOrder = null } = options;
   const cookieData = loadCookies();
   const hostname = cookieData.baseUrl.replace('https://', '');
   const cookies = cookieData.cookies;
@@ -1189,8 +1207,9 @@ async function searchFormDatas(appId, formUuid, options = {}) {
   // 【v3.6.0】自动翻页：存量超过 pageSize 时继续拉取，避免映射不完整导致关联填充静默失败
   const all = [];
   let page = currentPage;
+  const orderParam = dynamicOrder ? `&dynamicOrder=${encodeURIComponent(JSON.stringify(dynamicOrder))}` : '';
   while (page - currentPage < maxPages) {
-    const path = `/dingtalk/web/${appId}/v1/form/searchFormDatas.json?formUuid=${formUuid}&pageSize=${pageSize}&currentPage=${page}`;
+    const path = `/dingtalk/web/${appId}/v1/form/searchFormDatas.json?formUuid=${formUuid}&pageSize=${pageSize}&currentPage=${page}${orderParam}`;
     const result = await getRequest(hostname, path, cookies, csrfToken);
 
     // 兼容多种响应结构
@@ -1439,6 +1458,53 @@ async function deleteFormData(appId, formInstId, cookieData) {
 }
 
 /**
+ * 【v3.7.4新增】查询当前登录用户在指定应用下的待办任务（用于获取流程审批 taskId）。
+ * @param {string} appId - 应用ID
+ * @param {Object} [opts] - 可选：{ processCode, pageSize, currentPage, cookieData }
+ * @returns {Promise<{success: boolean, tasks: Array<Object>}>} tasks 项含 taskId/processInstanceId/title/status 等
+ */
+async function getTodoTasks(appId, opts = {}) {
+  const cd = opts.cookieData || loadCookies();
+  const hostname = cd.baseUrl.replace('https://', '');
+  const query = [];
+  query.push(`currentPage=${opts.currentPage || 1}`);
+  query.push(`pageSize=${opts.pageSize || 20}`);
+  if (opts.processCode) query.push(`processCode=${encodeURIComponent(opts.processCode)}`);
+  const result = await getRequest(hostname, `/dingtalk/web/${appId}/v1/task/getTodoTasksInApp.json?${query.join('&')}`, cd.cookies, cd.csrfToken);
+  if (result && result.success) {
+    const data = (result.content && result.content.data) || [];
+    return { success: true, tasks: data };
+  }
+  return { success: false, tasks: [], message: (result && (result.errorMsg || result.message)) || '查询待办失败' };
+}
+
+/**
+ * 【v3.7.4新增】执行流程任务审批（AGREE 通过 / DISAGREE 驳回）。
+ * 用于流程表单"审批通过后触发逻辑流"的运行时验证：流程表单提交后进入 RUNNING，
+ * 需审批通过（AGREE）才能让流程走到"结束"，从而触发 processFinish 事件。
+ * taskId 可用 getTodoTasksInApp 查询（当前登录用户待办任务）。
+ * @param {string} appId - 应用ID
+ * @param {string} processInstanceId - 流程实例ID
+ * @param {string} taskId - 待办任务ID
+ * @param {Object} [opts] - 可选：{ outResult: 'AGREE'|'DISAGREE', remark: string, cookieData }
+ * @returns {Promise<{success: boolean, message: string, content: *}>}
+ */
+async function approveTask(appId, processInstanceId, taskId, opts = {}) {
+  const cd = opts.cookieData || loadCookies();
+  const hostname = cd.baseUrl.replace('https://', '');
+  const params = {
+    taskId,
+    procInstId: processInstanceId,
+    outResult: opts.outResult || 'AGREE',
+    _csrf_token: cd.csrfToken,
+  };
+  if (opts.remark) params.remark = opts.remark;
+  const result = await postRequest(hostname, `/dingtalk/web/${appId}/v1/task/executeTask.json`, params, cd.cookies);
+  const success = !!(result && result.success === true);
+  return { success, message: success ? '' : (result && (result.errorMsg || result.message)) || '审批失败', content: result && result.content };
+}
+
+/**
  * 【v3.6.0新增】删除流程表单的一个实例（必须携带 _csrf_token，同 deleteFormData）。
  * @param {string} appId - 应用ID
  * @param {string} processInstanceId - 流程实例ID
@@ -1515,6 +1581,9 @@ module.exports = {
   startInstance,
   verifyProcessInstance,
   getRequest,
+  // v3.7.4新增：流程审批（AGREE 触发流程结束）
+  getTodoTasks,
+  approveTask,
   // v3.6.0新增：删除能力（数据异常时的官方修复手段，严禁 AI 手写删除脚本）
   deleteFormData,
   deleteInstance,

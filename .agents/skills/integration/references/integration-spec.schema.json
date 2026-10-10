@@ -1,0 +1,137 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "integration-spec.schema.json",
+  "title": "宜搭集成自动化声明式规格（spec v1.0）",
+  "description": "P4-2：AI 生成 spec → integration-create.js --spec 提交，走既有构建链与体检门禁。节点接线顺序由构建器固定（与 CLI 相同），spec 按节点类型声明意图；未建模参数用 extraArgs 原样透传。",
+  "type": "object",
+  "required": ["specVersion", "flowName", "trigger"],
+  "properties": {
+    "specVersion": { "const": "1.0" },
+    "appType": { "type": "string", "pattern": "^APP_", "description": "可省略，命令行位置参数优先" },
+    "flowName": { "type": "string", "minLength": 1 },
+    "trigger": {
+      "type": "object",
+      "required": ["formUuid"],
+      "properties": {
+        "formUuid": { "type": "string", "pattern": "^FORM-", "description": "触发表单UUID，严禁占位符" },
+        "events": { "type": "array", "items": { "enum": ["insert", "update", "delete", "comment", "processFinish", "activityTask"] }, "description": "流程表单触发按硬规则15自动映射，省略时默认 insert" },
+        "approvalActions": { "type": "array", "items": { "enum": ["agree", "disagree", "terminated"] }, "description": "审批事件时必填" }
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "items": { "$ref": "#/definitions/node" },
+      "description": "节点声明顺序仅表达意图，实际接线由构建器固定：trigger→dataRetrieve→addData→initiateApproval→updateData→deleteData→message→end"
+    },
+    "extraArgs": { "type": "array", "items": { "type": "string" }, "description": "逃生舱口：未建模 CLI 参数原样透传（如 --process-code 修改模式、--cycle 系列、--branch-* 系列、--conditional-upsert）" },
+    "publish": { "type": "boolean", "default": false, "description": "true 时创建后直接发布" }
+  },
+  "definitions": {
+    "condition": {
+      "type": "object",
+      "required": ["target", "valueType"],
+      "properties": {
+        "target": { "type": "string", "description": "b位：目标表单字段ID（literal 时此位仍是目标字段）" },
+        "targetName": { "type": "string", "description": "b位字段中文名（面板显示用）" },
+        "source": { "type": "string", "description": "a位：触发表单字段ID（valueType=processVar 时必填）" },
+        "componentType": { "type": "string", "examples": ["TextField", "NumberField", "SelectField", "DateField"] },
+        "op": { "type": "string", "enum": ["Equal", "NotEqual", "Contain", "NotContain", "HasValue", "NoValue", "GreaterThan", "LessThan", "GreaterThanOrEqual", "LessThanOrEqual", "In", "NotIn"], "default": "Equal" },
+        "valueType": { "enum": ["processVar", "literal"], "description": "枚举 token，不是数据值（硬规则3）" },
+        "value": { "type": ["string", "number"], "description": "valueType=literal 时必填（a位放真实业务值，如 已完成）" }
+      }
+    },
+    "assignment": {
+      "type": "object",
+      "required": ["target", "valueType"],
+      "properties": {
+        "target": { "type": "string", "description": "目标字段ID" },
+        "valueType": { "enum": ["processVar", "literal", "column"], "description": "column=公式：跨表 #{FORM-xxx/fieldId}、触发字段 #{fieldId}" },
+        "value": { "type": "string" }
+      }
+    },
+    "node": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["getSelf", "getFormData", "addData", "initiateApproval", "updateData", "deleteData", "message"] },
+        "extraArgs": { "type": "array", "items": { "type": "string" } }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "getFormData" } } },
+          "then": {
+            "required": ["formUuid"],
+            "properties": {
+              "formUuid": { "type": "string", "pattern": "^FORM-" },
+              "queryType": { "enum": ["single", "multiple"], "default": "single" },
+              "quantity": { "type": "number" },
+              "conditions": { "type": "array", "items": { "$ref": "#/definitions/condition" } },
+              "subSourceId": { "type": "string", "description": "目标表单子表直接获取（模式A，单独使用）" },
+              "subConditions": { "type": "array", "items": { "$ref": "#/definitions/condition" }, "description": "与 subSourceId 同用时变 5 节点 cascade（模式B）" },
+              "sourceType": { "enum": ["form", "subform"] },
+              "subFieldId": { "type": "string" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "addData" } } },
+          "then": {
+            "required": ["formUuid", "assignments"],
+            "properties": {
+              "formUuid": { "type": "string", "pattern": "^FORM-" },
+              "assignments": { "type": "array", "items": { "$ref": "#/definitions/assignment" } },
+              "insertType": { "enum": ["form", "sub_table"] },
+              "subFormUuid": { "type": "string" },
+              "batch": { "type": "object", "properties": { "type": { "const": "batch" }, "sourceId": { "type": "string" } } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "initiateApproval" } } },
+          "then": {
+            "required": ["formUuid"],
+            "properties": {
+              "formUuid": { "type": "string", "pattern": "^FORM-", "description": "必须是流程表单（硬规则4 自动降级兜底）" },
+              "assignments": { "type": "array", "items": { "$ref": "#/definitions/assignment" }, "description": "仅主表字段（硬规则14）" },
+              "initiatorUser": { "type": "string", "description": "省略=当前登录用户（硬规则12，禁止询问）" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "updateData" } } },
+          "then": {
+            "required": ["formUuid"],
+            "properties": {
+              "formUuid": { "type": "string", "pattern": "^FORM-" },
+              "conditions": { "type": "array", "items": { "$ref": "#/definitions/condition" }, "minItems": 1 },
+              "assignments": { "type": "array", "items": { "$ref": "#/definitions/assignment" }, "minItems": 1 },
+              "subSourceId": { "type": "string" },
+              "subConditions": { "type": "array", "items": { "$ref": "#/definitions/condition" } },
+              "noneOperation": { "enum": ["ignored", "add"], "description": "目标=流程表单且可能匹配不到时必须 ignored（硬规则13.1）" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "deleteData" } } },
+          "then": {
+            "properties": {
+              "subSourceId": { "type": "string", "description": "只删子表行时必填；缺省删整条" },
+              "subConditions": { "type": "array", "items": { "$ref": "#/definitions/condition" } }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "type": { "const": "message" } } },
+          "then": {
+            "required": ["receivers"],
+            "properties": {
+              "receivers": { "type": "string" },
+              "title": { "type": "string" },
+              "content": { "type": "string" }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

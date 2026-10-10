@@ -15,6 +15,7 @@ description: "宜搭数据准备制作技能，用于创建可视化ETL数据流
 3. **节点连线必须正确** — 输入节点 → 处理节点 → 输出节点，连线顺序不能错
 4. **数据准备创建后必须记录cubeCode** — 保存到项目配置中，供报表Skill引用
 5. **创建数据准备前必须确认用户已登录** — 通过浏览器自动化操作，需要有效的登录态
+6. **【v1.1.0】聚合表（virtualView）生命周期归 dataset skill** — 「聚合表」的 list/create/inspect/preview/save/publish/status 完整生命周期由 `dataset` skill 的 `aggregate-lifecycle.js` 承载（带 revision 防覆盖，P1-1）；官方 openyida 无「数据准备 ETL」对应模块，本 skill 的数据准备生命周期暂维持现状。用户说"聚合表"时走 dataset，说"数据准备/ETL"时走本 skill
 
 ---
 

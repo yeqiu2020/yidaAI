@@ -22,6 +22,7 @@ description: 宜搭自定义页面发布守卫。在发布自定义页面之前�
 - 发布前必须检查线上当前状态与本地最后同步状态的差异
 - 检测到线上有未同步改动时必须阻止发布（除非 `--force`）
 - 发布后必须执行 health check（验证页面可访问、非白屏/500）
+- **发布后必须先回读核对再汇报**：health check 通过后，还必须通过只读接口（get-form-config / getFormSchema 类）回读目标页面配置，核对本轮发布内容已真实落库（如 compiled 代码含本轮新增的函数名/标记），回读一致才算发布闭环完成；未回读或回读不一致时严禁汇报「已发布/已更新/已上线」
 - 所有检查结果必须有清晰的文本输出
 
 ## 适用场景
@@ -46,9 +47,9 @@ description: 宜搭自定义页面发布守卫。在发布自定义页面之前�
   代码文件 → lint → 编译 → 压缩 → 保存到宜搭
 
 增强后流程（publish-guard 作为前置层）:
-  代码文件 → publish-guard 检查 → lint → 编译 → 压缩 → 保存 → health check
-              ↑                              ↑
-         前置安全检查                    后置验证
+  代码文件 → publish-guard 检查 → lint → 编译 → 压缩 → 保存 → health check → 回读核对（C5）
+              ↑                              ↑                    ↑
+         前置安全检查                    后置验证            发布闭环确认
 ```
 
 **关键约束**：
@@ -93,6 +94,7 @@ node .agents/candidates/publish-guard/scripts/publish-guard.js health --appType 
 | C2 | 线上 Schema 与本地缓存对比 | 线上是否有未同步改动 | 阻断（除非 `--force`） |
 | C3 | 代码 diff 预览 | 本地代码与线上代码的差异摘要 | 警告（不阻断） |
 | C4 | 发布后 health check | 页面可访问、非白屏/500 | 阻断（失败需回退） |
+| C5 | 发布后回读核对 | 通过只读接口（get-form-config/getFormSchema 类）回读线上 Schema，核对本轮发布内容已真实落库（对照本轮改动标记，如新增函数名） | 阻断（回读不一致或未回读，不得汇报"已发布/已上线"） |
 
 ## 本地缓存机制
 
@@ -126,7 +128,12 @@ publish-guard 在 `.cache/publish-guard/` 目录维护本地发布状态缓存�
 | 线上有未同步改动 | 阻止发布，显示 diff 摘要，提示使用 `--force` |
 | 发布失败 | 不更新缓存，提示错误信息 |
 | health check 失败 | 警告页面可能异常，建议检查 |
+| 回读与发布内容不一致 | 判定"假成功"，停止后续汇报，输出回读差异并排查（登录态/Schema 版本/接口缓存），修复后重新发布并再次回读 |
 
 ## 参考文档
 
 - [发布守卫使用指南](references/publish-guard-guide.md)
+
+## 版本历史
+
+- **v1.1.0**（2026-09-28）：新增「发布后回读核对」环节（C5）— 严格要求新增回读条款、检查项新增 C5 行、流程图增加"回读核对（C5）"节点、异常处理新增"回读与发布内容不一致"判定为假成功的处理。health check 之后必须通过 get-form-config / getFormSchema 类只读接口核对本轮发布内容已真实落库，未回读或回读不一致不得汇报「已发布/已上线」。依据：OpenYida 借鉴改造清单 P0-2（官方 yida-publish-page 证据契约 + yida-openyida-publish-guard 发布后验证原义）。（此前候选轨初始版未设版本号，记为 v1.0.0）

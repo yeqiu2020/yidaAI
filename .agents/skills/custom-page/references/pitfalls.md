@@ -15,6 +15,37 @@
 
 ---
 
+## 🟠 P-19：新版 @babel/standalone 默认 automatic runtime，产物生成 require 导致页面崩溃
+
+**发现日期**：2026-10-01
+**严重程度**：🟠 严重（发布成功但页面渲染报错）
+**表现**：发布成功，打开页面显示「哎呀，出错了」，控制台报 `bound constructor 函数执行错误 {description: require is not defined}`，`ReferenceError: require is not defined at Proxy.eval`
+
+**根因分析**：
+
+新版 `@babel/standalone` 的 react preset 默认采用 **automatic runtime**，JSX 编译产物头部生成：
+
+```javascript
+var _jsxRuntime = require("react/jsx-runtime");
+```
+
+宜搭运行时用 `new Function()` 评估编译产物，沙箱内既无 `require` 也无 `react/jsx-runtime` 模块，模块加载即抛 ReferenceError，连锁导致页面报错。
+
+**修复方案（publish-page.js 已修复）**：
+
+react preset 显式声明 classic runtime，产物回归 `React.createElement` 形态（宜搭沙箱全局 React 可用，与历史页面产物一致）：
+
+```javascript
+presets: [['env', { targets: { chrome: '49' }, modules: modules }], ['react', { runtime: 'classic' }]],
+```
+
+**自检规则**：
+- publish-page.js 的 react preset 必须保持 `runtime: 'classic'`，禁止删掉该选项
+- 页面源码**禁止**使用文件级 `/** @jsxRuntime classic */` 或 `/** @jsx ... */` 指令——该版本 Babel 会判定与 preset 默认 automatic 冲突直接抛 `SyntaxError: pragma and pragmaFrag cannot be set when runtime is automatic`
+- 排查同类问题：本地用 `babelStandalone.transform` 复现编译产物，搜索 `require(`（注意排除注释命中）；代码级确认产物无 `var _jsxRuntime` 且含 `createElement` 即为正确形态
+
+---
+
 ## 🔴 P-01：Babel 编译必须使用 CommonJS 格式（`modules: 'commonjs'`）
 
 **发现日期**：2026-05-28

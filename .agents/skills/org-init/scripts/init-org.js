@@ -1,5 +1,6 @@
-﻿/**
- * 组织初始化脚本 - V1.5.0
+/**
+ * 组织初始化脚本 - V1.5.1
+ * 新增: 支持 YIDA_NO_OPEN_PORTAL 环境变量，由同步服务触发时跳过打开浏览器/注册自启（避免刷新应用信息时弹新窗口）
  * 自动从宜搭平台获取应用列表并更新到配置文件
  * 修复：配合 login-manager v1.0.11，修复页面跳转后登录流程提前退出的问题
  * 修复：文件不存在时自动创建默认配置文件
@@ -45,8 +46,14 @@ if (process.platform === 'win32') {
 // 引用本地的登录管理器（独立的，组织选择时等待用户手动操作）
 const { ensureLogin } = require('./login-manager.js');
 
-// 动态获取项目根目录（向上回溯到项目根目录）
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+// v3.0.2: 多项目隔离三级定位：
+//  1) YIDA_PROJECT_ROOT 环境变量（sync_server 注入，最可靠）
+//  2) process.cwd() 下存在 组织及应用信息.md 时（spawn 传 cwd 的场景）
+//  3) __dirname 回溯（脚本宿主项目，CLI 独立运行兜底）
+const SCRIPT_HOST_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const PROJECT_ROOT = (process.env.YIDA_PROJECT_ROOT && fs.existsSync(process.env.YIDA_PROJECT_ROOT))
+  ? process.env.YIDA_PROJECT_ROOT
+  : (fs.existsSync(path.join(process.cwd(), '组织及应用信息.md')) ? process.cwd() : SCRIPT_HOST_ROOT);
 
 const CONFIG = {
   cookiesFile: path.join(PROJECT_ROOT, '.cookies.json'),
@@ -104,7 +111,7 @@ function createDefaultOrgConfigFile(loginState) {
 | 完整域名 | ${baseUrl} |
 | corpId | ${corpId} |
 | corp名称 | ${corpName} |
-| 本地门户 | [http://127.0.0.1:8080/本地操作页面/index.html](http://127.0.0.1:8080/本地操作页面/index.html) |
+| 本地门户 | [http://127.0.0.1:8080/${encodeURIComponent(path.basename(PROJECT_ROOT))}/本地操作页面/index.html](http://127.0.0.1:8080/${encodeURIComponent(path.basename(PROJECT_ROOT))}/本地操作页面/index.html) |
 
 ---
 
@@ -449,23 +456,30 @@ function rebuildAppList(apps) {
 
   // 计算增删
   const newNameSet = new Set(allApps.map(a => a.name));
+  const removedNames = [];
   let removed = 0;
   beforeNames.forEach(({ name, appId }) => {
     if (name && !newNameSet.has(name)) {
       // 只移除已经同步过的应用（有真实 appId 的），不移除未同步应用
       if (appId !== '待创建' && appId !== '请手动补充') {
         removed++;
+        removedNames.push(name);
         console.log('    - 已删除（宜搭中不存在）:', name);
       }
     }
   });
   let added = 0;
-  allApps.forEach(a => { if (!beforeNames.find(b => b.name === a.name)) added++; });
+  const addedNames = [];
+  allApps.forEach(a => { if (!beforeNames.find(b => b.name === a.name)) { added++; addedNames.push(a.name); } });
   const updated = apps.length - added;
   const preserved = localOnlyApps.length;
+  // 保持不变的应用：之前已存在且当前仍在远端应用列表中
+  const unchangedNames = allApps
+    .filter(a => beforeNames.some(b => b.name === a.name))
+    .map(a => a.name);
 
   console.log(`  [重建] 应用列表：共 ${allApps.length} 个（云端 ${apps.length} + 本地未同步 ${preserved}），新增 ${added}，删除 ${removed}，更新 ${updated}`);
-  return { updated, removed, added, preserved };
+  return { updated, removed, added, preserved, addedNames, removedNames, unchangedNames };
 }
 
 /**
@@ -609,12 +623,13 @@ function makeRequest(url, options = {}, cookies = {}, referer = '') {
 }
 
 /**
- * 使用 API 接口获取应用列表
+ * 使用 API 接口获取应用列表（分页循环获取全部应用）
+ * 修复：原实现只请求 pageIndex=1 & pageSize=100，导致 100+ 应用的组织丢失后续数据
  * @param {Object} loginState - 登录态对象
  * @returns {Promise<Array>} 应用列表
  */
 async function fetchAppsViaAPI(loginState) {
-  console.log('\n📋 使用 API 接口获取应用列表...');
+  console.log('\n📋 使用 API 接口获取应用列表（分页获取）...');
   
   try {
     const baseUrl = loginState?.base_url || CONFIG.baseUrl;
@@ -639,33 +654,23 @@ async function fetchAppsViaAPI(loginState) {
     
     // 从 cookie 中获取 csrf token（宜搭使用 tianshu_csrf_token 或 c_csrf）
     const csrfToken = cookieObj['tianshu_csrf_token'] || cookieObj['c_csrf'] || cookieObj['XSRF-TOKEN'] || '';
-    const timestamp = Date.now();
     
-    // 尝试多个 API 端点（使用正确的参数格式）
-    const apiEndpoints = [
-      { 
-        url: `${baseUrl}/query/app/getAppList.json?_api=App.getList&_mock=false&_csrf_token=${csrfToken}&_locale_time_zone_offset=28800000&pageIndex=1&pageSize=100&orderField=data_gmt_create&appStatus=&isAdmin=true&creator=&key=&_stamp=${timestamp}`, 
-        method: 'GET' 
-      },
-      { url: `${baseUrl}/app/getAppList.json`, method: 'POST', body: {} },
-      { url: `${baseUrl}/query/app/getAppList.json`, method: 'GET' }
-    ];
+    // ── 分页循环获取全部应用 ──
+    let allApps = [];
+    let pageIndex = 1;
+    const pageSize = 100;
+    let hasMore = true;
     
-    for (const endpoint of apiEndpoints) {
-      console.log(`  尝试 API: ${endpoint.url}`);
+    while (hasMore) {
+      const timestamp = Date.now();
+      const url = `${baseUrl}/query/app/getAppList.json?_api=App.getList&_mock=false&_csrf_token=${csrfToken}&_locale_time_zone_offset=28800000&pageIndex=${pageIndex}&pageSize=${pageSize}&orderField=data_gmt_create&appStatus=&isAdmin=true&creator=&key=&_stamp=${timestamp}`;
       
-      const options = {
-        method: endpoint.method,
-        headers: {
-          'X-Requested-With': 'XMLHttpRequest'
-        }
-      };
+      console.log(`  获取第 ${pageIndex} 页应用 (pageSize=${pageSize})...`);
       
-      if (endpoint.body) {
-        options.body = endpoint.body;
-      }
-      
-      const result = await makeRequest(endpoint.url, options, cookieObj, `${baseUrl}/myApp`);
+      const result = await makeRequest(url, {
+        method: 'GET',
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      }, cookieObj, `${baseUrl}/myApp`);
       
       // 检查各种可能的响应格式
       let apps = null;
@@ -681,8 +686,6 @@ async function fetchAppsViaAPI(loginState) {
       }
       
       if (apps && apps.length > 0) {
-        console.log(`  ✓ 找到 ${apps.length} 个应用`);
-        
         // 转换为统一格式
         const formattedApps = apps.map(app => {
           const appName = app.appName?.zh_CN || app.appName?.en_US || app.appName || app.name || '未命名';
@@ -690,6 +693,67 @@ async function fetchAppsViaAPI(loginState) {
           return { name: appName, appId: appId };
         }).filter(app => app.name && app.name !== '未命名');
         
+        allApps.push(...formattedApps);
+        console.log(`    ✓ 获取到 ${formattedApps.length} 个应用（累计 ${allApps.length} 个）`);
+        
+        // 如果本页返回的数量等于 pageSize，说明可能还有下一页
+        if (apps.length >= pageSize) {
+          pageIndex++;
+          hasMore = true;
+        } else {
+          hasMore = false;
+        }
+      } else {
+        hasMore = false;
+      }
+      
+      // 安全阀：最多获取 50 页（5000 个应用），防止意外死循环
+      if (pageIndex > 50) {
+        console.log('  ⚠️ 已达到最大页数限制（50页），停止获取');
+        hasMore = false;
+      }
+    }
+    
+    if (allApps.length > 0) {
+      console.log(`  ✓ 共获取到 ${allApps.length} 个应用`);
+      return allApps;
+    }
+    
+    // 分页方式未获取到数据，回退尝试其他 API 端点
+    console.log('  ⚠️ 分页方式未获取到数据，尝试备用端点...');
+    const fallbackEndpoints = [
+      { url: `${baseUrl}/app/getAppList.json`, method: 'POST', body: {} },
+      { url: `${baseUrl}/query/app/getAppList.json`, method: 'GET' }
+    ];
+    
+    for (const endpoint of fallbackEndpoints) {
+      console.log(`  尝试 API: ${endpoint.url}`);
+      
+      const options = {
+        method: endpoint.method,
+        headers: { 'X-Requested-With': 'XMLHttpRequest' }
+      };
+      if (endpoint.body) options.body = endpoint.body;
+      
+      const result = await makeRequest(endpoint.url, options, cookieObj, `${baseUrl}/myApp`);
+      
+      let apps = null;
+      if (result?.success && result.content?.data && Array.isArray(result.content.data)) {
+        apps = result.content.data;
+      } else if (result?.data && Array.isArray(result.data)) {
+        apps = result.data;
+      } else if (result?.result && Array.isArray(result.result)) {
+        apps = result.result;
+      } else if (Array.isArray(result)) {
+        apps = result;
+      }
+      
+      if (apps && apps.length > 0) {
+        const formattedApps = apps.map(app => {
+          const appName = app.appName?.zh_CN || app.appName?.en_US || app.appName || app.name || '未命名';
+          const appId = app.appId || app.appType || app.id || null;
+          return { name: appName, appId: appId };
+        }).filter(app => app.name && app.name !== '未命名');
         return formattedApps;
       }
     }
@@ -942,7 +1006,8 @@ function checkHttpServiceRunning() {
  * 在浏览器中打开门户页面
  */
 function openPortalInBrowser() {
-  const portalUrl = 'http://127.0.0.1:8080/本地操作页面/index.html';
+  const projectName = encodeURIComponent(path.basename(PROJECT_ROOT));
+  const portalUrl = `http://127.0.0.1:8080/${projectName}/本地操作页面/index.html`;
   console.log('\n' + '='.repeat(60));
   console.log('🎉 门户页面已就绪！');
   console.log('  📍 访问地址: ' + portalUrl);
@@ -1044,13 +1109,33 @@ async function main() {
   console.log('  - 未匹配:', notFound, '个');
   console.log('  - 配置文件:', CONFIG.orgConfigFile);
 
+  // 输出结构化变化摘要（供 sync_server / 本地门户解析，展示每个应用的增删改情况）
+  const changeSummary = {
+    success: true,
+    addedNames: rebuildResult.addedNames || [],
+    removedNames: rebuildResult.removedNames || [],
+    unchangedNames: rebuildResult.unchangedNames || [],
+    added: rebuildResult.added,
+    removed: rebuildResult.removed,
+    updated: rebuildResult.updated,
+    preserved: rebuildResult.preserved
+  };
+  console.log('__YIDA_CHANGES__' + JSON.stringify(changeSummary));
+
   // 第四步：启动HTTP服务并打开门户页面
+  // 【v1.5.1】由 sync_server 触发（浏览器刷新应用信息）时跳过打开浏览器/注册自启，避免每次刷新弹新窗口
   console.log('\n🚀 第四步：启动HTTP服务...');
-  await startServicesAndOpenPortal();
+  if (process.env.YIDA_NO_OPEN_PORTAL === '1') {
+    console.log('  ℹ️ 由同步服务触发，跳过打开门户浏览器窗口');
+  } else {
+    await startServicesAndOpenPortal();
+  }
 
   // 第五步：注册开机自启
-  console.log('\n🔌 第五步：注册开机自启...');
-  registerAutoStart();
+  if (process.env.YIDA_NO_OPEN_PORTAL !== '1') {
+    console.log('\n🔌 第五步：注册开机自启...');
+    registerAutoStart();
+  }
 }
 
 /**

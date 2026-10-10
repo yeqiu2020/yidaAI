@@ -177,7 +177,34 @@ async function collectAbnormalFlows(authRef, appType, options) {
     }
   }
 
-  return { appType, totalFlows: flows.length, abnormalFlows };
+  return { appType, totalFlows: flows.length, abnormalFlows, flows };
+}
+
+/**
+ * 【v2.10.0 P4-1】静默失败检测：启用中但无任何执行记录的逻辑流。
+ * 背景：本项目已知「内嵌节点配置错误时无执行日志」——这类坏流不会出现在异常日志里，
+ * 唯一线索是"启用中却零执行记录"。本函数按此线索输出候选清单，供人工/体检复核。
+ */
+async function collectSilentFlows(authRef, appType, flows, options) {
+  options = options || {};
+  const logPageSize = options.logPageSize || 10;
+  const silentFlows = [];
+  for (const flow of flows) {
+    if (flow.status !== 'y') { continue; }
+    let totalCount = 0;
+    try {
+      const logResponse = await listLogicflowLogs(authRef, {
+        appType, processCode: flow.processCode, pageIndex: 1, pageSize: logPageSize,
+      });
+      totalCount = (logResponse && logResponse.totalCount) || 0;
+    } catch (error) {
+      continue;
+    }
+    if (totalCount === 0) {
+      silentFlows.push({ ...flow, reason: '启用中但无任何执行记录（触发条件未满足或内嵌节点配置错误）' });
+    }
+  }
+  return silentFlows;
 }
 
 function formatTimestamp(value) {
@@ -250,7 +277,6 @@ function printTextResult(result) {
   }
   if (!result.abnormalFlows.length) {
     console.error('未发现异常日志');
-    return;
   }
   for (const flow of result.abnormalFlows) {
     console.log([
@@ -270,6 +296,20 @@ function printTextResult(result) {
       ].join('\t'));
     }
   }
+  // 【v2.10.0 P4-1】静默失败候选清单
+  if (result.silentFlows && result.silentFlows.length) {
+    console.log('');
+    console.log('⚠️ 启用中但无任何执行记录的逻辑流（静默失败候选，建议 integration-validate 体检复核）:');
+    for (const flow of result.silentFlows) {
+      console.log([
+        flow.appType,
+        flow.formTitle || flow.formUuid || '-',
+        flow.name || '-',
+        flow.processCode,
+        flow.reason,
+      ].join('\t'));
+    }
+  }
 }
 
 async function run(args) {
@@ -283,6 +323,7 @@ async function run(args) {
     console.error('  --log-page-size <n>      日志每页数量（默认10）');
     console.error('  --max-log-pages <n>      最大日志页数（默认1）');
     console.error('  --flow-types <types>     逻辑流类型（逗号分隔）');
+    console.error('  --no-silent              跳过「启用中但无执行记录」静默失败检测（v2.10.0 默认开启）');
     console.error('  --no-progress            不显示进度条');
     process.exit(0);
   }
@@ -307,10 +348,12 @@ async function run(args) {
   }
 
   const authRef = buildAuthRef();
+  const silentCheck = !hasFlag(args, '--no-silent');
   const result = {
     checkedApps: appTypes,
     totalFlows: 0,
     abnormalFlows: [],
+    silentFlows: [],
     errors: [],
   };
 
@@ -324,6 +367,10 @@ async function run(args) {
       });
       result.totalFlows += appResult.totalFlows;
       result.abnormalFlows.push(...appResult.abnormalFlows);
+      if (silentCheck) {
+        const silent = await collectSilentFlows(authRef, appType, appResult.flows || [], { logPageSize });
+        result.silentFlows.push(...silent);
+      }
     } catch (error) {
       result.errors.push({ appType, message: error.message });
     }
@@ -364,5 +411,6 @@ module.exports = {
   run,
   exportToExcel,
   collectAbnormalFlows,
+  collectSilentFlows,
   normalizeLogStatus,
 };

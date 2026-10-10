@@ -3,7 +3,7 @@
  * 联系方式：15270209736
  * 来源：www.yidatrain.com
  * 表单动作代码模板
- * 版本号: v2.4.0
+ * 版本号: v2.5.0
  * 代码类型: formAction
  *
  * 使用说明:
@@ -20,6 +20,7 @@
  * - 跨表查询新增用 formDataJson，编辑用 updateFormDataJson
  * - ⚠️ getFormDataById 不适用 checkApiSuccess！需单独判断 res.serialNo
  * - ⚠️ listTableData 子表API关联字段key带 _id 后缀！需用 getAssociationValue
+ * - ⚠️ 统计聚合（求和/计数/均值/分组统计）禁止拉全量数据在前端 reduce/filter 聚合——优先走报表引擎或 data-prep 服务端聚合（分页展示场景除外）
  */
 
 // ===== 通用工具函数（需要时保留）=====

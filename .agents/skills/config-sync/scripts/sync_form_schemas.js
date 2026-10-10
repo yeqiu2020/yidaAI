@@ -82,7 +82,7 @@ function parseAppIdFromConfig(configPath) {
   
   const content = fs.readFileSync(configPath, 'utf-8');
   // 兼容多种格式：应用编码、应用ID，以及带转义符的格式
-  const appIdMatch = content.match(/\|\s*\*\*(?:应用编码|应用ID)\*\*\s*\|\s*`?(APP[_\\]*[A-Z0-9]+)`?\s*\|/);
+  const appIdMatch = content.match(/\|\s*(?:\*\*)?(?:应用编码|应用ID)(?:\*\*)?\s*\|\s*`?(APP[_\\]*[A-Z0-9]+)`?\s*\|/);
   if (appIdMatch) {
     // 清理转义符，返回标准格式
     return appIdMatch[1].replace(/\\/g, '');
@@ -252,10 +252,12 @@ function createFormDirectory(formName, baseDir, formType, formUuid, moduleFromCo
  * 主函数
  */
 async function main() {
-  const args = process.argv.slice(2);
-  
+  // v3.21.0: 项目根写入防线（共享模块，见 lib/sync-server/guard-root.js）
+  const { splitAllowRootFlag, assertNotProjectRoot } = require('../../../../lib/sync-server/guard-root');
+  const { args, allowRoot } = splitAllowRootFlag(process.argv.slice(2));
+
   if (args.length < 1) {
-    console.log('用法: node sync_form_schemas.js <项目目录> [应用ID] [--forms "表单1,表单2,..."]');
+    console.log('用法: node sync_form_schemas.js <项目目录> [应用ID] [--forms "表单1,表单2,..."] [--allow-root]');
     console.log('');
     console.log('示例:');
     console.log('  同步所有表单: node sync_form_schemas.js "../../../进销存管理"');
@@ -266,10 +268,12 @@ async function main() {
     console.log('  - 从系统配置清单读取应用ID和表单UUID');
     console.log('  - 如果提供了应用ID参数，则优先使用参数值');
     console.log('  - 使用--forms参数可以只同步指定的表单（多个表单用逗号分隔）');
+    console.log('  - 目标目录为项目根（含 组织及应用信息.md）时拒绝执行，需 --allow-root 显式豁免');
     process.exit(1);
   }
-  
-  const projectRoot = path.resolve(args[0]);
+
+  // v3.21.0 硬防线：目标目录是项目根时拒绝（防表单目录平铺到项目根，faq.md 问题17）
+  const projectRoot = assertNotProjectRoot(args[0], { allowRoot, scriptName: 'sync_form_schemas.js' });
   const configPath = path.join(projectRoot, '系统配置清单.md');
   
   // 检查项目目录是否存在

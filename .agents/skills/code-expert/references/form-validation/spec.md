@@ -1,7 +1,7 @@
 # 表单校验规范
 
 > 字段校验代码的编写规范
-> 版本: v1.0.0
+> 版本: v1.1.0
 
 ---
 
@@ -101,6 +101,42 @@ function validateRule(value) {
 }
 ```
 
+### 5. 跨字段校验（重要：validateRule 中可使用 this.$ 读取其他字段）
+
+**字段校验函数 `validateRule(value)` 虽然入参只有当前字段值，但函数内部可以使用 `this.$('字段ID').getValue()` 获取表单中其他字段的值，实现跨字段比较校验。**
+
+```javascript
+// ✅ 正确：跨字段比较校验（如"出库数量不得大于库存数量"）
+function validateRule(value) {
+  if (!value || value === '') return true; // 空值跳过
+  
+  var numValue = parseFloat(value);
+  if (isNaN(numValue)) return false;
+  
+  // 通过 this.$() 获取其他字段的值进行跨字段比较
+  try {
+    var stockComponent = this.$('numberField_stock'); // 库存数量字段ID
+    if (stockComponent) {
+      var stockValue = parseFloat(stockComponent.getValue());
+      if (!isNaN(stockValue) && numValue > stockValue) {
+        return false; // 出库数量大于库存数量，校验不通过
+      }
+    }
+  } catch (e) {
+    // 获取其他字段失败时不应阻断校验
+    console.error('获取库存数量失败:', e);
+  }
+  
+  return true;
+}
+```
+
+**关键要点：**
+1. **`this.$()` 在 validateRule 中可用** — 证据：错误案例 `Cannot read properties of null (reading 'getValue') at Proxy.validateRule` 证明 this.$ 可用，报错仅是字段ID错误导致组件返回 null
+2. **使用 try-catch 包裹** — 防止其他字段组件未加载时阻断校验
+3. **先检查组件是否存在**（`if (component)`）再调用 getValue()
+4. **只能读取（getValue），不能写入（setValue）** — 校验中修改其他字段值属于违规
+
 ---
 
 ## 三、常用正则表达式
@@ -178,4 +214,10 @@ function validateRule(value) {
 
 ---
 
-*文档版本: v1.0.0*
+*文档版本: v1.1.0*
+
+### 版本更新记录
+
+#### v1.1.0 (2026-08-20)
+- **新增** 第五条规则「跨字段校验」：明确 `validateRule(value)` 函数内可使用 `this.$('字段ID').getValue()` 获取其他字段值，实现跨字段比较校验（证据来自 `error-guide.md` 案例17 的报错堆栈 `at Proxy.validateRule`）
+- **背景**：销售出库"出库数量不得大于库存数量"校验曾因未使用 this.$ 获取库存数量而"校验不生效"（仅做了格式/正数校验）

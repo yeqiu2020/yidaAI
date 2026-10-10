@@ -19,9 +19,11 @@ const REGISTRY_URL = 'https://registry.npmjs.org/yeqiu-yida/latest';
 function fetchLatestVersion() {
   return new Promise((resolve) => {
     const req = https.get(REGISTRY_URL, { timeout: 5000 }, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try {
           const parsed = JSON.parse(data);
           resolve(parsed.version || null);

@@ -1,15 +1,16 @@
 /**
  * 宜搭应用数据备份脚本
- * 版本: 1.5.2
+ * 版本: 1.6.0
  * 功能: 备份指定应用中的所有表单数据，支持 JSON/Excel 格式，Excel 表头自动显示字段名称
+ *       v1.6.0 新增 --forms 参数：只备份指定的表单（按 UUID，竖线分隔），不传则全量备份
  *
  * 使用方式:
- * node scripts/backup-app-data.js <应用ID> <应用名称> [format] [输出目录]
+ * node scripts/backup-app-data.js <应用ID> <应用名称> [format] [输出目录] [--forms=UUID1|UUID2]
  *
  * 示例:
  *   node scripts/backup-app-data.js APP_XXXXXXXX "AI宜搭场景"
- *   node scripts/backup-app-data.js APP_XXXXXXXX "AI宜搭场景" json
  *   node scripts/backup-app-data.js APP_XXXXXXXX "AI宜搭场景" excel
+ *   node scripts/backup-app-data.js APP_XXXXXXXX "AI宜搭场景" json --forms=FORM-AAA|FORM-BBB
  */
 
 const https = require('https');
@@ -20,7 +21,12 @@ const { execSync } = require('child_process');
 // Phase 6: 引入 lib/core/utils 作为统一的 Cookie 加载实现
 const coreUtils = require('../../../../lib/core/utils');
 
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+// v3.0.2 多项目隔离：PROJECT_ROOT 优先取 YIDA_PROJECT_ROOT（sync_server 注入的目标项目），
+// Cookie 等数据必须跟随目标项目而不是脚本宿主项目
+const SCRIPT_HOST_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const PROJECT_ROOT = (process.env.YIDA_PROJECT_ROOT && fs.existsSync(process.env.YIDA_PROJECT_ROOT))
+  ? process.env.YIDA_PROJECT_ROOT
+  : SCRIPT_HOST_ROOT;
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
 let CURRENT_STAGING_DIR = null;
 
@@ -81,9 +87,11 @@ function getRequest(hostname, reqPath, cookies, csrfToken) {
     };
 
     const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', chunk => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try {
           const json = JSON.parse(data);
           resolve(json);
@@ -584,12 +592,21 @@ async function main() {
   //   2) node backup-app-data.js <appId> <appName> [outputDir] [format]
   let format = 'json';
   let customOutputDir = '';
+  // v1.6.0: --forms=UUID1|UUID2 指定只备份这些表单（不传则全量备份）
+  let selectedFormUuids = null;
   for (let i = 2; i < args.length; i++) {
-    const arg = args[i].toLowerCase();
+    const rawArg = args[i];
+    if (rawArg.startsWith('--forms=')) {
+      selectedFormUuids = rawArg.slice('--forms='.length).split('|')
+        .map(s => s.trim())
+        .filter(Boolean);
+      continue;
+    }
+    const arg = rawArg.toLowerCase();
     if (arg === 'json' || arg === 'excel') {
       format = arg;
-    } else if (!customOutputDir && args[i]) {
-      customOutputDir = args[i];
+    } else if (!customOutputDir && rawArg) {
+      customOutputDir = rawArg;
     }
   }
 
@@ -626,7 +643,7 @@ async function main() {
   }
 
   console.log('═══════════════════════════════════════════');
-  console.log(`        宜搭应用数据备份工具 v1.5.2 [${format.toUpperCase()}]`);
+  console.log(`        宜搭应用数据备份工具 v1.6.0 [${format.toUpperCase()}]`);
   console.log('═══════════════════════════════════════════\n');
 
   // 加载Cookie
@@ -651,6 +668,26 @@ async function main() {
   if (!forms || forms.length === 0) {
     console.log('⚠️  未找到任何表单');
     process.exit(1);
+  }
+
+  // v1.6.0: 按 --forms 指定的 UUID 过滤（部分备份模式）
+  let selectedCount = 0;
+  if (selectedFormUuids && selectedFormUuids.length > 0) {
+    const uuidSet = new Set(selectedFormUuids);
+    const before = forms.length;
+    const filtered = forms.filter(f => uuidSet.has(f.uuid));
+    const missing = selectedFormUuids.filter(u => !filtered.some(f => f.uuid === u));
+    if (missing.length > 0) {
+      console.log(`⚠️ 以下 ${missing.length} 个指定表单未在表单列表中找到，已跳过: ${missing.join(', ')}`);
+    }
+    if (filtered.length === 0) {
+      console.log('❌ 指定的表单均未匹配到，请检查表单 UUID');
+      process.exit(1);
+    }
+    selectedCount = filtered.length;
+    console.log(`🎯 指定备份模式: ${selectedCount}/${before} 个表单`);
+    forms.length = 0;
+    forms.push(...filtered);
   }
 
   const fieldNameMap = loadFieldNameMap(appName);
@@ -739,6 +776,8 @@ async function main() {
     backupTime: new Date().toISOString(),
     outputDir: baseBackupDir,
     format,
+    backupMode: selectedCount > 0 ? 'selected' : 'all',
+    selectedForms: selectedCount > 0 ? selectedCount : null,
     totalForms: forms.length,
     successForms,
     failForms,
@@ -781,6 +820,7 @@ async function main() {
     zipPath,
     mergedExcelPath: zipPath && mergedExcelPath ? 'packed' : null,
     format,
+    backupMode: selectedCount > 0 ? 'selected' : 'all',
     totalRecords,
     totalForms: forms.length,
     successForms,

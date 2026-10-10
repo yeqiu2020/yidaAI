@@ -1,4 +1,4 @@
-﻿const fs = require('fs');
+const fs = require('fs');
 const path = require('path');
 const querystring = require('querystring');
 const https = require('https');
@@ -45,9 +45,11 @@ function httpRequest(method, baseUrl, apiPath, postData, cookieStr) {
       opts.headers['Content-Length'] = Buffer.byteLength(postData);
     }
     var req = reqModule.request(opts, function(res) {
-      var body = '';
-      res.on('data', function(chunk) { body += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', function(chunk) { chunks.push(chunk); });
       res.on('end', function() {
+        const body = Buffer.concat(chunks).toString('utf-8');
         try { resolve(JSON.parse(body)); }
         catch(e) { resolve({ success: false, errorMsg: 'JSON parse error', raw: body.substring(0, 300) }); }
       });
@@ -63,7 +65,9 @@ function compileSource(sourceCode, moduleType) {
   try {
     var babelStandalone = require('@babel/standalone');
     var babelResult = babelStandalone.transform(sourceCode, {
-      presets: [['env', { targets: { chrome: '49' }, modules: modules }], 'react'],
+      // react preset 必须显式 classic：新版 @babel/standalone 默认 automatic runtime，
+      // 产物会生成 require("react/jsx-runtime")，宜搭 new Function() 沙箱无 require 直接白屏（2026-10-01 实测）
+      presets: [['env', { targets: { chrome: '49' }, modules: modules }], ['react', { runtime: 'classic' }]],
       plugins: [],
     });
     var compiled = babelResult.code || sourceCode;

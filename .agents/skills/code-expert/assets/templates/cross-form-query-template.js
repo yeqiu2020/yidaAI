@@ -3,7 +3,7 @@
  * 联系方式：15270209736
  * 来源：www.yidatrain.com
  * 跨表查询【场景C】专用模板：查主表 + 查子表 → 填充当前表单子表
- * 版本号: v1.0.0
+ * 版本号: v1.1.0
  * 代码类型: formAction
  *
  * 适用场景：在当前表单选择一条“关联表单”记录后，
@@ -13,6 +13,11 @@
  * ⚠️ 场景C 必须调用 2 个 API、配置 2 个数据源：
  *   ① getFormDataById  → 查主表（❌不返回子表数据！❌不能用 checkApiSuccess，判断 res.serialNo）
  *   ② listTableDataByFormInstIdAndTableId → 查子表（数据在 res.data 顶层，关联字段key带 _id 后缀）
+ *
+ * ⚠️ 数据查询三项硬规范（P0-3，生成的查询代码必须遵守）：
+ *   ① pageSize 默认显式写 50（平台硬上限 100，传 200 静默返回 0 条）；
+ *   ② 写日期字段必须用 13 位毫秒时间戳（如 1719705600000），严禁 "YYYY-MM-DD" 字符串；
+ *   ③ 需要分页/对比/配对的 searchFormDatas 必须传 dynamicOrder（如 { "dateField_xxx": "-" }），不传不保证顺序稳定。
  *
  * ⚠️ 事件绑定必须手动：本模板只提供 export function，请在设计器中手动绑定 onChange，
  *   禁止用代码 field.onChange() 自动绑定。

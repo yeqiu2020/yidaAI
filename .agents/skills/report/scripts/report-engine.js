@@ -146,9 +146,11 @@ function httpPost(baseUrl, requestPath, postData, cookies) {
     };
 
     const req = requestModule.request(options, (res) => {
-      let data = '';
-      res.on('data', (chunk) => { data += chunk; });
+      // Buffer 收集统一解码，防 chunk 边界撕碎中文字符
+      const chunks = [];
+      res.on('data', (chunk) => chunks.push(chunk));
       res.on('end', () => {
+        const data = Buffer.concat(chunks).toString('utf-8');
         try {
           const parsed = JSON.parse(data);
           resolve(parsed);

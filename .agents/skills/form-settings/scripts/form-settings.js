@@ -1,10 +1,16 @@
-﻿const path = require('path');
+const path = require('path');
 const fs = require('fs');
 
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+// v3.0.2 多项目隔离：
+//  - SCRIPT_HOST_ROOT：脚本宿主项目（api-client 等依赖跟随宿主，__dirname 回溯）
+//  - PROJECT_ROOT：数据项目（Cookie 等必须跟随目标项目，优先 YIDA_PROJECT_ROOT 环境变量）
+const SCRIPT_HOST_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const PROJECT_ROOT = (process.env.YIDA_PROJECT_ROOT && fs.existsSync(process.env.YIDA_PROJECT_ROOT))
+  ? process.env.YIDA_PROJECT_ROOT
+  : SCRIPT_HOST_ROOT;
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
-const FORM_MANAGER_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'form_manager.js');
-const API_CLIENT_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'api_client.js');
+const FORM_MANAGER_PATH = path.join(SCRIPT_HOST_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'form_manager.js');
+const API_CLIENT_PATH = path.join(SCRIPT_HOST_ROOT, '.agents', 'skills', 'api-client', 'scripts', 'api_client.js');
 
 // Phase 6: Cookie 加载统一委托给 lib/core/utils
 const coreUtils = require('../../../../lib/core/utils');
@@ -12,7 +18,8 @@ const coreUtils = require('../../../../lib/core/utils');
 function getAuthRef() {
   const { loadCookieData, resolveBaseUrl } = coreUtils;
   const { resolveCorpId } = require(API_CLIENT_PATH);
-  const cookieData = loadCookieData();
+  // v3.0.7: 显式传 PROJECT_ROOT，与 COOKIE_FILE 保持同源（不传则 findProjectRoot 兜底可能回溯宿主项目）
+  const cookieData = loadCookieData(PROJECT_ROOT);
   if (!cookieData) {
     console.error('  ❌ 未找到登录态，请先登录');
     process.exit(1);
