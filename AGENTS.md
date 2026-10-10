@@ -447,3 +447,14 @@
 
 <!-- END local-cache-sync-hard-rules -->
 
+<!-- BEGIN git-branch-workflow-rules (2026-10-11 用户定稿) -->
+
+# Git 分支协作规范【对所有 AI 强制生效】
+
+22. **【强制】分支命名 = `project-<企业名拼音缩写小写>`**（喜优高 → `project-xyg`）。AI 为新项目取名时，必须向用户复述"项目名 → 拼音缩写 → 完整分支名"并确认后再创建；易混缩写（如 xlg/xyg）逐一拼写核对。历史事故（2026-10-11）：AI 取名 project-xlg，实为 xyg，用户事后发现才改名。
+23. **【强制】main = 主干，只收「完整、测试绿」的公共底座改动；项目进行中的半成品一律在项目分支上 commit + push（推 GitHub 作异地备份）**。节奏：每次收尾 push 分支；批次完成（测试绿）→ merge 回 main → push → 删分支；开工/换电脑前 `git fetch && git merge origin/main` 下行拉公共更新。项目业务数据不进 git（真相源在宜搭云端），git 只管公共底座（skills/lib/页面/文档）。
+24. **【强制】勤合勤下行，禁止长期攒分支**：多个项目分支并行时，哪个分支的公共改动完整（测试绿）就先合哪个，其余分支随即 merge origin/main 下行，把冲突化整为零；`版本历史.md` / `SKILL.md` / `skill-config.json` 等高频文件一律追加式编辑（文件末尾或自己的小节内），降低同一行被两条分支同时改写的冲突面。合并回 main 的操作由 AI 在命令行完成（用户说"合回 main"即可），无需用户去 GitHub 网页操作。
+
+<!-- END git-branch-workflow-rules -->
+
+
