@@ -4,8 +4,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>宜搭AI助手 - 组织管理门户</title>
-  <link rel="stylesheet" href="css/style.css">
+    <title>宜搭AI助手 - 组织管理门户</title>
+    <link rel="stylesheet" href="css/style.css">
   <style>
     .tab-nav {
       display: flex;
@@ -660,6 +660,63 @@
       justify-content: flex-end;
     }
 
+    /* ========== 备份数据·表单选择弹窗（v1.9.0） ========== */
+    .backup-select-box {
+      max-width: 480px;
+    }
+    .backup-select-title {
+      color: #1677ff;
+    }
+    .backup-select-all {
+      font-weight: 600;
+      border-bottom: 1px solid #eee;
+      padding-bottom: 8px;
+      margin-bottom: 8px;
+    }
+    .backup-form-list {
+      max-height: 280px;
+      overflow-y: auto;
+      border: 1px solid #eee;
+      border-radius: 6px;
+      padding: 6px 12px;
+      margin-bottom: 12px;
+      background: #fafafa;
+    }
+    .backup-form-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 4px;
+      font-size: 14px;
+      color: #333;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .backup-form-item:hover {
+      background: #f0f7ff;
+    }
+    .backup-form-item input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #1677ff;
+      width: 15px;
+      height: 15px;
+      flex-shrink: 0;
+    }
+    .backup-form-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .backup-selected-count {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 14px;
+    }
+    .backup-select-box .tool-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
     /* ========== Tooltip（刷新登录态按钮悬停说明） ========== */
     .tooltip-wrapper .tooltip-text {
       opacity: 0;
@@ -670,20 +727,257 @@
       opacity: 1;
       visibility: visible;
     }
+
+    /* ========== 案例库 ========== */
+    .case-nav {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+    .case-nav-btn {
+      padding: 8px 18px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-bg);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .case-nav-btn:hover {
+      border-color: var(--primary);
+      color: var(--primary);
+    }
+    .case-nav-btn.active {
+      background: var(--primary);
+      color: #fff;
+      border-color: var(--primary);
+    }
+    .case-header {
+      background: linear-gradient(135deg, #1677ff 0%, #722ed1 100%);
+      border-radius: var(--radius);
+      color: #fff;
+      padding: 28px 32px;
+      margin-bottom: 20px;
+      box-shadow: 0 4px 16px rgba(22,119,255,0.25);
+    }
+    .case-header-inner { display: flex; flex-direction: column; gap: 8px; }
+    .case-header-title { font-size: 24px; font-weight: 700; }
+    .case-header-tagline { font-size: 14px; opacity: 0.9; }
+    .case-header-stats { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+    .case-stat-chip {
+      background: rgba(255,255,255,0.18);
+      padding: 3px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+    }
+    .case-stat-chip b { margin-right: 2px; }
+    .badge-parallel { background: rgba(82,196,26,0.25); }
+    .case-card {
+      background: var(--card-bg);
+      border-radius: var(--radius);
+      padding: 24px 28px;
+      box-shadow: var(--shadow);
+      margin-bottom: 20px;
+    }
+    .case-card-title {
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .case-section-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--primary);
+      color: #fff;
+      border-radius: 8px;
+      font-size: 14px;
+      flex-shrink: 0;
+    }
+    .case-intro { font-size: 14px; color: var(--text-secondary); line-height: 1.8; margin-bottom: 20px; white-space: pre-line; }
+    .case-legend { margin-left: auto; display: flex; gap: 8px; }
+    .legend-tag, .phase-mode, .step-mode {
+      font-size: 11px;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+    .tag-parallel, .phase-parallel, .step-parallel {
+      background: var(--success-bg);
+      color: var(--success);
+    }
+    .tag-sequential, .phase-sequential, .step-sequential {
+      background: var(--primary-bg);
+      color: var(--primary);
+    }
+    .case-route-tip {
+      font-size: 13px;
+      color: var(--text-secondary);
+      background: var(--primary-bg);
+      padding: 10px 14px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      line-height: 1.7;
+    }
+    .case-route-tip b { color: var(--primary); }
+
+    /* 架构图 */
+    .arch-wrap { margin: 16px 0 20px; }
+    .case-arch { display: flex; flex-direction: column; gap: 12px; }
+    .arch-node {
+      border-radius: 10px;
+      padding: 14px 18px;
+      border: 1px solid var(--border);
+      background: #fafafa;
+    }
+    .arch-node-title { font-size: 14px; font-weight: 700; margin-bottom: 6px; }
+    .arch-node-tags { font-size: 12px; color: var(--text-secondary); line-height: 1.7; }
+    .arch-base { border-left: 4px solid #722ed1; }
+    .arch-auto { border-left: 4px solid #fa8c16; background: #fffbe6; }
+    .arch-flow { display: flex; gap: 12px; flex-wrap: wrap; }
+    .arch-column { flex: 1; min-width: 240px; display: flex; }
+    .arch-column .arch-node { flex: 1; }
+    .arch-purchase { border-left: 4px solid #1677ff; }
+    .arch-sale { border-left: 4px solid #13c2c2; }
+    .arch-stock { border-left: 4px solid #52c41a; }
+    .arch-node-flow { font-size: 13px; font-weight: 600; margin-bottom: 4px; }
+    .arch-node-sub { font-size: 12px; color: var(--text-muted); }
+
+    /* 模块卡片 */
+    .case-module-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+      gap: 12px;
+    }
+    .case-module-card {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+    }
+    .case-module-icon { font-size: 24px; margin-bottom: 6px; }
+    .case-module-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+    .case-module-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.6; }
+
+    /* 阶段 */
+    .case-phase {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      background: #fcfcfc;
+    }
+    .case-phase-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .case-phase-title { font-size: 16px; font-weight: 700; }
+    .case-phase-desc { font-size: 13px; color: var(--text-secondary); line-height: 1.7; margin-bottom: 12px; }
+    .case-steps { display: flex; flex-direction: column; gap: 10px; }
+
+    /* 步骤 */
+    .case-step {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+    }
+    .case-step-head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 6px;
+    }
+    .case-step-num {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--primary);
+      background: var(--primary-bg);
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .case-step-name { font-size: 14px; font-weight: 600; }
+    .case-step-skill { font-size: 12px; color: var(--text-muted); margin-bottom: 4px; }
+    .case-step-note { font-size: 12px; color: #8c6d1f; background: #fffbe6; padding: 4px 10px; border-radius: 4px; margin-bottom: 8px; }
+    .case-step-prompt {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      background: #f5f7fa;
+      border-radius: 6px;
+      padding: 8px 12px;
+    }
+    .case-step-prompt .prompt-text {
+      flex: 1;
+      font-size: 12px;
+      color: var(--text);
+      white-space: pre-wrap;
+      word-break: break-word;
+      cursor: pointer;
+      line-height: 1.7;
+    }
+    .case-step-prompt .prompt-text:hover { color: var(--primary); }
+    .case-step-prompt .copy-btn { flex-shrink: 0; }
+
+    /* 测试 */
+    .case-test-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .case-test-card {
+      background: #fafafa;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .case-test-index {
+      width: 24px;
+      height: 24px;
+      background: var(--success);
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .case-test-name { font-size: 14px; font-weight: 600; }
+    .case-test-prompt .prompt-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      cursor: pointer;
+      line-height: 1.6;
+    }
+    .case-test-prompt .prompt-text:hover { color: var(--primary); }
+    .case-test-method { font-size: 12px; color: var(--text-muted); }
   </style>
 </head>
 
 <body>
-  <div id="service-indicator" class="service-indicator" title="同步服务状态">
-    <span class="indicator-dot"></span>
-    <span class="indicator-text">检测中...</span>
-  </div>
-
   <div class="container">
     <header class="org-header">
       <div class="org-icon">&#127970;</div>
       <h1 class="org-name" id="orgName">加载中...</h1>
       <div class="org-meta" id="orgMeta"></div>
+      <button class="btn btn-restart-service" id="btnRestartService" onclick="restartService()" title="重启 HTTP 与同步服务（重启到当前项目目录）">&#128260; 重启服务</button>
     </header>
 
     <nav class="tab-nav">
@@ -693,10 +987,10 @@
       <button class="tab-btn" data-tab="system" onclick="switchTab('system')">&#128274; 系统关联</button>
       <button class="tab-btn" data-tab="custom" onclick="switchTab('custom')">&#127912; 自定义页面</button>
       <button class="tab-btn" data-tab="tools" onclick="switchTab('tools')">&#128295; 其他工具</button>
-      <button class="tab-btn" data-tab="features" onclick="switchTab('features')">&#128221; 功能清单</button>
+      <button class="tab-btn" data-tab="cases" onclick="switchTab('cases')">&#128218; 案例库</button>
     </nav>
 
-    <!-- Tab 1: 应用管理 -->
+    <!-- Tab 1: 应用管理（默认视图） -->
     <div class="tab-content active" id="tab-apps">
       <section class="app-section">
         <div class="section-header">
@@ -1058,6 +1352,17 @@
               onclick="copyText(this)">生成【xxx】应用的ER实体关系图，分析表单之间的关联关系、子表关系，检测孤立表单和循环依赖</span>
           </div>
         </div>
+        <!-- 篱笆咨询 -->
+        <div class="tool-card" style="border-left-color:#fa8c16;">
+          <div class="tool-card-header">
+            <div class="tool-card-title">&#128172; 篱笆咨询</div><span class="tool-card-badge prompt">提示词</span>
+          </div>
+          <div class="tool-card-desc">宜搭问题诊断大管家：分类、检索、分析、解答、验证、沉淀</div>
+          <div class="tool-card-actions">
+            <span class="prompt-text" data-prompt-category="篱笆咨询" data-prompt-label="问题诊断入口"
+              onclick="copyText(this)">「调用技能yida-consultant」宜搭顾问，帮我按“分类→检索→分析→解答→验证→沉淀”流程诊断这个问题：【粘贴问题现象、错误信息、公式/代码/配置截图】。先不要修改线上配置，如需验证请先说明排查方式和风险。</span>
+          </div>
+        </div>
         <!-- 表单设置 -->
         <div class="tool-card" style="border-left-color:#1677ff;">
           <div class="tool-card-header">
@@ -1102,6 +1407,24 @@
           <div class="tool-result" id="result-service-status"></div>
         </div>
       </div>
+      <div class="prompt-category" data-category="篱笆咨询">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128172; 篱笆咨询</div>
+          <button class="prompt-add-btn" onclick="showAddPromptModal(this)">+ 新增提示词</button>
+        </div>
+        <table class="prompt-table">
+          <thead>
+            <tr>
+              <th class="prompt-seq">序号</th>
+              <th>你想做什么</th>
+              <th>提示词（点击复制）</th>
+              <th>技能</th>
+              <th style="width:120px">操作</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
       <div class="prompt-category" data-category="数据架构">
         <div class="prompt-category-header">
           <div class="prompt-category-title">&#128202; 数据架构</div>
@@ -1138,17 +1461,30 @@
           <tbody></tbody>
         </table>
       </div>
+
+      <!-- 开发能力总览（原功能清单，整合于此） -->
+      <div class="prompt-category">
+        <div class="prompt-category-header">
+          <div class="prompt-category-title">&#128221; 开发能力总览</div>
+        </div>
+        <div class="copy-hint" style="margin-top:0;margin-bottom:12px;">&#128161; 以下为系统提供的全部能力（Skill），按「开发执行顺序」分为 11
+        个阶段排列，包含序号、功能名称、简述与详细描述。共 <span id="featureCount">0</span> 项。</div>
+        <div id="featureList"></div>
+      </div>
     </div>
 
-    <!-- Tab 6: 功能清单 -->
-    <div class="tab-content" id="tab-features">
-      <div class="copy-hint" style="margin-top:0;margin-bottom:16px;">&#128161; 以下为系统提供的全部能力（Skill），按「开发执行顺序」分为 11
-        个阶段排列，包含序号、功能名称、简述与详细描述。共 <span id="featureCount">0</span> 项。</div>
-      <div id="featureList"></div>
+    <!-- Tab 8: 案例库 -->
+    <div class="tab-content" id="tab-cases">
+      <div class="copy-hint" style="margin-top:0;margin-bottom:16px;">&#128161; 完整案例教学：先看「整体业务介绍」了解系统架构，再按「建造路线」将提示词依次复制给 AI 执行，最后按「测试与模拟数据」验证规则。绿色「可并行」步骤可同时执行，蓝色「需按顺序」步骤必须等前一步完成。</div>
+      <div class="case-nav" id="caseNav"></div>
+      <div class="case-header" id="caseHeader"></div>
+      <div id="caseOverview"></div>
+      <div id="caseBuildRoute"></div>
+      <div id="caseTesting"></div>
     </div>
 
     <footer class="portal-footer">
-      <p>宜搭AI助手 &copy; 2026 | 组织管理门户 v2.6.0</p>
+      <p>宜搭AI助手 &copy; 2026 | 组织管理门户 v2.7.0</p>
     </footer>
   </div>
 
@@ -1157,6 +1493,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <h3 id="syncModalTitle">同步中...</h3>
+        <span class="modal-close" id="syncModalClose" onclick="hideSyncModal()" title="关闭" style="display:none;">&times;</span>
       </div>
       <div class="modal-body">
         <div class="sync-progress">
@@ -1234,10 +1571,14 @@
 
   <div id="toast" class="toast" style="display:none;"></div>
 
-  <script src="js/dashboard.js?v=1.6.0"></script>
+  <script src="js/dashboard.js?v=1.8.0"></script>
+  <script src="js/case-library-data.js?v=1.0.0"></script>
+  <script src="js/case-library.js?v=1.0.0"></script>
   <script>
     // ========== 全局变量 ==========
     let orgApps = []; // {name, appId, synced}
+
+    // 多组织并存：PROJECT_NAME / PROJECT_DIR_QUERY 由 dashboard.js 全局声明，此处直接使用
 
     // ========== Tab 切换 ==========
     function switchTab(tabId) {
@@ -1245,6 +1586,11 @@
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.querySelector(`[data-tab="${tabId}"]`).classList.add('active');
       document.getElementById(`tab-${tabId}`).classList.add('active');
+      // 首次进入案例库时初始化
+      if (tabId === 'cases' && window.CaseLibraryData && !window.__caseInited) {
+        window.__caseInited = true;
+        initCaseLibrary();
+      }
     }
 
     // ========== 复制提示词 ==========
@@ -1264,7 +1610,7 @@
     // ========== 加载应用列表到下拉框 ==========
     async function loadAppSelects() {
       try {
-        const res = await fetch('http://127.0.0.1:3457/org-info');
+        const res = await fetch(`http://127.0.0.1:3457/org-info?${PROJECT_DIR_QUERY}`);
         const data = await res.json();
         if (!data.success) return;
         orgApps = data.apps || [];
@@ -1288,7 +1634,7 @@
       formSel.innerHTML = '<option value="">加载中...</option>';
       formSel.style.display = 'inline-block';
       try {
-        const res = await fetch(`http://127.0.0.1:3457/app-forms?appName=${encodeURIComponent(appName)}`);
+        const res = await fetch(`http://127.0.0.1:3457/app-forms?appName=${encodeURIComponent(appName)}&${PROJECT_DIR_QUERY}`);
         const data = await res.json();
         if (data.success && data.forms.length > 0) {
           formSel.innerHTML = '<option value="">选择表单...</option>' + data.forms.map(f =>
@@ -1315,7 +1661,7 @@
       btn.disabled = true; btn.textContent = '执行中...';
       if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = '正在执行，请稍候...'; }
 
-      const body = { appId, appName };
+      const body = { appId, appName, projectDir: PROJECT_NAME };
       try {
         const res = await fetch(`http://127.0.0.1:3457/${tool}`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body)
@@ -1352,7 +1698,7 @@
       try {
         const res = await fetch('http://127.0.0.1:3457/form-settings', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appId, formUuid, action, appName })
+          body: JSON.stringify({ appId, formUuid, action, appName, projectDir: PROJECT_NAME })
         });
         const data = await res.json();
         if (data.success) {
@@ -1385,7 +1731,7 @@
       try {
         const res = await fetch('http://127.0.0.1:3457/flow-settings', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appId, formUuid, action, appName })
+          body: JSON.stringify({ appId, formUuid, action, appName, projectDir: PROJECT_NAME })
         });
         const data = await res.json();
         if (data.success) {
@@ -1408,7 +1754,7 @@
       try {
         const res = await fetch('http://127.0.0.1:3457/clean-data', {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appId, appName, mode: 'all', confirm: !dryRun, dryRun })
+          body: JSON.stringify({ appId, appName, mode: 'all', confirm: !dryRun, dryRun, projectDir: PROJECT_NAME })
         });
         const data = await res.json();
         if (data.success) {
@@ -1457,7 +1803,7 @@
       const resultEl = document.getElementById('result-service-status');
       if (resultEl) { resultEl.className = 'tool-result show'; resultEl.textContent = '正在检查...'; }
       try {
-        const res = await fetch('http://127.0.0.1:3457/health');
+        const res = await fetch(`http://127.0.0.1:3457/health?${PROJECT_DIR_QUERY}`);
         const data = await res.json();
         if (resultEl) {
           resultEl.className = 'tool-result show success';
@@ -1636,6 +1982,7 @@
       });
 
       try {
+        allData.projectDir = PROJECT_NAME;
         const res = await fetch('http://127.0.0.1:3457/save-prompts', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -1691,7 +2038,7 @@
         const res = await fetch('http://127.0.0.1:3457/create-project', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ projectName })
+          body: JSON.stringify({ projectName, projectDir: PROJECT_NAME })
         });
         const data = await res.json();
         if (data.success) {
@@ -1718,7 +2065,7 @@
     // ========== 加载提示词 ==========
     async function loadPrompts() {
       try {
-        const res = await fetch('http://127.0.0.1:3457/get-prompts');
+        const res = await fetch(`http://127.0.0.1:3457/get-prompts?${PROJECT_DIR_QUERY}`);
         const data = await res.json();
         if (!data.success || !data.data) return;
 

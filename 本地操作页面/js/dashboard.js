@@ -1,9 +1,33 @@
 /**
  * 宜搭组织管理门户 - Dashboard JS
- * v1.6.0
+ * v1.9.0: 服务异常横幅增加「启动宜搭服务」按钮——同步服务(3457)未启动时不再提示"去对话框输入"，
+ *         改为直接点击按钮，通过 8080 静态服务的 /__yida_start_service 接口拉起服务，无需 AI 介入
+ * v1.8.3: 应用管理列表优化——已同步的应用排在前面、未同步的排在后面；未同步应用卡片背景轻微加灰以作区分
+ * v1.8.2: 拆分「初始化组织信息」与「刷新应用信息」两个入口
+ *         - 初始化按钮：放在组织名称位置，仅当未初始化时显示，点击后完成首次登录+组织信息+应用列表抓取，完成后按钮自动消失
+ *         - 刷新按钮：保留在应用管理 Tab 顶部，用于已有数据后同步宜搭端最新应用列表
+ *         - 抽取共享函数 _runOrgInit 供两个入口复用，仅 UI 文案与触发场景不同
+ * v1.8.0: 多组织并存——从 URL 路径首段提取当前项目名，请求同步/静态服务时携带 projectDir，
+ *         实现同一端口下多项目互不干扰、不串数据
+ * v1.7.1: 修复服务重启后刷新过早导致组织信息加载失败（增加重试机制+延迟刷新）
+ * v1.7.0: 企业名称后显示服务启动目录；新增"重启服务"按钮
+ * v1.6.1: 刷新应用信息改为 SSE 流式日志（与刷新登录态一致），弹窗实时展示同步进度
  */
 const SYNC_SERVICE = 'http://localhost:3457';
 const HTTP_SERVICE = 'http://127.0.0.1:8080';
+
+// ========== 多组织并存：从 URL 路径提取当前项目名 ==========
+// 页面以 http://127.0.0.1:8080/{项目名}/本地操作页面/index.html 访问，首段即项目目录名。
+// 请求同步服务(3457)/静态服务(8080)时以该值定位到当前项目，避免串到其他项目的数据。
+function getProjectName() {
+  const segments = window.location.pathname.split('/').filter(Boolean);
+  return segments.length > 0 ? decodeURIComponent(segments[0]) : '';
+}
+const PROJECT_NAME = getProjectName();
+// projectDir 查询串（相对静态根的项目目录名），用于同步服务 resolveProjectDir
+const PROJECT_DIR_QUERY = PROJECT_NAME ? `projectDir=${encodeURIComponent(PROJECT_NAME)}` : '';
+// 静态服务中当前项目下的资源路径前缀（含项目段）
+const HTTP_PROJECT_PREFIX = PROJECT_NAME ? `/${encodeURIComponent(PROJECT_NAME)}` : '';
 
 // ========== 全局状态 ==========
 let orgData = null;
@@ -18,34 +42,81 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ========== 服务状态检测 ==========
+// v3.0.2 修复：v3.0 门户改版后页面已无 #service-indicator 元素，原代码在元素不存在时
+// 直接 return，导致 serviceRunning 永远为 false，所有操作按钮（删除/同步/备份/清理）
+// 都误报"同步服务未启动"。改为：状态检测不依赖指示器元素。
+// v3.0.3 交互方案：服务正常运行时零噪音（不显示任何状态 UI）；
+// 仅当同步服务未运行时在顶部显示警告横幅，恢复后自动消失。
 async function checkService() {
-  const indicator = document.getElementById('service-indicator');
-  indicator.className = 'service-indicator checking';
-  indicator.querySelector('.indicator-text').textContent = '检测中...';
-
   try {
-    const res = await fetch(`${SYNC_SERVICE}/health`, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(`${SYNC_SERVICE}/health?${PROJECT_DIR_QUERY}`, { signal: AbortSignal.timeout(3000) });
     if (res.ok) {
       serviceRunning = true;
-      indicator.className = 'service-indicator running';
-      indicator.querySelector('.indicator-text').textContent = '服务运行中';
     } else {
       throw new Error('not ok');
     }
   } catch (_) {
     serviceRunning = false;
-    indicator.className = 'service-indicator stopped';
-    indicator.querySelector('.indicator-text').textContent = '服务未启动';
+  }
+  updateServiceBanner(serviceRunning);
+}
+
+// ========== 服务异常横幅（仅异常时显示） ==========
+// v1.9.0: 横幅改为直接展示「启动宜搭服务」按钮，点击即调用 8080 启动接口，无需去对话框让 AI 启动
+function updateServiceBanner(running) {
+  const existing = document.getElementById('service-down-banner');
+  if (running) {
+    // 服务恢复：移除横幅与页面位移
+    if (existing) existing.remove();
+    document.body.classList.remove('has-service-banner');
+  } else {
+    // 服务未运行：显示横幅（已存在则不重复创建）
+    if (!existing) {
+      const banner = document.createElement('div');
+      banner.id = 'service-down-banner';
+      banner.className = 'service-down-banner';
+      banner.innerHTML =
+        '<span class="banner-icon">&#9888;&#65039;</span>' +
+        '<span class="banner-text">宜搭服务未启动，页面部分功能不可用</span>' +
+        '<button class="btn btn-start-service" id="btnStartService" onclick="startServiceFromPage()">&#9654; 启动宜搭服务</button>';
+      document.body.appendChild(banner);
+      document.body.classList.add('has-service-banner');
+    }
   }
 }
 
+// ========== 页面内启动服务 ==========
+// v1.9.0: 同步服务(3457)未启动时，静态服务(8080)仍可访问。点击横幅按钮即调用 8080 上的
+// /__yida_start_service 接口，由 server_manager start 拉起全部服务。随后轮询等待 3457 恢复并刷新。
+function startServiceFromPage() {
+  const btn = document.getElementById('btnStartService');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '&#9889; 启动中...';
+  }
+  const url = `${HTTP_SERVICE}/__yida_start_service?${PROJECT_DIR_QUERY}`;
+  fetch(url, { signal: AbortSignal.timeout(5000) })
+    .then(res => res.json())
+    .then(data => {
+      console.log('[start-service] 启动已触发:', data);
+      showToast('服务正在启动，请稍候...', 'info');
+      waitForServiceRestart(40);
+    })
+    .catch(err => {
+      console.warn('[start-service] 触发启动失败:', err);
+      if (btn) { btn.disabled = false; btn.innerHTML = '&#9654; 启动宜搭服务'; }
+      showToast('启动触发失败，请检查服务或稍后重试', 'error');
+    });
+}
+
 // ========== 加载组织信息 ==========
-async function loadOrgInfo() {
+// v1.7.1: 增加失败重试机制（最多3次），解决服务重启后刷新过早导致加载失败的问题
+async function loadOrgInfo(attempt = 1) {
   const appList = document.getElementById('appList');
   appList.innerHTML = '<div class="loading">加载中...</div>';
 
   try {
-    const res = await fetch(`${SYNC_SERVICE}/org-info`, { signal: AbortSignal.timeout(5000) });
+    const res = await fetch(`${SYNC_SERVICE}/org-info?${PROJECT_DIR_QUERY}`, { signal: AbortSignal.timeout(5000) });
     const data = await res.json();
 
     if (!data.success) {
@@ -54,18 +125,24 @@ async function loadOrgInfo() {
     }
 
     orgData = data;
-    renderOrgHeader(data.orgInfo);
+    renderOrgHeader(data.orgInfo, data.projectDir);
     renderAppList(data.apps);
     renderAppStats(data.totalApps, data.syncedApps);
   } catch (error) {
-    // 如果API不可用，尝试直接读取markdown
+    // 连接失败时重试（服务重启等场景下端口可能未就绪）
+    if (attempt < 3) {
+      console.log(`[loadOrgInfo] 第${attempt}次加载失败，3秒后重试...`);
+      setTimeout(() => loadOrgInfo(attempt + 1), 3000);
+      return;
+    }
+    // 重试耗尽后，尝试直接读取markdown
     try {
-      const mdRes = await fetch(`${HTTP_SERVICE}/组织及应用信息.md`, { signal: AbortSignal.timeout(3000) });
+      const mdRes = await fetch(`${HTTP_SERVICE}${HTTP_PROJECT_PREFIX}/组织及应用信息.md`, { signal: AbortSignal.timeout(3000) });
       if (mdRes.ok) {
         const mdText = await mdRes.text();
         const parsed = parseOrgMarkdown(mdText);
         orgData = parsed;
-        renderOrgHeader(parsed.orgInfo);
+        renderOrgHeader(parsed.orgInfo, null);
         renderAppList(parsed.apps);
         renderAppStats(parsed.totalApps, parsed.syncedApps);
         return;
@@ -139,8 +216,31 @@ function cleanUrlValue(raw) {
 }
 
 // ========== 渲染组织头部 ==========
-function renderOrgHeader(orgInfo) {
-  document.getElementById('orgName').textContent = orgInfo.orgName || '未知组织';
+function renderOrgHeader(orgInfo, projectDir) {
+  const orgNameEl = document.getElementById('orgName');
+
+  // v1.8.2: 判断是否已初始化（组织名称为空 / "未知组织" / 未提供 orgInfo 视为未初始化）
+  // 未初始化时，在组织名称位置显示"初始化组织信息"按钮，引导用户完成首次初始化
+  const rawName = orgInfo && orgInfo.orgName ? orgInfo.orgName.trim() : '';
+  const isUninitialized = !rawName || rawName === '未知组织';
+
+  // v1.7.0: 在企业名称后显示服务启动目录名，一眼看出当前服务来自哪个文件夹
+  const dirName = projectDir ? projectDir.replace(/[\\/]+$/, '').split(/[\\/]/).pop() : '';
+
+  if (isUninitialized) {
+    // 未初始化：显示初始化按钮（一次性，初始化成功后页面重载即消失）
+    orgNameEl.innerHTML = `<button class="btn btn-init-org" id="initOrgBtn" onclick="initOrgInfo(this)">&#128295; 初始化组织信息</button>`
+      + (dirName
+        ? ` <span class="org-dir-badge" title="当前服务启动目录：${projectDir}">${dirName}</span>`
+        : '');
+    // 未初始化时隐藏 meta 区域（域名/corpId 都还没有）
+    document.getElementById('orgMeta').innerHTML = '';
+    return;
+  }
+
+  orgNameEl.innerHTML = rawName + (dirName
+    ? ` <span class="org-dir-badge" title="当前服务启动目录：${projectDir}">${dirName}</span>`
+    : '');
 
   const metaParts = [];
   if (orgInfo.fullDomain) {
@@ -151,6 +251,69 @@ function renderOrgHeader(orgInfo) {
   if (orgInfo.corpId) metaParts.push(`<span>&#128273; ${orgInfo.corpId.substring(0, 12)}...</span>`);
 
   document.getElementById('orgMeta').innerHTML = metaParts.join('');
+}
+
+// ========== 重启服务 ==========
+// v1.8.0: 多组织并存模式下，重启全局服务（所有项目短暂不可访问），不再针对单一项目目录
+// 重启后轮询 /health 等待服务恢复，自动刷新页面
+function restartService() {
+  const btn = document.getElementById('btnRestartService');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerHTML = '&#128260; 重启中...';
+  }
+
+  if (!window.confirm('确定要重启全局服务吗？\n将重启 HTTP(8080) 与同步服务(3457)，所有项目会短暂不可访问。')) {
+    if (btn) { btn.disabled = false; btn.innerHTML = '&#128260; 重启服务'; }
+    return;
+  }
+
+  // 标记页面正在重启，防止用户误操作
+  sessionStorage.setItem('serviceRestarting', '1');
+  window.alert('全局服务正在重启，页面将自动刷新，请稍候...');
+
+  // 通知同步服务执行重启（同步服务会 spawn 独立 server_manager restart 进程后自行退出）
+  fetch(`${SYNC_SERVICE}/restart-service?${PROJECT_DIR_QUERY}`, { method: 'POST' })
+    .then(res => res.json())
+    .then(data => {
+      console.log('[restart-service] 重启已触发:', data);
+      // 重启需要几秒（stop 旧进程 + 启动新进程），轮询等待服务恢复
+      waitForServiceRestart();
+    })
+    .catch(err => {
+      console.warn('[restart-service] 触发重启失败:', err);
+      // 即使 HTTP 请求失败（服务已开始重启），也尝试轮询等待
+      waitForServiceRestart();
+    });
+}
+
+// 轮询等待同步服务恢复，最多等 30 秒
+// v1.7.1: 服务恢复后再延迟 3 秒刷新，确保 3457 完全就绪（避免刷新过早导致组织信息加载失败）
+function waitForServiceRestart(maxAttempts = 30) {
+  let attempt = 0;
+  const timer = setInterval(() => {
+    attempt++;
+    if (attempt > maxAttempts) {
+      clearInterval(timer);
+      sessionStorage.removeItem('serviceRestarting');
+      window.alert('服务重启超时，请手动刷新页面或重新启动服务。');
+      return;
+    }
+    fetch(`${SYNC_SERVICE}/health`, { signal: AbortSignal.timeout(3000) })
+      .then(res => res.json())
+      .then(data => {
+        if (data && data.status === 'ok') {
+          clearInterval(timer);
+          sessionStorage.removeItem('serviceRestarting');
+          // 服务健康检查通过后，再等 3 秒确保完全就绪，然后刷新
+          console.log('[restart-service] 服务已恢复，3秒后刷新页面...');
+          setTimeout(() => window.location.reload(), 3000);
+        }
+      })
+      .catch(() => {
+        // 服务尚未恢复，继续轮询
+      });
+  }, 1000);
 }
 
 // ========== 渲染应用统计 ==========
@@ -167,7 +330,10 @@ function renderAppList(apps) {
     return;
   }
 
-  appList.innerHTML = apps.map((app, index) => {
+  // 排序：已同步的排在上面，未同步的排在下面
+  const sortedApps = apps.slice().sort((a, b) => (a.synced === b.synced ? 0 : a.synced ? -1 : 1));
+
+  appList.innerHTML = sortedApps.map((app, index) => {
     const statusClass = app.synced ? 'synced' : 'not-synced';
     const statusIcon = app.synced ? '&#10003;' : '&#9675;';
     const statusText = app.synced ? '已同步' : '未同步';
@@ -178,10 +344,11 @@ function renderAppList(apps) {
 
     if (app.synced) {
       // 已同步的应用：显示进入应用 + 同步更新
-      // 指向本地原型页面
+      // 已生成原型页面 → 指向完整原型页面；尚未生成（仅创建未转换）→ 指向 01需求梳理/index.html 开发引导页，
+      // 避免访问不存在的原型页面 index.html 返回 404
       const entryUrl = (app.hasPrototype && app.prototypeUrl)
         ? app.prototypeUrl
-        : `http://127.0.0.1:8080/${encodeURIComponent(app.name)}/01需求梳理/原型页面/index.html`;
+        : `${HTTP_SERVICE}${HTTP_PROJECT_PREFIX}/${encodeURIComponent(app.name)}/01需求梳理/index.html`;
 
       actionsHtml = `
         <a href="${entryUrl}" class="btn btn-outline" target="_blank">&#128194; 进入应用</a>
@@ -206,7 +373,7 @@ function renderAppList(apps) {
     if (app.hasPrototype) metaParts.push('原型页面已生成');
 
     return `
-      <div class="app-card" id="app-${index}">
+      <div class="app-card${app.synced ? '' : ' app-card-not-synced'}" id="app-${index}">
         <div class="app-icon">&#128230;</div>
         <div class="app-info">
           <div class="app-name">
@@ -254,8 +421,8 @@ function syncAppToLocal(appName, appId, btnEl) {
   if (progressFill) progressFill.style.width = '0%';
 
   // 使用 SSE 流式接收同步进度
-  const sseUrl = `${SYNC_SERVICE}/sync-app-to-local-stream`;
-  const es = new EventSource(sseUrl + '?appName=' + encodeURIComponent(appName) + '&appId=' + encodeURIComponent(appId));
+  const sseUrl = `${SYNC_SERVICE}/sync-app-to-local-stream?${PROJECT_DIR_QUERY}`;
+  const es = new EventSource(sseUrl + '&appName=' + encodeURIComponent(appName) + '&appId=' + encodeURIComponent(appId));
   const syncLog = document.getElementById('syncLog');
   if (syncLog) syncLog.classList.add('show');
 
@@ -266,7 +433,7 @@ function syncAppToLocal(appName, appId, btnEl) {
     item.className = 'sync-log-item' + (type ? ' ' + type : '');
     item.textContent = message;
     syncLog.appendChild(item);
-    syncLog.scrollTop = syncLog.scrollHeight;
+    undefined
   }
 
   let formTotal = 0;
@@ -327,7 +494,7 @@ function syncAppToLocal(appName, appId, btnEl) {
       }
     } catch (_) {}
     es.close();
-    hideSyncModal();
+    showSyncModalCloseBtn();
     showToast(`同步失败：${errorMsg}`, 'error');
     btnEl.disabled = false;
     btnEl.innerHTML = originalText;
@@ -346,7 +513,7 @@ function syncAppToLocal(appName, appId, btnEl) {
       setTimeout(() => { hideSyncModal(); showToast(`应用【${appName}】同步完成！`, 'success'); }, 800);
       setTimeout(() => loadOrgInfo(), 1500);
     } else {
-      hideSyncModal();
+      showSyncModalCloseBtn();
       showToast(`同步失败：${data.error || '未知错误'}`, 'error');
       btnEl.disabled = false;
       btnEl.innerHTML = originalText;
@@ -361,7 +528,7 @@ function syncAppToLocal(appName, appId, btnEl) {
   setTimeout(() => {
     if (es.readyState !== EventSource.CLOSED) {
       es.close();
-      hideSyncModal();
+      showSyncModalCloseBtn();
       showToast('同步超时，请稍后重试', 'error');
       btnEl.disabled = false;
       btnEl.innerHTML = originalText;
@@ -374,12 +541,78 @@ function syncAppToLocal(appName, appId, btnEl) {
 }
 
 // ========== 备份应用数据 ==========
+// v1.9.0 增强版：点击后先弹出表单选择弹窗（默认全选），
+// 可只勾选部分表单备份（大数据量应用无需全量拉取），确认后执行
 async function backupAppData(appName, appId, btnEl) {
   if (!serviceRunning) {
     showToast('同步服务未启动，请在对话框中输入"启动宜搭服务"', 'error');
     return;
   }
 
+  // 拉取应用表单列表（用于选择弹窗）；拉不到则退回全量备份直接执行
+  let forms = [];
+  try {
+    const res = await fetch(`${SYNC_SERVICE}/app-forms?appName=${encodeURIComponent(appName)}&${PROJECT_DIR_QUERY}`);
+    const data = await res.json();
+    if (data.success && Array.isArray(data.forms)) forms = data.forms;
+  } catch (_) {} // 拉取失败走全量
+
+  if (!forms.length) {
+    executeBackup(appName, appId, btnEl, null);
+    return;
+  }
+
+  // 构建选择弹窗（自定义模态框，复用 confirm-overlay 风格）
+  const overlay = document.createElement('div');
+  overlay.className = 'confirm-overlay';
+  const itemsHtml = forms.map(f =>
+    `<label class="backup-form-item"><input type="checkbox" class="backup-form-check" value="${f.formUuid}" checked><span class="backup-form-name"></span></label>`
+  ).join('');
+  overlay.innerHTML = `<div class="confirm-box backup-select-box">
+    <div class="confirm-title backup-select-title">&#128190; 备份【${appName}】数据</div>
+    <div class="confirm-msg">选择要备份的表单（大应用可只勾选部分表单，避免全量拉取耗时过长）：</div>
+    <label class="backup-form-item backup-select-all"><input type="checkbox" id="backupSelectAll" checked><span class="backup-form-name">全选</span></label>
+    <div class="backup-form-list">${itemsHtml}</div>
+    <div class="backup-selected-count" id="backupSelectedCount"></div>
+    <div class="confirm-actions">
+      <button class="tool-btn" style="background:#999" onclick="this.closest('.confirm-overlay').remove()">取消</button>
+      <button class="tool-btn" id="backupStartBtn">开始备份</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+
+  // 填充表单名（textContent 防 XSS）
+  overlay.querySelectorAll('.backup-form-item:not(.backup-select-all) .backup-form-name').forEach((el, i) => {
+    el.textContent = forms[i].name;
+  });
+
+  const allChecks = Array.from(overlay.querySelectorAll('.backup-form-check'));
+  const selectAllEl = overlay.querySelector('#backupSelectAll');
+  const countEl = overlay.querySelector('#backupSelectedCount');
+  const updateCount = () => {
+    const n = allChecks.filter(c => c.checked).length;
+    countEl.textContent = `已选 ${n} / ${forms.length} 个表单`;
+    selectAllEl.checked = n === forms.length;
+    overlay.querySelector('#backupStartBtn').disabled = n === 0;
+  };
+  allChecks.forEach(c => c.addEventListener('change', updateCount));
+  selectAllEl.addEventListener('change', () => {
+    allChecks.forEach(c => { c.checked = selectAllEl.checked; });
+    updateCount();
+  });
+  updateCount();
+
+  overlay.querySelector('#backupStartBtn').onclick = () => {
+    const selectedUuids = allChecks.filter(c => c.checked).map(c => c.value);
+    const isAll = selectedUuids.length === forms.length;
+    overlay.remove();
+    // 全选时不传 forms（走原全量路径，行为与旧版完全一致）
+    executeBackup(appName, appId, btnEl, isAll ? null : selectedUuids);
+  };
+}
+
+// 实际执行备份请求
+async function executeBackup(appName, appId, btnEl, selectedForms) {
   const originalText = btnEl.innerHTML;
   btnEl.disabled = true;
   btnEl.innerHTML = '&#8987; 备份中...';
@@ -388,14 +621,15 @@ async function backupAppData(appName, appId, btnEl) {
   const formatSelect = btnEl.parentElement.querySelector('.backup-format-select');
   const format = formatSelect ? formatSelect.value : 'json';
 
-  showSyncModal(`正在备份【${appName}】数据...`);
-  document.getElementById('progressText').textContent = `正在以 ${format.toUpperCase()} 格式查询表单数据，请稍候...`;
+  const scopeInfo = selectedForms ? `（${selectedForms.length} 个指定表单）` : '（全部表单）';
+  showSyncModal(`正在备份【${appName}】数据${scopeInfo}...`);
+  document.getElementById('progressText').textContent = `正在以 ${format.toUpperCase()} 格式查询表单数据${scopeInfo}，请稍候...`;
 
   try {
     const res = await fetch(`${SYNC_SERVICE}/backup-app-data`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ appName, appId, format })
+      body: JSON.stringify({ appName, appId, format, projectDir: PROJECT_NAME, ...(selectedForms ? { forms: selectedForms } : {}) })
     });
 
     const data = await res.json();
@@ -403,15 +637,16 @@ async function backupAppData(appName, appId, btnEl) {
     if (data.success) {
       hideSyncModal();
       const recordInfo = data.totalRecords > 0 ? `，共 ${data.totalRecords} 条记录` : '（表单暂无数据）';
-      showToast(`应用【${appName}】备份完成${recordInfo}`, 'success');
+      const formInfo = data.backupMode === 'selected' ? `【${data.totalForms} 个表单】` : '';
+      showToast(`应用【${appName}】${formInfo}备份完成${recordInfo}`, 'success');
     } else {
-      hideSyncModal();
+      showSyncModalCloseBtn();
       showToast(`备份失败：${data.error || '未知错误'}`, 'error');
       btnEl.disabled = false;
       btnEl.innerHTML = originalText;
     }
   } catch (error) {
-    hideSyncModal();
+    showSyncModalCloseBtn();
     showToast(`请求失败：${error.message}`, 'error');
     btnEl.disabled = false;
     btnEl.innerHTML = originalText;
@@ -451,7 +686,7 @@ async function doDeleteLocalApp(appName, appId, btnEl) {
     const res = await fetch(`${SYNC_SERVICE}/delete-local-app`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ appName, appId })
+      body: JSON.stringify({ appName, appId, projectDir: PROJECT_NAME })
     });
     const data = await res.json();
 
@@ -501,7 +736,7 @@ async function refreshLoginState(btnEl) {
     item.className = 'sync-log-item' + (type ? ' ' + type : '');
     item.textContent = message;
     syncLog.appendChild(item);
-    syncLog.scrollTop = syncLog.scrollHeight;
+    undefined
   };
 
   const setProgress = (percent, text) => {
@@ -512,7 +747,9 @@ async function refreshLoginState(btnEl) {
     if (progressText && text) progressText.textContent = text;
   };
 
-  const es = new EventSource(`${SYNC_SERVICE}/refresh-login`);
+  // v1.8.1: 携带 projectDir — 否则服务端 fallback 到 STATIC_ROOT，Cookie 写错位置，
+  // 且无法读取项目历史组织做「登录组织校验」（曾导致登录到其他组织后同步全部报登录失效）
+  const es = new EventSource(`${SYNC_SERVICE}/refresh-login${PROJECT_DIR_QUERY ? '?' + PROJECT_DIR_QUERY : ''}`);
   let closed = false;
 
   const finish = () => {
@@ -552,7 +789,12 @@ async function refreshLoginState(btnEl) {
       showToast('刷新失败，请查看弹窗日志', 'error');
     }
     try { await loadLoginState(); } catch (err) {}
-    setTimeout(hideSyncModal, 1200);
+    // 成功才自动关闭；失败保留日志，需手动关闭
+    if (d.success) {
+      setTimeout(hideSyncModal, 1200);
+    } else {
+      showSyncModalCloseBtn();
+    }
   });
 
   es.addEventListener('error', (e) => {
@@ -563,47 +805,170 @@ async function refreshLoginState(btnEl) {
     setProgress(100, '❌ ' + msg);
     addLog('❌ ' + msg, 'error');
     showToast(`刷新失败：${msg}`, 'error');
-    setTimeout(hideSyncModal, 1500);
+    // 失败不自动关闭，弹窗保留日志
+    showSyncModalCloseBtn();
   });
 }
 
-// ========== 刷新组织应用信息 ==========
-async function refreshOrgApps(btnEl) {
+// ========== 初始化/刷新组织应用信息（共享底层） ==========
+// v1.8.2: 抽取共享函数 _runOrgInit，供「初始化组织信息」（一次性，组织名称位置）与
+//         「刷新应用信息」（应用列表顶部，常规同步）两个入口复用。
+//         两者调用同一后端接口 /refresh-org-apps，仅 UI 文案与触发场景不同。
+async function _runOrgInit(btnEl, opts) {
   if (!serviceRunning) {
     showToast('同步服务未启动，请在对话框中输入"启动宜搭服务"', 'error');
     return;
   }
 
+  const o = Object.assign({
+    modalTitle: '正在刷新应用信息',
+    startLog: '开始刷新应用信息',
+    progressText: '正在从宜搭同步应用列表，请稍候...',
+    pendingBtnHtml: '&#8987; 刷新中...',
+    doneProgressText: '✅ 应用信息刷新完成',
+    doneLogText: '✅ 应用信息刷新完成',
+    doneToast: '应用信息刷新完成',
+    failProgressText: '❌ 刷新失败',
+    failToastPrefix: '刷新失败',
+  }, opts || {});
+
   const originalText = btnEl.innerHTML;
   btnEl.disabled = true;
-  btnEl.innerHTML = '&#8987; 刷新中...';
+  btnEl.innerHTML = o.pendingBtnHtml;
 
   // 灰化整个 portal 内容区
   const container = document.querySelector('.container');
   if (container) container.classList.add('is-busy');
 
-  showToast('正在从宜搭同步应用列表...', 'info');
+  // 打开执行过程观察弹窗
+  showSyncModal(o.modalTitle);
+  const progressText = document.getElementById('progressText');
+  const progressFill = document.getElementById('progressFill');
+  const syncLog = document.getElementById('syncLog');
+  if (syncLog) syncLog.classList.add('show');
 
-  try {
-    const res = await fetch(`${SYNC_SERVICE}/refresh-org-apps`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' }
-    });
-    const data = await res.json();
+  const addLog = (message, type) => {
+    if (!syncLog) return;
+    const item = document.createElement('div');
+    item.className = 'sync-log-item' + (type ? ' ' + type : '');
+    item.textContent = message;
+    syncLog.appendChild(item);
+    undefined//
+  };
 
-    if (data.success) {
-      showToast('应用信息刷新完成', 'success');
-      await loadOrgInfo();
-    } else {
-      showToast('刷新失败：' + (data.error || '未知错误'), 'error');
+  const setProgress = (percent, text) => {
+    if (percent !== null && percent !== undefined && progressFill) {
+      progressFill.classList.add('determinate');
+      progressFill.style.width = percent + '%';
     }
-  } catch (error) {
-    showToast('请求失败：' + error.message, 'error');
-  } finally {
+    if (progressText && text) progressText.textContent = text;
+  };
+
+  addLog(o.startLog, 'info');
+  setProgress(null, o.progressText);
+
+  const es = new EventSource(`${SYNC_SERVICE}/refresh-org-apps?${PROJECT_DIR_QUERY}`);
+  let closed = false;
+
+  const finish = () => {
+    if (closed) return;
+    closed = true;
+    try { es.close(); } catch (e) {}
     if (container) container.classList.remove('is-busy');
     btnEl.disabled = false;
     btnEl.innerHTML = originalText;
-  }
+  };
+
+  es.addEventListener('log', (e) => {
+    let d = {};
+    try { d = JSON.parse(e.data || '{}'); } catch (err) {}
+    addLog(d.message || '', d.type || 'info');
+    setProgress(null, (d.message || '').slice(0, 48));
+  });
+
+  es.addEventListener('done', async (e) => {
+    let d = { success: false };
+    try { d = JSON.parse(e.data || '{}'); } catch (err) {}
+    finish();
+    if (d.success) {
+      setProgress(100, o.doneProgressText);
+      addLog(o.doneLogText, 'success');
+      // 展示每个应用的变化情况（新增 / 删除 / 保持不变）
+      const changes = d.changes;
+      if (changes && typeof changes === 'object') {
+        const addedNames = changes.addedNames || [];
+        const removedNames = changes.removedNames || [];
+        const unchangedNames = changes.unchangedNames || [];
+        if (addedNames.length) {
+          addLog(`🆕 新增应用：${addedNames.join('、')}`, 'success');
+        }
+        if (removedNames.length) {
+          addLog(`🗑️ 删除应用：${removedNames.join('、')}`, 'error');
+        }
+        if (unchangedNames.length) {
+          addLog(`➖ 保持不变：${unchangedNames.join('、')}`, 'info');
+        }
+        if (!addedNames.length && !removedNames.length && !unchangedNames.length) {
+          addLog('未检测到应用变化', 'info');
+        }
+      }
+      showToast(o.doneToast, 'success');
+      // 成功才自动关闭
+      setTimeout(hideSyncModal, 1500);
+      try { await loadOrgInfo(); } catch (err) {}
+    } else {
+      setProgress(100, o.failProgressText);
+      addLog(o.failProgressText + '：' + (d.error || '未知错误'), 'error');
+      showToast(o.failToastPrefix + '：' + (d.error || '未知错误'), 'error');
+      // 失败不自动关闭，弹窗保留日志
+      showSyncModalCloseBtn();
+    }
+  });
+
+  es.addEventListener('error', (e) => {
+    if (closed) return;
+    let msg = '连接中断';
+    try { const d = JSON.parse(e.data || '{}'); if (d.error) msg = d.error; } catch (err) {}
+    finish();
+    setProgress(100, '❌ ' + msg);
+    addLog('❌ ' + msg, 'error');
+    showToast(`${o.failToastPrefix}：${msg}`, 'error');
+    // 失败不自动关闭，弹窗保留日志
+    showSyncModalCloseBtn();
+  });
+}
+
+// ========== 刷新组织应用信息（应用管理 Tab 顶部按钮） ==========
+// 适用：已有组织数据后，同步宜搭端最新的应用列表（组织信息变更也会一并更新）
+async function refreshOrgApps(btnEl) {
+  await _runOrgInit(btnEl, {
+    modalTitle: '正在刷新应用信息',
+    startLog: '开始刷新应用信息',
+    progressText: '正在从宜搭同步应用列表，请稍候...',
+    pendingBtnHtml: '&#8987; 刷新中...',
+    doneProgressText: '✅ 应用信息刷新完成',
+    doneLogText: '✅ 应用信息刷新完成',
+    doneToast: '应用信息刷新完成',
+    failProgressText: '❌ 刷新失败',
+    failToastPrefix: '刷新失败',
+  });
+}
+
+// ========== 初始化组织信息（组织名称位置按钮，一次性） ==========
+// v1.8.2: 首次进入时组织名称位置显示此按钮，点击后完成首次登录+组织信息+应用列表抓取。
+//         完成后调用 loadOrgInfo 重载，按钮自动消失，组织名称显示。
+async function initOrgInfo(btnEl) {
+  await _runOrgInit(btnEl, {
+    modalTitle: '正在初始化组织信息',
+    startLog: '开始初始化组织信息（首次登录 + 抓取组织信息 + 应用列表）',
+    progressText: '正在登录宜搭并同步组织信息，请稍候...',
+    pendingBtnHtml: '&#8987; 初始化中...',
+    doneProgressText: '✅ 组织信息初始化完成',
+    doneLogText: '✅ 组织信息初始化完成，正在刷新页面...',
+    doneToast: '组织信息初始化完成',
+    failProgressText: '❌ 初始化失败',
+    failToastPrefix: '初始化失败',
+  });
 }
 
 // ========== 弹窗控制 ==========
@@ -615,12 +980,45 @@ function showSyncModal(title) {
   if (fill) { fill.style.width = '0%'; fill.classList.remove('determinate'); }
   const log = document.getElementById('syncLog');
   if (log) { log.innerHTML = ''; log.classList.remove('show'); }
+  const closeBtn = document.getElementById('syncModalClose');
+  if (closeBtn) closeBtn.style.display = 'none';
   modal.style.display = 'flex';
+}
+
+// 失败/报错时：弹窗保留日志不自动关闭，仅显示手动关闭按钮
+function showSyncModalCloseBtn() {
+  const closeBtn = document.getElementById('syncModalClose');
+  if (closeBtn) closeBtn.style.display = 'block';
 }
 
 function hideSyncModal() {
   document.getElementById('syncModal').style.display = 'none';
 }
+
+
+// ========== 错误警告横幅（仅当有错误时显示） ==========
+let errorBannerAdded = false;
+function showErrorBanner(errorMessage) {
+  if (errorBannerAdded) return;
+  errorBannerAdded = true;
+  
+  const banner = document.createElement('div');
+  banner.id = 'error-banner';
+  banner.className = 'error-warning-banner';
+  banner.innerHTML = 
+    '<span class="banner-icon">&#9888;&#65039;</span>' +
+    '<span class="banner-text">检测到错误</span>' +
+    '<button class="btn btn-dismiss-error" onclick="dismissErrorBanner()">关闭</button>';
+  
+  document.body.insertBefore(banner, document.body.firstChild);
+}
+
+function dismissErrorBanner() {
+  const banner = document.getElementById('error-banner');
+  if (banner) banner.remove();
+  errorBannerAdded = false;
+}
+
 
 // ========== Toast 提示 ==========
 function showToast(message, type = 'info') {
@@ -629,9 +1027,11 @@ function showToast(message, type = 'info') {
   toast.className = `toast ${type}`;
   toast.style.display = 'block';
 
+  // 错误信息停留更长时间（8 秒），成功信息正常 3 秒
+  const duration = type === 'error' ? 8000 : 3000;
   setTimeout(() => {
     toast.style.display = 'none';
-  }, 3000);
+  }, duration);
 }
 
 // ========== 复制提示词 ==========

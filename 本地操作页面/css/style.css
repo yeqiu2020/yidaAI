@@ -29,49 +29,73 @@ body {
   min-height: 100vh;
 }
 
-/* ========== 服务状态指示灯 ========== */
-.service-indicator {
+/* ========== 服务异常横幅（仅同步服务未运行时显示，正常时零噪音） ========== */
+.service-down-banner {
   position: fixed;
-  top: 16px;
-  right: 16px;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2000;
   display: flex;
   align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border-radius: 20px;
-  background: var(--card-bg);
-  box-shadow: var(--shadow);
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  background: var(--warning-bg);
+  border-bottom: 1px solid var(--warning);
+  color: #874d00;
   font-size: 13px;
-  z-index: 100;
-  transition: all 0.3s;
+  animation: bannerSlideDown 0.3s ease;
 }
 
-.indicator-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--text-muted);
-  transition: background 0.3s;
+.service-down-banner .banner-icon { font-size: 15px; }
+.service-down-banner .banner-text { margin-right: 4px; }
+
+/* v1.9.0: 横幅内的「启动宜搭服务」按钮 */
+.btn-start-service {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: 8px;
+  padding: 3px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  background: #fa8c16;
+  border: 1px solid #fa8c16;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+.btn-start-service:hover {
+  background: #d4780d;
+  border-color: #d4780d;
+}
+.btn-start-service:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
 }
 
-.service-indicator.running .indicator-dot { background: var(--success); }
-.service-indicator.stopped .indicator-dot { background: var(--error); }
-.service-indicator.checking .indicator-dot { background: var(--warning); animation: pulse 1s infinite; }
+/* 横幅出现时页面整体下移，避免遮挡顶部内容 */
+body.has-service-banner { padding-top: 40px; }
 
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
+@keyframes bannerSlideDown {
+  from { transform: translateY(-100%); }
+  to { transform: translateY(0); }
 }
 
 /* ========== 主容器 ========== */
 .container {
-  max-width: 900px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 40px 24px;
 }
 
 /* ========== 组织信息头部 ========== */
 .org-header {
+  position: relative;
   text-align: center;
   padding: 40px 24px;
   background: linear-gradient(135deg, #1677ff 0%, #4096ff 100%);
@@ -90,6 +114,48 @@ body {
   font-size: 28px;
   font-weight: 600;
   margin-bottom: 8px;
+}
+
+/* v1.7.0: 服务启动目录徽标（区分不同项目文件夹，防止误操作） */
+.org-dir-badge {
+  display: inline-block;
+  vertical-align: middle;
+  margin-left: 8px;
+  padding: 2px 10px;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.6;
+  color: #1677ff;
+  background: #fff;
+  border-radius: 999px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  cursor: default;
+}
+
+/* v1.8.0: 重启服务按钮（内嵌在 header 中，右上角） */
+.btn-restart-service {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 10;
+  padding: 6px 14px;
+  font-size: 13px;
+  color: #1677ff;
+  background: #fff;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.15);
+  transition: all 0.2s;
+}
+.btn-restart-service:hover {
+  background: #f0f5ff;
+  transform: translateY(-1px);
+}
+.btn-restart-service:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
 }
 
 .org-meta {
@@ -180,6 +246,11 @@ body {
 .app-card:hover {
   border-color: var(--primary);
   box-shadow: 0 4px 16px rgba(22,119,255,0.12);
+}
+
+/* 未同步的应用：背景稍微加灰，与已同步区分 */
+.app-card.app-card-not-synced {
+  background: #fafbfc;
 }
 
 .app-icon {
@@ -315,6 +386,37 @@ body {
 
 .btn-outline:hover:not(:disabled) {
   background: var(--primary-bg);
+}
+
+/* v1.8.2: 初始化组织信息按钮（组织名称位置，未初始化时显示，醒目引导） */
+.btn-init-org {
+  background: var(--primary);
+  color: #fff;
+  border: 1px solid var(--primary);
+  padding: 8px 20px;
+  font-size: 16px;
+  font-weight: 600;
+  border-radius: 8px;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(22, 119, 255, 0.35);
+  animation: init-btn-pulse 2s ease-in-out infinite;
+  transition: all 0.2s;
+}
+.btn-init-org:hover:not(:disabled) {
+  background: var(--primary-hover);
+  border-color: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.5);
+}
+.btn-init-org:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  animation: none;
+  transform: none;
+}
+@keyframes init-btn-pulse {
+  0%, 100% { box-shadow: 0 2px 8px rgba(22, 119, 255, 0.35); }
+  50% { box-shadow: 0 2px 16px rgba(22, 119, 255, 0.65); }
 }
 
 .btn-success {
@@ -575,4 +677,53 @@ body {
   font-size: 13px;
   border-top: 1px solid var(--border);
   margin-top: 16px;
+}
+
+
+/* ========== 错误警告横幅 ========== */
+.error-warning-banner {
+  background: linear-gradient(135deg, #f44336 0%, #d32f2f 100%);
+  color: white;
+  padding: 16px 24px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+  font-size: 14px;
+  animation: slideDown 0.3s ease-out;
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.error-warning-banner .banner-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.error-warning-banner .banner-text {
+  flex: 1;
+  font-weight: 600;
+}
+
+.error-warning-banner .btn-dismiss-error {
+  background: white;
+  color: #f44336;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.error-warning-banner .btn-dismiss-error:hover {
+  background: #ffebee;
+  transform: scale(1.05);
 }

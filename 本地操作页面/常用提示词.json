@@ -6,11 +6,6 @@
       "skill": "project-creator"
     },
     {
-      "label": "流程图转字段清单",
-      "prompt": "「调用技能flow-to-form」将流程图【粘贴图片路径】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。",
-      "skill": "flow-to-form"
-    },
-    {
       "label": "Excel转字段清单",
       "prompt": "「调用技能excel-to-form」将 Excel【xxx】转换成本地字段清单和规则清单，生成到【01需求梳理】目录下。应用的场景是电子产品的采购、库管和销售。",
       "skill": "excel-to-form"
@@ -95,40 +90,15 @@
   ],
   "业务规则": [
     {
-      "label": "INSERT新增（不支持插入子表）",
-      "prompt": "「调用技能business-rule」创建一个业务关联规则：当【XXX】表单提交时，向【YYY】表单插入（INSERT）一条新数据，字段映射如下：",
-      "skill": "business-rule"
-    },
-    {
-      "label": "UPDATE更新",
-      "prompt": "「调用技能business-rule」创建一个业务关联规则：当【XXX】表单提交时，更新(UPDATE)【YYY】表单中符合条件的记录，条件字段和更新字段如下：",
-      "skill": "business-rule"
-    },
-    {
-      "label": "DELETE删除",
-      "prompt": "「调用技能business-rule」创建一个业务关联规则：当【XXX】表单提交时，删除(DELETE)【YYY】表单中符合条件的记录，条件如下：",
-      "skill": "business-rule"
-    },
-    {
-      "label": "UPSERT新增或更新",
-      "prompt": "「调用技能business-rule」创建一个业务关联规则：当【XXX】表单提交时，UPSERT更新或插入【YYY】表单（存在则更新，不存在则新增），条件字段和映射字段如下：",
+      "label": "新增/更新/删除/更新或新增",
+      "prompt": "「调用技能business-rule」在【XXX】内创建X个业务关联规则：",
       "skill": "business-rule"
     }
   ],
   "集成自动化": [
     {
-      "label": "创建表单触发自动化",
-      "prompt": "「调用技能integration」创建一个集成自动化：当【XXX】表单提交时触发，执行以下操作：",
-      "skill": "integration"
-    },
-    {
-      "label": "查看自动化列表",
-      "prompt": "「调用技能integration」查看【XXX】应用的集成自动化列表",
-      "skill": "integration"
-    },
-    {
-      "label": "启停自动化",
-      "prompt": "「调用技能integration」启用/停用【XXX】应用的自动化规则【YYY】",
+      "label": "集成自动化",
+      "prompt": "「调用技能integration」在【XXX】内创建X个集成自动化：",
       "skill": "integration"
     }
   ],
@@ -191,6 +161,38 @@
       "label": "Canvas页面开发",
       "prompt": "「调用技能custom-page」使用Canvas代码画布开发一个现代化的React18自定义页面，支持hooks状态管理和ECharts可视化",
       "skill": "custom-page"
+    }
+  ],
+  "篱笆咨询": [
+    {
+      "label": "问题诊断入口",
+      "prompt": "「调用技能yida-consultant」宜搭顾问，帮我按“分类→检索→分析→解答→验证→沉淀”流程诊断这个问题：【粘贴问题现象、错误信息、公式/代码/配置截图】。先不要修改线上配置，如需验证请先说明排查方式和风险。",
+      "skill": "yida-consultant"
+    },
+    {
+      "label": "公式不生效诊断",
+      "prompt": "「调用技能yida-consultant」这个宜搭公式为什么不生效？公式是：【粘贴公式】；字段类型和字段ID是：【粘贴组件ID清单或截图】。请先判断根因，给出正确写法和验证方式，不要通过API修改已有字段。",
+      "skill": "yida-consultant"
+    },
+    {
+      "label": "JS代码报错诊断",
+      "prompt": "「调用技能yida-consultant」这段宜搭JS代码报错，帮我诊断原因。代码如下：【粘贴代码】；错误信息如下：【粘贴报错】；运行位置是：【表单动作/字段校验/自定义页面/集成自动化脚本】。请给出修复写法和验证建议。",
+      "skill": "yida-consultant"
+    },
+    {
+      "label": "业务规则不生效诊断",
+      "prompt": "「调用技能yida-consultant」这个宜搭业务规则为什么不生效？规则目标是：【描述INSERT/UPDATE/DELETE/UPSERT场景】；触发表单和目标表单是：【表单名/UUID】；字段映射和条件是：【粘贴配置】。请先只读排查，并说明是否需要同步规则或Schema。",
+      "skill": "yida-consultant"
+    },
+    {
+      "label": "集成自动化不执行诊断",
+      "prompt": "「调用技能yida-consultant」集成自动化保存成功但不执行，帮我诊断。应用是：【appType】；流程Code是：【processCode】；触发表单是：【formUuid】；现象是：【粘贴执行现象或日志】。请先建议只读体检命令，不要手写processJson/viewJson。",
+      "skill": "yida-consultant"
+    },
+    {
+      "label": "连接器调用失败诊断",
+      "prompt": "「调用技能yida-consultant」宜搭连接器调用失败，帮我诊断原因。连接器动作是：【动作名称】；接口信息是：【URL/方法/鉴权方式】；报错信息是：【粘贴401/403/超时/返回体】。请说明可能根因、验证方式和是否需要重新配置连接器。",
+      "skill": "yida-consultant"
     }
   ],
   "数据架构": [
