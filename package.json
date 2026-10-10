@@ -1,6 +1,6 @@
 {
   "name": "ai-assistant",
-  "version": "2.0.2",
+  "version": "2.0.37",
   "description": "宜搭AI助手 - 统一依赖管理",
   "scripts": {
     "prepare": "node scripts/install-git-hooks.js",

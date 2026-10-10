@@ -1461,7 +1461,7 @@
         const data = await res.json();
         if (resultEl) {
           resultEl.className = 'tool-result show success';
-          resultEl.textContent = `HTTP服务: 运行中 (端口 8080)\n同步服务: 运行中 (端口 3457)\n版本: ${data.version || '未知'}\n工作目录: ${data.cwd || '未知'}`;
+          resultEl.textContent = `HTTP服务: 运行中 (端口 8080)\n同步服务: 运行中 (端口 3457)\n项目版本: ${data.projectVersion || '未知'}\n同步服务版本: v${data.version || '未知'}\n工作目录: ${data.cwd || '未知'}`;
         }
       } catch (e) {
         if (resultEl) { resultEl.className = 'tool-result show error'; resultEl.textContent = '服务未运行，请在对话框输入"启动宜搭服务"'; }
