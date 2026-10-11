@@ -21,7 +21,11 @@ const HTTP_SERVICE = 'http://127.0.0.1:8080';
 // 请求同步服务(3457)/静态服务(8080)时以该值定位到当前项目，避免串到其他项目的数据。
 function getProjectName() {
   const segments = window.location.pathname.split('/').filter(Boolean);
-  return segments.length > 0 ? decodeURIComponent(segments[0]) : '';
+  if (segments.length === 0) return '';
+  // 单项目布局（静态根=项目根）：URL 无项目段、直接以 /本地操作页面/ 开头，此时不提取项目名，
+  // 同步服务端按 referer/cwd 兜底定位项目
+  if (segments[0] === '本地操作页面') return '';
+  return decodeURIComponent(segments[0]);
 }
 const PROJECT_NAME = getProjectName();
 // projectDir 查询串（相对静态根的项目目录名），用于同步服务 resolveProjectDir
