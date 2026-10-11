@@ -11,7 +11,7 @@
  * - 布局：公司切换条（置顶）→ KPI 主次分明（本月销售主卡）→ 高频入口大卡 + 分组收拢 → 最近订单动态 → 报表分析区
  * 数据源：销售订单/采购订单（近 100 条本地聚合本月口径与最近动态）、
  *         产品信息/客户信息/供应商信息/实时库存（totalCount）
- * 版本：v1.1.0 (2026-10-12)
+ * 版本：v1.1.1 (2026-10-12)
  * - v1.0.0：首版发布
  * - v1.0.1：修复 automatic runtime 产物生成 require 导致页面报错（配合 publish-page.js classic 修复，见踩坑 P-19）
  * - v1.0.2：isMobile 基础上补充视口宽度判断（≤768px 走紧凑布局，兼容 PC 拖窄窗口）
@@ -20,6 +20,7 @@
  * - v1.0.4：最近销售订单行调整主次——客户名称为主行（14px 加粗），订单编号+日期为次行小字
  * - v1.1.0：顶部新增公司切换条（新鑫科技/智联科技/致联科技 三档 Tab），选中公司写入 localStorage 持久化；
  *            「新建」类入口（submission 发起页）URL 自动携带 ?company= 参数，供表单侧默认归属使用
+ * - v1.1.1：按用户演示范围要求，?company= 参数收敛为仅「新建销售订单」入口携带，其余入口保持原样不带参数
  */
 
 var APP_TYPE = 'APP_NVNNBIVSF59IKTEP1L1H';
@@ -377,12 +378,15 @@ export function openForm(formUuid) {
   window.open(url, '_blank');
 }
 
-// 表单提交页（发起新单据）：{origin}/{appType}/submission/{formUuid}?company=当前公司
-// ?company= 由表单侧 didMount 读取并填入「业务所属公司」字段（表单侧接入前该参数不生效，无副作用）
+// 表单提交页（发起新单据）：{origin}/{appType}/submission/{formUuid}
+// v1.1.1：仅销售订单入口携带 ?company=（公司归属演示范围，销售订单 didMount 读取并填入
+// 「业务所属公司」）；其他入口保持原样不带参数
 export function openCreate(formUuid) {
   if (!formUuid) return;
-  var url = window.location.origin + '/' + APP_TYPE + '/submission/' + formUuid
-    + '?company=' + encodeURIComponent(getCurrentCompanyName());
+  var url = window.location.origin + '/' + APP_TYPE + '/submission/' + formUuid;
+  if (formUuid === UUIDS.saleOrder) {
+    url += '?company=' + encodeURIComponent(getCurrentCompanyName());
+  }
   window.open(url, '_blank');
 }
 
