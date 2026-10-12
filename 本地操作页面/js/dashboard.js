@@ -1,5 +1,7 @@
 /**
  * 宜搭组织管理门户 - Dashboard JS
+ * v1.10.0: 单项目布局适配——URL 直接以 /本地操作页面/ 开头（静态根=项目根、无项目段）时
+ *         不再提取项目名，请求不携带 projectDir，由同步服务端按 referer/cwd 兜底定位项目
  * v1.9.0: 服务异常横幅增加「启动宜搭服务」按钮——同步服务(3457)未启动时不再提示"去对话框输入"，
  *         改为直接点击按钮，通过 8080 静态服务的 /__yida_start_service 接口拉起服务，无需 AI 介入
  * v1.8.3: 应用管理列表优化——已同步的应用排在前面、未同步的排在后面；未同步应用卡片背景轻微加灰以作区分
@@ -21,7 +23,11 @@ const HTTP_SERVICE = 'http://127.0.0.1:8080';
 // 请求同步服务(3457)/静态服务(8080)时以该值定位到当前项目，避免串到其他项目的数据。
 function getProjectName() {
   const segments = window.location.pathname.split('/').filter(Boolean);
-  return segments.length > 0 ? decodeURIComponent(segments[0]) : '';
+  if (segments.length === 0) return '';
+  // 单项目布局（静态根=项目根）：URL 无项目段、直接以 /本地操作页面/ 开头，此时不提取项目名，
+  // 同步服务端按 referer/cwd 兜底定位项目
+  if (segments[0] === '本地操作页面') return '';
+  return decodeURIComponent(segments[0]);
 }
 const PROJECT_NAME = getProjectName();
 // projectDir 查询串（相对静态根的项目目录名），用于同步服务 resolveProjectDir

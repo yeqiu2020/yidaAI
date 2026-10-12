@@ -1,0 +1,343 @@
+---
+description: 宜搭集成自动化（逻辑流）生成硬规则，防止AI产出保存成功但不工作的废流
+alwaysApply: true
+---
+
+<!-- 本文件由 scripts/sync-hard-rules.js 自动生成，请勿直接修改。 -->
+<!-- 权威源: .agents/skills/integration/references/集成自动化硬规则.md，改完源文件后运行 node scripts/sync-hard-rules.js -->
+
+# 宜搭集成自动化（逻辑流）生成硬规则【对所有 AI 强制生效】
+
+
+> 背景事故：曾有 AI 手工拼配置创建"采购入库同步库存"逻辑流，产出空壳获取节点、
+> 把序列化 token "processVar" 当字面量存进匹配条件、公式为空、数据流断链——
+> 保存全部"成功"，但流程永远不工作。宜搭 saveProcess 接口不校验配置完整性，
+> **保存成功 ≠ 配置正确**。以下规则用于从根源杜绝此类废流。
+
+1.**【强制】禁止手写 processJson/viewJson，禁止直接调用 saveProcess.json 接口，禁止用浏览器自动化拖节点拼流程。** 创建/修改集成自动化只允许通过以下 CLI（经过回归测试的构建器，自带保存前体检门禁）：
+   - 创建：`node .agents/skills/integration/scripts/integration-create.js create <appType> <formUuid> "<名称>" [参数]`
+   - 回读：`node .agents/skills/integration/scripts/integration-get.js <appType> <processCode>`
+   - 体检：`node .agents/skills/integration/scripts/integration-validate.js <appType> <processCode>`
+   - 列表：`node .agents/skills/integration/scripts/integration-list.js list <appType>`
+   参数详情见 `.agents/skills/integration/SKILL.md`。
+
+2.**【强制】生成前必须先拿到真实 ID，禁止编造任何 formUuid / fieldId / appType。**
+   - 应用ID 从 `组织及应用信息.md` 读取；表单字段ID 必须先同步 Schema（get-schema skill 或 CLI 会自动抓取校验）。
+   - 出现 `FORM-XXX`、`textField_xxx` 这类猜测值 = 直接违规，门禁会拒绝保存。
+
+3.**【强制】`processVar` / `literal` / `formula` 是值类型（valueType）的枚举 token，不是数据值。**
+   - 引用触发表单字段：valueType=processVar，值 = 真实字段引用（如 `trigger_textField_abc`）。
+   - 固定值比较：valueType=literal，值 = 真实业务值（如 `上海仓库`）。
+   - 把 token 本身写进值槽位（例如 匹配条件 = 字面量 "processVar"）会导致条件永远匹配不到。
+
+4.**【强制】保存/发布后必须回读验证闭环，不允许以"保存成功"作为完成依据：**
+   - 第一步 `integration-get.js` 回读节点树，确认节点数、类型、串联与预期一致；
+   - 第二步 `integration-validate.js` 体检，必须输出"体检通过"；有 [ERROR] 必须修复重建；
+   - 有条件的场景再用 data-tester 提交一条测试数据，用 `integration-check.js` 查执行日志。
+
+5.**【强制】典型场景"单据审批通过后同步库存"的标准形态（不要自由发挥节点图）：**
+   流程事件触发（审批通过）→ 更新数据节点（direct_form 直接更新：主条件=字段引用匹配仓库/商品，
+   更新规则=公式累加数量，noneOperation=add 实现 upsert）→ 结束。
+   **直接更新模式下不需要"获取单条数据"前置节点**；只有 `--update-type node` 才需要获取节点。
+   **标准 CLI 命令模板（照抄替换真实 ID 即可，不要自由发挥）：**
+   ```
+   node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后同步更新" \
+     --events processFinish --approval-actions agree \
+     --update-form-uuid FORM-TARGET \
+     --update-condition "textField_target_key1:目标匹配字段1:textField_trig_key1:TextField:Equal::processVar" \
+     --update-condition "textField_target_key2:目标匹配字段2:textField_trig_key2:TextField:Equal::processVar" \
+     --update-assignment "numberField_target_val:column:#{FORM-TARGET/numberField_target_val}+#{numberField_trig_val}" \
+     --update-assignment "textField_target_key1:processVar:textField_trig_key1" \
+     --update-assignment "textField_target_key2:processVar:textField_trig_key2" \
+     --update-none-operation add --publish
+   ```
+   ⚠️ 上面就是完整命令，3 节点（触发→更新→结束），不需要 --cycle、不需要 --data-form-uuid、不需要获取节点。
+
+5.1.**【强制】方案选择判别标准是「动作类型」，不是「数据拓扑」（选错=白建逻辑流）：**
+   - **✅ 数据同步/累加/upsert（更新或新增另一张表的数据）→ 一律 direct_form 更新数据节点（3 节点），无论触发数据来自主表字段还是子表明细行**：
+     - 目标是主表字段：`--update-form-uuid` + `--update-condition` + `--update-assignment`（CLI 模板见上方第 5 条）；
+     - 目标是子表行：追加 `--update-sub-source-id` + `--update-sub-condition`；
+     - 引擎在 direct_form 模式下自动对触发子表明细行逐行迭代匹配（含"子表明细→目标主表记录"，如采购入库.入库明细→库存信息主表，已实际验证），**任何数据同步场景禁止用循环容器**。
+   - **⚠️ 循环容器（`--cycle`）仅用于"逐条执行非更新类动作"**：即需要对「获取多条数据」的每条结果分别执行**消息通知、连接器调用、发起审批**等 direct_form 无法表达的动作时才使用；它不是数据同步的备选方案。**"发起审批" ≠ "新增数据"**：发起审批是创建流程实例（审批流程），不是更新/新增数据记录，属于"非更新类动作"，必须用循环容器+发起审批节点（InitiateApprovalNode），禁止用 direct_form 更新数据节点。
+   - **历史事故（同一根因发生过三次）**：前两次都有 AI 把"采购入库同步库存"（入库明细子表→库存信息主表）误用循环容器方案（5 节点+获取多条+循环），实际 direct_form 直接更新（3 节点）即可。第三次（v2.8.0）：另一个 AI 把"任务分派子表→任务执行发起审批"误用 direct_form 更新数据节点，根因是 5.1 只提"消息通知、连接器调用"未明确提"发起审批"，AI 把"发起审批"等同于"新增数据"套用 direct_form 规则。修复：5.1 明确列出"发起审批"为非更新类动作。前两次根因详见 `docs/采购入库同步库存-集成自动化配置指南.md`。
+
+6.**【强制】`--force-save`（跳过体检门禁）只能在用户明确批准后使用，AI 不得自行决定绕过门禁。**
+
+7.怀疑某条已有逻辑流有问题（无论谁创建的），先用 `integration-validate.js <appType> <processCode>` 体检出具报告，再决定修复方案；禁止盲改。
+
+8.**【强制】公式赋值（valueType=column）的 viewJson 必须同时写入 `__display`、`__source`、`value` 三个字段，格式如下（bundle 逆向确认，禁止自由发挥）：**
+   - `__display` = **纯文本字符串**（如 `"目标表字段.库存数量+入库明细.入库数量"`），给设置面板输入框显示。❌ 不能是 JSON 对象（显示 `[object Object]`）、❌ 不能是 JSON 字符串（显示 JSON 原文）。
+   - `__source` = **与 CLI 传入公式完全相同**（如 `"#{FORM-xxx/fieldId}+#{fieldId}"`），给公式编辑器弹窗重建状态。❌ 跨表引用用单斜杠 `/` 不是 `//`（direct_form 模式目标表单是 targetForm 类型，formSuffix="/"）；❌ 触发字段不加任何后缀（formSuffix=""）。
+   - `value` = **与 `__source` 完全相同**，不做任何转换。❌ 不需要点号转换。
+   - 历史事故：曾因 `__source` 误用 `//` 导致验证器报"类型不合法"；`__display` 误存为 JSON 对象导致设置面板显示 `[object Object]`；`value` 误做点号转换导致与 `__source` 不一致。
+
+9.**【强制】删除流程表单数据时，必须增加流程状态判断为"已完成"** — 流程表单的数据在流程进行中时不允许直接删除，只有流程完成后（状态为"已完成"）才能删除。创建删除自动化规则时，必须在获取数据节点中增加流程状态的条件判断，确保只删除流程已结束的数据。
+   - 获取数据节点的过滤条件中必须包含：流程状态 = "已完成"
+   - 如果目标表单是流程表单（formType=process），必须添加此条件
+   - 如果目标表单是普通表单（formType=receipt），无需此条件
+   - 历史事故：曾因未添加流程状态判断，导致流程进行中的数据被误删除，造成业务流程异常
+
+10.**【强制】循环容器内发起审批节点的 `assignments[].value` 必须使用 `${cycleNodeId}.fieldId` 格式** — 设计器 setter tree 选择器中"当前循环执行的数据"展开后子选项的 value 就是此格式（如 `${node_xxx}.textField_570rac0i`）。同时必须写入 `__display` 字段（源字段中文名），否则 setter 在未加载 `getFormVariables.json` API 时显示空白。
+   - ❌ 裸 `cycleNodeId`（如 `node_xxx`）→ setter 全部显示"当前循环执行的数据"整体，不显示具体字段名
+   - ❌ `cycleNodeId//fieldId`（如 `node_xxx//textField_570rac0i`）→ setter 不识别，保存后回退为空
+   - ✅ `${cycleNodeId}.fieldId`（如 `${node_xxx}.textField_570rac0i`）→ setter 正确显示各字段名
+   - `__display` = 源字段中文名（如 `"任务名称"`），缺少则首次加载显示"请配置字段/变量"（空白）
+   - **面板保存 ≠ 服务器保存**：设计器面板内的"保存"按钮只应用到本地画布，必须点击页面顶部工具栏的 `simple-flow-canvas-save` 按钮才触发 `saveProcess` API 持久化。创建后执行 `integration-designer-fix.js --save` 自动修复设计器面板并持久化。
+   - **正确保存流程（v2.8.2 经实测验证）**：①点击设置面板右下角"保存"按钮（通过 React `__reactEventHandlers$.onClick` 调用，非 DOM click）→ ②检查是否有错误弹窗（如发起人未设置等）→ ③点击空白处退出节点 → ④点击右上角"发布"按钮（同样通过 React onClick）→ ⑤检查是否有错误弹窗 → ⑥等待 `saveProcess` API 返回 `success:true`。**每次保存后必须检查弹窗**，否则可能"假保存"成功。
+   - 历史事故：v2.6.0~v2.7.0 经历三轮格式试错（裸 cycleNodeId → cycleNodeId//fieldId → ${cycleNodeId}.fieldId），每次都"保存成功"但设计器显示不正确，折腾多天。根因是 setter tree 选择器子选项 value 格式未通过 Playwright 逆向确认。
+
+11.**【强制】`--cycle-initiate-approval-assignment` 参数格式为 `目标字段ID:processVar:源字段ID`（两个冒号），不是 `目标字段ID:源字段ID`（一个冒号）。** CLI 的 `parseAssignments` 函数按 `column:valueType:value` 三段式解析，只传一个冒号会导致 valueType 和 value 都截断为空，赋值静默丢失（assignments 数组为空）。
+   - ✅ 正确：`--cycle-initiate-approval-assignment "textField_target:processVar:textField_source"`
+   - ❌ 错误：`--cycle-initiate-approval-assignment "textField_target:textField_source"`（只一个冒号，赋值被静默丢弃）
+   - 回读验证：创建后用 `integration-get.js --raw` 检查 `initiateApprovalRules.assignments` 数组长度，为 0 = 格式错误。
+   - **标准 CLI 命令模板（循环内发起审批，照抄替换真实 ID 即可）：**
+   ```
+   node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后循环发起审批" \
+     --events processFinish --approval-actions agree \
+     --data-source-type subform --data-sub-field-id tableField_xxx \
+     --cycle \
+     --cycle-initiate-approval-form-uuid FORM-TARGET \
+     --cycle-initiate-approval-assignment "textField_target1:processVar:textField_source1" \
+     --cycle-initiate-approval-assignment "employeeField_target2:processVar:employeeField_source2" \
+     --cycle-initiate-approval-assignment "dateField_target3:processVar:dateField_source3" \
+     --publish
+   ```
+   ⚠️ 创建后必须执行 `integration-designer-fix.js --save` 修复设计器面板并持久化。
+
+12.**【强制】所有发起审批节点的发起人（initiator）不得为空，禁止使用 `form_inst_creator`；【默认约定·禁止询问】发起人默认 = 当前登录用户（开发者本人），无需向用户询问、无需手动传参。**
+   - **【默认发起人（CLI 已实现，v2.8.12）】** 未显式指定 `--initiate-approval-initiator-user` 时，`integration-create.js` 自动读取项目根目录 `.cookies.json` 的 `login_user.userId / login_user.userName`（即当前登录的开发者）作为发起人，并输出 `ℹ️ 【默认发起人】` 提示。**AI 禁止为"发起人用谁"停下来问用户**——直接省略该参数让 CLI 默认即可；只有用户主动要求特定发起人时才传 `--initiate-approval-initiator-user <userId[:name]>`。
+   - initiator 实际格式（`buildSelectUserInitiator`，主链与循环内同款）：`{type: 'select_user', value: '{"id":"<userId>","label":"<姓名>","type":"employee"}'}`
+   - ❌ 空值 → 设计器保存时报错弹窗，保存失败但不报 API 错误
+   - ❌ `form_inst_creator`（系统变量）→ **processFinish 事件中不可用，导致发起审批静默失败**（v2.8.3 事故）
+   - ✅ 当前登录用户（默认）或显式指定的 userId → 设计器正确显示姓名，processFinish 事件中正常工作
+   - ⚠️ **文档纠偏（v2.8.12）**：旧版规则描述的 `findSubmitterFieldId` 自动查找（按"提交人 EmployeeField→第一个 EmployeeField"优先级）**从未存在于当前代码**（全目录无该函数），`form_field_list`/`form_field` 两种 initiator 格式也与当前代码不符（实际统一为 `select_user`）。以本条描述为准。
+   - 历史事故：
+     - v2.8.2（循环内）：initiator 为空，设计器弹"发起人不能为空"。
+     - v2.8.3（主链）：发起审批回退到 `form_inst_creator`，processFinish 事件中不可用，导致发起审批静默失败（规则触发但未生成数据）。
+     - v2.0.27（文档-代码脱节）：旧文档声称"CLI 已自动查找发起人"，实际代码硬性要求 `--initiate-approval-initiator-user` 缺失即报错退出 → AI 被迫向用户索要 userId。而"默认开发者 ID"此前只在 data-tester/batch-submitter.js（EmployeeField 自动填充）实现过，integration 路径从未配置。修复：CLI 缺省取 `.cookies.json` 当前登录用户，本规则同步改写。
+
+13.**【强制】目标表单是流程表单时，必须使用「发起审批」节点创建数据，禁止使用「更新数据」或「新增数据」节点。** 流程表单的数据必须关联流程实例才能正常打开，直接用数据操作节点插入的数据没有流程实例，无法在宜搭中打开查看。
+   - ✅ 目标表单是流程表单 → 用 InitiateApprovalNode（发起审批）创建流程实例
+   - ❌ 目标表单是流程表单 → 用 UpdateDataNode（更新数据）或 AddDataNode（新增数据）→ 数据无流程实例，无法打开
+   - 历史事故（v2.8.3）：AI 用更新数据节点向流程表单插入数据，保存成功但数据无法打开；改用发起审批节点后又用 insert 事件触发，导致规则触发但未生成数据（流程表单的 insert 事件不触发自动化）。
+
+13.1.**【强制】规则 13 只约束「创建新记录」场景 — 流程表单目标的插入/更新/删除完整决策表（按表直接执行，禁止停下来向用户抛方案选择题）。**
+   - **规则 13 禁止的是用数据节点创建新记录**（新记录无流程实例 → 打不开），它**不禁止**对流程表单**已有记录**的更新与删除。更新数据节点作用于流程表单已有记录（规则 14 两步方案的节点 2 已实测可行）、删除数据节点配合"流程状态=已完成"条件（规则 9）均为标准可行方案。**禁止把规则 13 的"创建场景禁止"推广到更新/删除场景。**
+   - **完整决策表（目标表单是流程表单时，按操作类型对号入座直接执行）：**
+     | 操作 | 标准方案 | 关键约束 |
+     |------|---------|---------|
+     | 插入新数据（仅主表字段） | InitiateApprovalNode（发起审批，见规则 13） | 发起人默认=当前登录用户，无需传参无需询问（规则 12）；触发表单也是流程表单时事件用 processFinish+agree（规则 15） |
+     | 插入新数据（含子表） | 发起审批 + 更新数据 两步方案（见规则 14） | CLI 自动检测：`--update-form-uuid` 指向流程表单 + `--update-none-operation add` 时自动插入发起审批节点 |
+     | 更新已有数据 | UpdateDataNode（更新数据，direct_form，CLI 模板见规则 5） | `--update-none-operation` 必须用 `ignored`（默认）——**禁止 add**：add 在匹配不到时会插入无流程实例的脏数据；匹配条件必须用已有记录的业务键（如名称）定位 |
+     | 删除已有数据 | 获取数据节点（过滤条件必须含 流程状态="已完成"，见规则 9）→ 删除数据节点 | 删整条：`--data-form-uuid` + `--delete-data`（不传 `--delete-sub-source-id`）；只删子表行：按规则 16 选模式 A/B |
+   - **遇到「插入+更新+删除」等组合需求**：按上表把每个动作拆成独立逻辑流（一条逻辑流一个动作）直接创建，**全部动作均可实现**。禁止向用户抛"方案A 改普通表单 / 方案B 放弃更新删除 / 方案C 自定义"之类的选择题；也禁止主动建议用户把流程表单改成普通表单来绕过限制（除非用户主动提出）。
+   - 历史事故（v2.0.27）：AI 把规则 13 误读为"流程表单一律禁止更新/删除"，对"插入+更新+删除"组合需求停下来问用户选方案 A/B/C。实际三个动作全部可实现：插入=发起审批、更新=更新数据节点（ignored）、删除=获取（流程状态=已完成）+删除节点。根因：可行方案分散在规则 9/13/14/15/16 中，缺少按操作类型对号入座的总决策表。
+
+14.**【强制】发起审批节点（InitiateApprovalNode）不支持子表字段赋值。** assignments 中只能赋值目标表单的**主表字段**，子表字段（tableField 下的字段）赋值不生效（规则触发但子表数据为空）。
+   - 如需向目标流程表单的子表插入数据，必须采用**「发起审批 + 更新数据」两步方案**：
+     - 节点1：InitiateApprovalNode — 只赋值主表字段创建流程实例
+     - 节点2：UpdateDataNode（direct_form 子表 upsert）— 按主表字段匹配刚创建的记录，向子表插入数据
+   - **CLI v2.8.3 已实现自动检测**：当 `--update-form-uuid` 指向流程表单且 `--update-none-operation add` 时，CLI 自动在更新数据节点前插入发起审批节点（从 `--update-condition` 提取主表字段作为发起审批赋值），AI 无需手动判断和添加 `--initiate-approval-*` 参数。
+   - **两步方案中 UpdateDataNode 的 `--update-none-operation` 必须设为 `add`（而非 `ignored`）**，因为子表当前为空，`ignored` 会跳过不插入。
+   - **子表字段必须同时出现在 `--update-sub-condition`（匹配条件）和 `--update-assignment`（赋值）中**，否则只匹配不赋值，子表数据不完整。
+   - **两步方案标准 CLI 命令模板（照抄替换真实 ID 即可，发起人由 CLI 自动查找）：**
+   ```
+   node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "提交数据插入目标流程表单子表" \
+     --initiate-approval-form-uuid FORM-TARGET \
+     --initiate-approval-assignment "textField_target_main:processVar:textField_trig_main" \
+     --update-form-uuid FORM-TARGET \
+     --update-condition "textField_target_main:名称:textField_trig_main:TextField:Equal::processVar" \
+     --update-sub-source-id tableField_target_sub \
+     --update-sub-condition "numberField_target_sub_key:规格:numberField_trig_sub_key:NumberField:Equal::processVar" \
+     --update-assignment "numberField_target_sub_key:processVar:numberField_trig_sub_key" \
+     --update-assignment "numberField_target_sub_val:processVar:numberField_trig_sub_val" \
+     --update-none-operation add \
+     --publish
+   ```
+   ⚠️ 发起人默认=当前登录用户（开发者），无需传 `--initiate-approval-initiator-user`（CLI v2.8.12 起自动从 `.cookies.json` 读取，规则 12）。仅当用户主动要求特定发起人时才显式指定。
+   - 历史事故（v2.8.3）：①AI 在发起审批节点中赋值子表字段 → 规则触发但子表数据为空 ②两步方案中 noneOperation 用 ignored → 发起审批创建了主表记录但子表仍为空（ignored 跳过了子表插入）③子表字段只在 sub-condition 中出现未在 assignment 中出现 → 规格字段没写入目标子表。
+
+15.**【强制】流程表单作为触发表单时，触发事件必须「分动作区分」，不可一律用 processFinish。** `integration-create.js` v2.8.14 已实现精确的触发事件自动检测与修正（黄金标准参考流「主表操作主表1-删除同步目标表单1」LPROC-76E66）：
+
+   - **流程表单触发事件语义（分动作对号入座，禁止全部改成 processFinish）**：
+     - **insert（新增/提交）** → 流程表单上表现为「流程结束」→ **自动映射为 `processFinish + agree`**（未显式 `--events` 时同理）
+     - **update（编辑）** → 流程表单上仍是**独立数据操作事件**，显式 `--events update` 时**保留**原事件（编辑触发）
+     - **delete（删除）** → 流程表单上仍是**独立数据操作事件**，显式 `--events delete` 时**保留**原事件（删除触发，对齐金标准 `formEventType=["delete"]` + `examineApproveType="processFinish"`）
+
+   - **【自动检测逻辑（已实现）】** `integration-create.js` 在创建逻辑流前自动调用 `getFormType` 检测触发表单类型，命中 `formType === 'process'` 时按以下规则处理：
+     - 未显式指定 `--events`（默认 insert）→ 自动设为 `processFinish + agree`（禁止确认，直接执行）
+     - 显式指定 `--events insert` → 将 insert 映射为 `processFinish + agree`（流程表单 submit=流程完成）
+     - 显式指定 `--events update` → **保留 update**（编辑触发，无需审批动作）
+     - 显式指定 `--events delete` → **保留 delete**（删除触发，无需审批动作）
+     - AI 无需手动判断触发表单类型，CLI 会自动拦截并精确处理
+   - **【默认约定·禁止确认】触发事件由 CLI 按动作自动判定，不是需要征求意见的选项。** 用户描述的动作（新增/编辑/删除）对应唯一的标准触发事件：
+     - 新增数据 → `processFinish`（流程结束）
+     - 编辑数据 → `update`（编辑触发）
+     - 删除数据 → `delete`（删除当前触发表单数据触发）
+     禁止把"新增用流程结束、编辑用编辑、删除用删除"统一改成"全部用 processFinish"。也**禁止**停下发"你确认这个触发事件吗"之类的确认题。只有存在**多个**可行方案且用户意图无法唯一确定时，才允许向用户询问。
+
+   - 历史事故（v2.8.3）：AI 用 `--events insert` 触发流程表单，规则触发了但没生成数据。另一事故：AI 用 `--events delete` 触发流程表单删除规则，规则永远无法触发。
+   - 历史事故（v2.0.27）：AI 用 `--events update` 触发流程表单，设计器显示不正常且字段未设置。根因：`integration-create.js` 缺少触发表单类型自动检测逻辑，AI 和 CLI 都未拦截无效事件。修复：添加触发表单类型自动检测。
+   - 历史事故（v2.8.14）：此前规则15过度泛化——把"流程表单源的 insert 不单独触发"泛化为"update/delete 也不触发"，导致 AI 创建三条同步流（新增/编辑/删除）时全部被改写为 `processFinish + agree`，编辑和删除无法按"编辑/删除"触发。修复：重写触发事件自动检测，仅 insert 默认/显式映射为 processFinish，显式 update/delete 保留原事件。
+
+16.**【强制】删除子表数据的两种标准模式（按子表关联范围选择）** — 删除目标表单的子表行时，禁止在同一个获取节点里混用主表条件和子表条件（引擎报"表单不存在"红色错误）。
+
+   **模式 A：sub_table 直接获取模式（4 节点，推荐 — 设计器 UI 友好）**：触发 → 获取多条数据（从子表中获取） → 删除子表行 → 结束
+   - 适用场景：子表条件字段值在目标表单中唯一（不会跨主记录重复），或全局删除匹配行即可
+   - **节点1 触发**：流程表单用 `processFinish + agree`，普通表单用 `delete`
+   - **节点2 子表多条**（GetBatchDataNode, originalType="sub_table", sourceId=`#{FORM-TARGET}`, subSourceId=字段ID）：条件=触发表单字段关联目标子表字段
+   - **节点3 删除子表行**（DeleteDataNode, sourceId=节点2的nodeId, delete-sub-source-id+delete-sub-condition 精确匹配）
+   - **关键**：`--data-condition` 只放子表字段条件，**不能加主表字段条件**（否则引擎报错）
+   - **CLI 命令模板（照抄替换真实 ID）：**
+   ```
+   node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后删除关联子表行" \
+     --events processFinish --approval-actions agree \
+     --data-form-uuid FORM-TARGET \
+     --data-query-type multiple \
+     --data-condition "numberField_target_sub_val:规格:numberField_trigger_sub_val:NumberField:Equal::processVar" \
+     --data-sub-source-id tableField_target_sub \
+     --delete-data \
+     --delete-sub-source-id tableField_target_sub \
+     --delete-sub-condition "numberField_target_sub_val:规格:numberField_trigger_sub_val:NumberField:Equal::processVar" \
+     --publish
+   ```
+   - ⚠️ `--data-condition` 中**不能**加 `--data-sub-condition`（否则触发 chain mode 变成 5 节点 cascade，且设计器显示"从数据节点中获取"而非"从子表中获取"）
+   - **v2.8.7 关键澄清**：`--data-sub-source-id` **单独使用（无 `--data-sub-condition`）即触发 sub_table 直接获取模式**（节点2 显示"从子表中获取"，sourceId=`#{目标表单}`）。它与 `--data-source-type subform` 不同——subform 是 `sourceId=#{触发表单}`（从触发数据子表取），本模式是 `sourceId=#{目标表单}`（从目标表单子表取）。若误传了 `--data-sub-condition`，会变成 5 节点 cascade（模式 B，节点显示"从数据节点中获取"）。
+
+   **模式 B：cascade 链式获取模式（5 节点）**：触发 → 获取主表单条 → 获取子表多条 → 删除子表行 → 结束
+   - 适用场景：子表条件字段值跨主记录重复，必须先用主表字段定位到具体父记录
+   - **节点2 主表单单条**（GetSingleDataNode, sourceId=目标表单, originalType=process_form/form）：主条件=触发表单字段关联目标主表字段（流程表单目标用 `process_form`，普通表单目标用 `form`）
+   - **节点3 子表多条**（GetBatchDataNode, originalType="sub_table"【非"node"，v2.8.8 修正】, sourceId=节点2的nodeId, subSourceId=目标子表字段ID）：子条件=触发表单字段关联目标子表字段
+   - **节点4 删除子表行**（DeleteDataNode, sourceId=节点3的nodeId, **deleteData.type="sub_table"**【非"node"，v2.8.8 修正】+ 无 appType + targetItem={} + subSourceId=目标子表 + subCondition）：删除子表行必须 `type="sub_table"`；仅删除整条主表记录（无 subSourceId）才用 `type="node"`+appType
+   - **CLI v2.8.5 已支持自动 cascade**：同时指定 `--data-sub-source-id` 和 `--data-sub-condition` 时自动启用链式获取
+   - **CLI 命令模板（照抄替换真实 ID）：**
+   ```
+   node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后删除关联子表行" \
+     --events processFinish --approval-actions agree \
+     --data-form-uuid FORM-TARGET \
+     --data-query-type single \
+     --data-condition "textField_target_main:名称:textField_trigger_main:TextField:Equal::processVar" \
+     --data-sub-source-id tableField_target_sub \
+     --data-sub-condition "numberField_target_sub_val:规格:numberField_trigger_sub_val:NumberField:Equal::processVar" \
+     --delete-data \
+     --delete-sub-source-id tableField_target_sub \
+     --delete-sub-condition "numberField_target_sub_val:规格:numberField_trigger_sub_val:NumberField:Equal::processVar" \
+     --publish
+   ```
+   - ⚠️ 目标表单是流程表单时，还应在 `--data-condition` 中追加流程状态条件（字段ID 视平台而定）
+   - **设计器 UI 差异**：模式 A 在节点2显示"从子表中获取"+ 目标表单名称；模式 B 显示"从数据节点中获取"+ 上游节点名称
+   - **🟡 v2.8.8 重要引擎限制（bundle 0.2.241 验证）**：模式 A（sub_table 直接获取）**不能**在 condition 中放主表字段作为过滤条件——引擎 `GetDataSetter` 在 `originalType="sub_table"` 时只允许子表字段做条件。**任何"按主表字段（如名称）锁定 + 从子表取行"的场景都必须用模式 B（cascade，5 节点）**。模式 A 仅适用于「子表条件字段值全局唯一」或「全局删除匹配行」的简化场景。
+
+   - 历史事故（v2.8.5 前）：AI 把"删除目标子表行"做成单个 GetBatchDataNode+DeleteDataNode（2 节点），主表字段和子表字段混在同一个 condition 里，引擎报"表单不存在"红色错误；另一版本用 delete 事件触发流程表单，规则无法触发。
+   - 历史事故（v2.8.5）：AI 使用 chain mode（--data-sub-condition）创建了 cascade 流，虽然运行时能工作，但设计器显示"从数据节点中获取"而非"从子表中获取"，且 sourceId 引用上游节点的 viewJson 格式（`appType: '', targetItem: {}`）未填充表单友好信息，导致用户难以通过 UI 确认配置正确性。修复：引入 sub_table 直接获取模式（模式 A），仅使用 `--data-condition`（不加 `--data-sub-condition`），让 CLI 使用 originalType="sub_table" 路径，viewJson 的 targetItem 正确填充目标表单信息。
+   - **历史事故（v2.8.8）**：AI（包括本会话）错误判断 cascade（5 节点）里 node3（GetBatchDataNode）的 `originalType` 必须是 `"node"`（因 sourceId 指向上游节点）。**事实**：手工配置金标准显示 **节点3 的 `originalType` 应当是 `"sub_table"`**——`sourceId` 指向上游节点 + `subSourceId`=目标子表 + `originalType="sub_table"` 才会让设计器显示「从子表中获取」+「数据节点=获取单条数据」+「子表=产品规格」三件套。修复 `integration-view-builder.js` 第 487 行和 `integration-process-builder.js` 第 612 行：`originalType: 'node'` → `originalType: 'sub_table'`。验证：与用户手工截图（设计器面板）对照，节点3 的「从子表中获取」radio 选中、「数据节点」=「获取单条数据」、「子表」=「产品规格」、condition 仅含子表规格条件——完全匹配 `originalType="sub_table"` + `sourceId=node_2` + `subSourceId=tableField_5rkfw271` 的 viewJson。教训：**不要根据代码字段名（如 `sourceId=节点`）推断 `originalType`**，必须以**设计器手工配置 viewJson 金标准**为准。
+
+17.**【强制】全场景组合总决策矩阵（4 数据拓扑 × 3 操作 × 2 目标类型 = 24 格）— 创建任何逻辑流前先在此表对号入座，禁止脱离矩阵自由发挥节点方案。**
+   - **数据拓扑定义（"X 操作 Y" = 触发数据来自 X，操作目标是 Y）**：
+     - **主表→主表**：触发主表字段 → 目标主表记录
+     - **子表→主表**：触发子表明细行 → 目标主表记录（direct_form 引擎自动逐行迭代，规则 5.1）
+     - **主表→子表**：触发主表字段 → 目标子表行
+     - **子表→子表**：触发子表明细行 → 目标子表行
+   - **矩阵（方案缩写：AF=发起审批节点；UD=更新数据节点 direct_form；AD=新增数据节点；GD=获取数据节点+删除数据节点；两步=发起审批+更新数据）**：
+
+     | 拓扑 | 操作 | 目标=普通表单 | 目标=流程表单 |
+     |------|------|--------------|--------------|
+     | 主表→主表 | 新增 | ✅ UD+add(upsert，规则5模板) 或 AD(--add-data-form-uuid) | ✅ AF（规则13；每触发1条建1条） |
+     | 主表→主表 | 更新 | ✅ UD（规则5模板） | ✅ UD+ignored（规则13.1） |
+     | 主表→主表 | 删除 | ✅ GD 删整条(--data-condition+--delete-data) | ✅ GD+流程状态条件（字段写法见下方"缺口1已闭合"） |
+     | 子表→主表 | 新增 | ✅ UD+add（引擎逐行迭代，5.1已验证；⚠️ 首选，规则19）；❌ AD batch 写目标主表在流程表单触发场景崩溃（规则19） | ✅ 循环+AF 逐行发起（规则11模板）/整单1条则主链AF |
+     | 子表→主表 | 更新 | ✅ UD（5.1 已验证：入库明细→库存主表） | ✅ UD+ignored（同主表→主表更新，引擎逐行迭代） |
+     | 子表→主表 | 删除 | ✅ GD 删整条（--data-condition 引用触发子表字段，见下方缺口2模板） | ✅ GD+流程状态条件（字段写法见下方"缺口1已闭合"） |
+     | 主表→子表 | 新增 | ✅ 往已有记录子表插行：UD+--update-sub-source-id+add（规则14同款，目标改普通表单免AF）；新建记录含子表行：AD+--add-data-insert-type sub_table | ✅ 两步方案（规则14模板，触发字段全用主表字段） |
+     | 主表→子表 | 更新 | ✅ UD+--update-sub-*（子表upsert，cli-examples 模板） | ✅ UD+--update-sub-*（noneOperation 按下方分层表选） |
+     | 主表→子表 | 删除 | ✅ 规则16 模式A（子表字段值全局唯一）或模式B | ✅ 规则16 模式A/B+流程状态条件（字段写法见下方"缺口1已闭合"） |
+     | 子表→子表 | 新增 | ✅ AD+sub_table+batch（cli-examples"子表批量新增"模板） | ✅ 两步方案（规则14模板原样） |
+     | 子表→子表 | 更新 | ⚠️ 先过规则20判据：定位目标父记录的业务键在触发表单【主表】→ UD+--update-sub-*（入库明细→采购订单.采购明细 已验证）；键只在触发【子表行】里 → ❌ 直接更新静默空转，✅ 必须中间表两段式（规则20，实测32/32） | 同左判据（规则20）；中间表流B按规则13.1 用 ignored |
+     | 子表→子表 | 删除 | ✅ 规则16 模式A/B 模板 | ✅ 规则16 模式A/B+流程状态条件（字段写法见下方"缺口1已闭合"） |
+
+   - **✅ 缺口1已闭合（v2.0.28 金标准：主表操作主表1-删除目标表单1）** — 删除流程表单数据时「流程状态=已完成」过滤条件的**真实字段写法已实测固化**：字段ID=**`process_status`**，组件类型=`SelectField`（多值 multiple=true），运算符=**「包含」(Contain)**，值=**「已完成」**，valueType=`literal`（extValue=`value`；设计器存数组 `["已完成"]`，CLI 存字符串 `"已完成"` 均可工作）。**CLI 写法**（追加到 `--data-condition`，注意用**单冒号**分隔，勿用 `::`）：
+     ```
+     --data-condition "process_status:流程状态:已完成:SelectField:Contain:literal"
+     ```
+     ⚠️ **单冒号坑**：`--data-condition` 是 `bFieldId:bFieldName:aFieldId:componentType:opCode:valueType` 六段单冒号格式。若误用 `Contain::literal`（双冒号）会把 valueType 置空回退成 `processVar`，导致值"已完成"被当变量引用（v2.8.11/v2.0.28 实测踩坑）。**处理方式（禁止编造字段ID，规则2/18 同源约束）**：若遇到未确认的目标=流程表单删除场景，先用金标准路径——①在设计器手工建一条含"流程状态=已完成"过滤条件的获取节点 → ② `integration-get.js <appType> <processCode> --raw` 导出该节点 condition → ③ 固化并照抄。拿到金标准前，向用户说明"流程状态条件写法待金标准确认"并执行①②，不算多余提问。
+   - **缺口2 模板（子表→主表 删整条，往已有模板的参数适配，非新能力）**：获取节点 `--data-condition` 的 aFieldId 放触发**子表字段ID**（规则16 模板已证明获取条件可引用触发子表字段），其余同 cli-examples"批量删除"：
+     ```
+     node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "审批通过后删除目标表单匹配记录" \
+       --events processFinish --approval-actions agree \
+       --data-form-uuid FORM-TARGET --data-query-type single \
+       --data-condition "textField_target_main:名称:textField_trigger_sub_key:TextField:Equal::processVar" \
+       --delete-data --publish
+     ```
+     （流程表单触发默认 processFinish+agree，规则15；目标为普通表单无需流程状态条件）
+   - **noneOperation 分层语义（子表更新场景选 add/ignored 的唯一判据，两半均有实测来源）**：
+     | 层级 | ignored | add |
+     |------|---------|-----|
+     | 主表记录未匹配（主条件不命中） | 跳过，什么都不做 | **新增一条主表记录**（规则5 upsert 已验证；目标=流程表单时这是无流程实例的脏数据 → 禁止，规则13.1） |
+     | 主表匹配、子表行未匹配（子条件不命中） | 跳过该行，不插入（规则14 事故②实测） | 在匹配到的主表记录子表中**新增一行**（规则14 两步方案实测） |
+     - **选型口诀**：目标=流程表单且主表可能匹配不到 → 只能 ignored；主表必匹配到（如两步方案刚创建的记录）且需给子表插行 → add；目标=普通表单且允许新增主表（upsert）→ add。
+   - **审查记录（v2.8.11，2026-08-20）**：24 格全量对照规则 5/5.1/9/11/13/13.1/14/15/16 + cli-examples 20 示例 + process-builder 源码。结论：16 格有模板可照抄，4 格本次补判定/模板（子表→主表删整条、主表→子表新增的两种语义），4 格（目标=流程表单的删除）依赖缺口1的流程状态字段金标准。矩阵随新能力落地持续更新，修改本矩阵必须同步注明来源（哪条规则/哪条模板/哪个实测流）。
+
+18.**【强制】显式分支 upsert（"存在则更新/不存在则插入"）必须用 CLI `--conditional-upsert`，且分支内动作节点必须嵌套进 ConditionNode.children — 「执行接线正确」≠「画布渲染正确」，两者缺一不可。**
+   - **场景识别**：用户要求"匹配到就更新、匹配不到就新增"且**明确要求显式分支判断**（画布上可见条件分支节点）时，用 `--conditional-upsert`（不是默认 upsert——默认 upsert 是单更新节点 `noneOperation=add`，画布上没有分支）。若用户只要"同步效果"没要求分支，按规则 5 模板用单节点 upsert。
+   - **🔴 画布嵌套铁律（v2.8.20 实证）**：viewJson 中分支内动作节点必须作为 ConditionNode 的 `children` **层级嵌套**：
+     ```
+     ConditionContainer（条件分支）
+       ├─ ConditionNode（条件1，有值）→ children: [UpdateDataNode 更新数据]
+       └─ ConditionNode（其他情况，默认）→ children: [InitiateApprovalNode 发起审批]
+     ```
+     ❌ 动作节点平铺在 CanvasEngine children 顶层（与容器同级）→ processJson nextId 接线即使完全正确（条件1→更新、默认→发起审批），**设计器画布仍把动作节点画在主干上、分支内为空**。saveProcess 不校验嵌套层级，保存照样成功——又一个"保存成功 ≠ 配置正确"的实例。CLI v2.8.20 已修复 view-builder 自动嵌套，AI 无需手写，但**回读验证必须确认嵌套结构**。
+   - **标准节点树（6 节点）**：表单事件触发 → 获取单条数据（按业务键匹配目标表单）→ 条件分支[条件1:实例ID有值 ExistValue→更新数据 / 其他情况→发起审批] → 结束。
+   - **🔵 条件1 判断存在性的字段必须是「获取数据节点的实例ID」（v2.8.21 根因修复）**：CLI 自动生成 `条件1` 规则引用**获取数据节点的实例ID变量** = `node_xxx.pid`（`opCode=ExistValue` 有值、`name/__display=获取单条数据.实例ID`）。**禁止把判断字段填成固定字面量"实例ID"**——那只是检出示意图，不是运行时真正要检查的节点变量。必须引用 `${dataNodeId}.pid`（`__display` 为节点变量中文名，设计器才能从"获取单条数据"节点取到真实实例ID值）。**禁止用业务匹配字段（如名称）做 ExistValue 判断**——业务字段可能为空但记录已存在，用业务字段会把"已存在"误判为"不存在"导致重复插入。conditionalUpsert 语义下"新建一律走发起审批"，目标必为流程表单，实例ID 即流程表单实例ID系统字段。
+     - **字段名铁律（v2.8.23 实证，v2.8.26 补坑，v2.8.27 定稿）**：实例ID 变量引用键是 **`.pid`**，**不是 `.processInstanceId`**，也**不是 `.proc_inst_id`**。用户手工配置金标准（设计器变量树"获取单条数据.实例ID"）确认 id = `${node}.pid`。CLI 曾误用 `.processInstanceId` 退化显示固定"实例ID"；v2.8.25 又曾误用 `.proc_inst_id`（误读 dataNode/getConfig.json 的**表单筛选字段**表）导致标红、下拉不选中。**教训：条件分支引用「节点输出」的键后缀固定是 `.pid`；`proc_inst_id` 只是数据节点自身表单筛选用的字段键，属不同上下文，禁止混用**。判断键必须对照设计器变量树而非 getConfig 字段表。
+     - **🔴 `${}` 包裹铁律（v2.8.27 实证，连续三个版本踩坑的真正根因）**：规则 id 存进 viewJson/processJson 时，`${` 和 `}` 是**字面量字符**，必须原样出现在最终 JSON 里：`"id": "${node_xxx}.pid"`。**JS 代码里写未转义模板字符串 `` `${dataNodeId}.pid` `` 是错的**——插值会把 `${}` 吃掉产出 `"node_xxx.pid"`，后果：设计器下拉匹配不到（span 显示对但下拉不选中+标红）+ 运行时恒判"无值"走默认分支重复插入。正确写法：`` `\${${dataNodeId}}.pid` ``（转义）或 `'$' + '{' + dataNodeId + '}.pid'`。统一走 `buildExistenceBranchCondition(dataNodeId)` 导出函数，禁止在别处手拼。**验证金标准必须逐字符 diff（含 `${}`），不能只对比字段名/后缀——v2.8.23~26 三次"已修复"全是假验证。**
+     - **`extValue` 铁律（v2.8.24 实证）**：节点变量引用条件（id 形如 `${node}.pid`）的 `extValue` 必须为 **`"value"`**，`valueType` 保持 `"literal"`。**禁止把 `extValue` 写成 `"literal"`**。用户手配金标准（csa66_golden.json 条件规则）`extValue="value"`、`valueType="literal"`、`op="有值"`、`name/__display=获取单条数据.实例ID`。实测：`extValue` 写成 `"literal"` 时，即使 `id` 已正确指向 `${node}.pid`，设计器条件 setter 仍把该字段当成"固定字面量"而非"节点实例ID变量引用"，渲染为未选中（v2.8.24 前用户连续多次踩坑）。CLI 已在 `buildConditionNodeProps` 中：凡 `fieldId` 含 `.`（节点变量引用）则强制 `extValue="value"`。
+     - **🔴 无值操作符键禁令（v2.8.28 实证，`${}` 修复后的下一个隐藏根因）**：ExistValue（有值）/NotExistValue（无值）这类**无值比较操作符**的条件规则，**禁止写 `value` 和 `ruleValue` 键**——金标准（用户手配 captured_save.json）里这两个键**不存在**。CLI 曾写 `value:""/ruleValue:""`，设计器条件 setter 拿规则 `value` 匹配下拉选项 key，空字符串匹配不上 `${node}.pid` → span 靠 name 显示正确但下拉不选中+标红（与 `${}` 丢失同症状不同根因）。`buildConditionNodeProps` 已对无值操作符跳过这两个键；`buildExistenceBranchCondition` 不再产出 `value:''`。**教训：金标准 diff 必须键集合级对比（哪些键存在/缺失），多一个空键同样致命——v2.8.27 只 diff 值没 diff 键集合，漏掉了这个根因。**
+   - **目标=流程表单时插入分支必须用发起审批节点**（规则 13），普通表单则用新增数据节点。更新分支 `noneOperation=ignored`。
+   - **标准 CLI 命令模板（照抄替换真实 ID 即可）：**
+     ```
+     node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-TRIGGER "提交后分支判断更新或新增" \
+       --events processFinish --approval-actions agree \
+       --data-form-uuid FORM-TARGET --data-query-type single \
+       --data-condition "textField_target_key:名称:textField_trig_key:TextField:Equal::processVar" \
+       --update-form-uuid FORM-TARGET \
+       --update-condition "textField_target_key:名称:textField_trig_key:TextField:Equal::processVar" \
+       --update-assignment "numberField_target_val:processVar:numberField_trig_val" \
+       --update-none-operation ignored \
+       --initiate-approval-form-uuid FORM-TARGET \
+       --initiate-approval-assignment "textField_target_key:processVar:textField_trig_key" \
+       --initiate-approval-assignment "numberField_target_val:processVar:numberField_trig_val" \
+       --conditional-upsert --publish
+     ```
+     （发起人默认=当前登录用户，规则 12；流程表单触发自动映射 processFinish+agree，规则 15）
+   - **验证闭环（在规则 4 基础上追加画布验证）**：① `integration-get.js <appType> <processCode> --raw` 回读 viewJson 树，确认 UpdateDataNode/InitiateApprovalNode 在 ConditionNode **children 内**而非顶层平铺；② `integration-validate.js` 体检通过；③ 打开设计器确认画布渲染（分支内能看到两个动作节点）。
+   - 历史事故（v2.8.13~v2.8.16）：conditionalUpsert 首版只有 processJson 接线，v2.8.16 挪了容器位置但动作节点仍平铺，用户打开设计器看到"分支里面没有节点，节点在分支外面"（LPROC-ULD662...实锤）。修复（v2.8.20）：view-builder 把两个动作节点分别嵌套进「条件1」/「其他情况」的 children，重建 LPROC-N4G662... 设计器 logicSchema 确认嵌套正确。教训：**凡涉及容器类节点（条件分支/循环/并行），子节点必须层级嵌套；每次都应打开设计器亲眼确认画布，不要只看回读 JSON**。
+
+19.**【强制·v2.8.29 实测】「子表→主表」批量写入首选 direct_form upsert（UD+add），禁止用 AD batch 写目标主表 — 后者在流程表单触发场景下引擎崩溃且体检不拦截。**
+   - **事故（2026-09-22，LPROC-BMG66GA1 实锤）**：流程表单 processFinish+agree 触发 → AddDataNode `--add-data-type batch --add-data-source-id 触发子表字段ID`（insertType=form 写目标主表，7 条 column 裸字段赋值）→ 运行时报 `节点[新增数据] 执行异常: com.alibaba.fastjson.JSONArray cannot be cast to java.util.Map`，零写入。保存前体检通过——又一个"保存成功 ≠ 配置正确"实例。
+   - **标准替代方案（已回归验证）**：direct_form 更新节点 + `--update-none-operation add`（规则 5.1 金标准逐行迭代）写入目标主表：主条件 a 侧引用触发子表字段（引擎逐行迭代 upsert），赋值用 processVar。实测流 LPROC-NAD66NC1：对账单审批通过 → 对账明细 4 行逐行 upsert 到中间表，全部正确（含触发主表流水号字段引用）。
+   - **中间表架构模式（触发子表 → 中间普通表 → 目标子表）**：当直接更新目标子表被引擎限制封死（5.1 只能写主表列、级联 GetSingle 解析不到触发子表字段会静默空转）时，用两段式：流A=UD+add 逐行写中间表；流B=中间表 insert 触发 → direct_form+subSourceId 更新目标子表（触发字段全为中间表主表字段，绕开全部限制）。实测 LPROC-NAD66NC1 + LPROC-QMF66WA1 链路 32/32 断言 PASS（双订单匹配/行状态/累加/填零完结）。
+   - **测试脚本经验**：searchFormDatas 的 pageSize 上限 100，传 200 返回 0 条（静默），验证脚本用 ≤100。
+
+20.**【强制·v2.0.30 实测定稿】「子表→子表」更新前必须先过判据：定位目标父记录的业务键在哪一层 — 键只在触发子表行里时，直接更新方案无论怎么拼节点都是死路，必须中间表两段式。**
+   - **判据（创建前先回答一个问题）**："用什么字段定位目标表单的父记录（更新节点的主条件 a 侧）？"
+     - 该业务键在**触发表单主表**上有对应字段 → direct_form `UD+--update-sub-*` 可行（入库明细→采购订单.采购明细 已验证案例）
+     - 该业务键**只在触发子表行里**（典型：对账单主表的"选择销售订单"是多选关联无法作精确匹配键，销售订单编号只存在于对账明细子表行）→ ❌ 直接方案撞双重引擎限制：**主条件被迫引用触发子表字段（限制②禁止）+ 级联 GetSingle 解析不到触发子表字段静默空转（限制③）** → ✅ **必须中间表两段式**（完整 CLI 模板见 cli-examples.md"中间表两段式"）
+   - **两段式架构（每一段都走引擎已验证的畅通方向）**：
+     - 流A = 触发表单审批通过 → `UD+--update-none-operation add` 逐行迭代把触发子表行 upsert 进**中间普通表**（"子表→主表"畅通方向，规则 5.1/19）；主条件 = 中间表业务键组合（单号+订单编号+产品+规格）匹配触发子表字段
+     - 流B = 中间表 `--events insert` 触发 → `UD+--update-sub-source-id` 更新目标子表（"主表→子表"畅通方向）；触发字段全为中间表**主表**字段，绕开全部 6 道限制；多订单支持靠子表行自带订单编号，无需循环容器
+     - 中间表字段 = 触发子表行字段全集 + 定位键（单号/订单编号/产品/规格），建普通表单（add_form_to_app）
+   - **流B `--update-none-operation` 用 `ignored`**：主记录必已存在（订单编号来自真实订单），`add` 会在匹配不到时插无流程实例的脏数据（规则 13.1 分层表）。
+   - **试错成本记录（勿重蹈）**：v2.0.33 对账场景经历 5 轮试错（级联5节点→循环容器→业务规则→AD batch→中间表成功），消耗用户 100+ 积分。**下次遇到"多条数据×子表行×更新目标子表"直接上两段式，禁止从直接方案开始试。**
+   - **测试数据经验（data-tester 创建流程表单测试数据）**：① `submitOne` 走 process 分支**不自动加载 Cookie**，必须显式传 `{csrfToken, cookies, hostname}`（postRequest 里 `cookies.map` 空指针）；② `deleteInstance` 第 3 参传**完整 cookieData** 非 cookies 数组；③ `loadCookies()` 返回 `userId`（非 `login_user.userId`）；④ 提交后等 6 秒再查待办审批（太快 optim lock fail / 待办未找到）；⑤ 测试脚本的 schema 字段映射**直接用组件ID清单.md 硬编码**，禁止动态解析 form_creator JSON（label 属性结构与假设不符会静默提取为空，产出空壳数据）；⑥ 测试数据删除（即使是 AI 自己刚建的坏数据）也必须先征得用户同意。
+   - **设计器显示坑（勿误判）**：赋值源为**流水号字段（SerialNumberField）**时，设计器设置面板显示"请配置字段/变量"空白（字段选择树类型过滤不含流水号），属**显示层问题**——回读 value 为真实字段ID、运行时正常（实测写入成功）。先 `integration-get.js --raw` 验证存储值再决定是否修复，**禁止看到空白就重建**；也禁止在此类面板上点"保存"（可能把好配置回写成空）。
+   - 实测验证链：LPROC-NAD66NC1（流A）+ LPROC-QMF66WA1（流B）32/32 断言 PASS（双订单匹配/行状态/累加/填零完结）；完整复盘见 `docs/销售对账同步订单-中间表架构复盘.md`。
+
+21.**【强制·2026-10-11 实证】向已有表单的子表新增字段后，引擎 UPDATE 引用该列时只能命中「新增之后创建的行」——存量行的行数据里没有新列，直接报「公式:UPDATE 计算错误」（更新数据节点整体失败）。**
+   - **场景**：子表→子表两段式（规则 20）的流B 更新目标子表时，目标字段是刚加到目标表单子表的新列。
+   - **根因**：引擎 UPDATE 子表行时，SET 的列必须存在于该行的存储数据中。存量实例的行创建于加字段之前，行数据不含新列 → 对不存在的列做 SET 计算报错。与字段创建方式无关（saveFormSchema API 加的字段、设计器拖拽重建的字段都一样）；与字段类型无关（同表单同子表的老文本列可写、新下拉/新文本都需行数据含列）。
+   - **判别方法**：listTableDataByFormInstIdAndTableId 返回的行原始键里查目标 fieldId——键不存在 = 存量行未含列。
+   - **修复**：存量单据在页面编辑保存一次（UI 序列化会把新列写入行数据）；updateFormData API 补列无效（数据层丢弃行记录中不存在的键，实测）。新建实例的行天然包含新列，无需处理。
+   - **公式形态注意（同一案例实测）**：子表行 UPDATE 的赋值公式引用「目标表单字段」需带表单前缀 （无前缀报「公式包含不存在的组件」）；仅引用触发表单字段可用无前缀 。金标准 LPROC-QMF66WA1 公式中无前缀的引用实为触发表单（对账记录表）字段。
+   - **实测链**：采购付款核销链路 LPROC-D66667A1（流A）+ 流B（目标=对账单子表）+ 流C（目标=采购订单子表下拉，原生列 ✅）。流B 在存量行上 5 种赋值形态（字面量/公式无前缀/公式带前缀/processVar×2）全部失败，换新建对账单后**同一条流不改任何配置直接成功**（XX-DZ-202610110030 实测「已付款」写入）——行数据是唯一被对照实验锁定的变量。
+   - **⚠️ 排查期间的两个错误判断（勿重蹈）**：①曾误判「下拉字段引擎不可写、需改单行文本」——被推翻，终版流B 以公式成功写入下拉字段（新建行），文本列能写只是因为它行数据里有列；②曾误判「API 加的字段引擎不认、设计器重建才行」——被推翻，设计器重建的下拉在存量行上同样失败。两者都是把「行数据缺列」这个真因错归因到了字段类型/创建方式上。
+   - **排查方法论（固定顺序，避免再耗一下午）**：① listTableData 查目标行原始键，确认行数据里有没有目标列（第一步就做，不要反复换赋值写法）；② 用「新建一条含新列的实例」做对照实验，锁定行数据变量；③ 确认后再决定存量数据策略（页面编辑保存补列 / 只对新数据生效并明示用户）。

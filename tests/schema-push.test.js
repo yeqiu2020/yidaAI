@@ -67,6 +67,36 @@ describe('schema-push applyBindings', () => {
     expect(r2.skipped).toBe(1);
   });
 
+  test('新建事件容器补全金标准形态：type=JSExpression + value=execEventFlow（运行时可触发）', () => {
+    const schema = freshSchema();
+    schemaPush.applyBindings(schema, [
+      { field: 'textField_kk91ezq9', event: 'onChange', fn: 'onTestChange' }
+    ], schemaPush.extractExportNames(CODE));
+    const { component } = schemaPush.findComponent(schemaPush.getComponentsTree(schema), 'textField_kk91ezq9');
+    const container = component.props.onChange;
+    expect(container.type).toBe('JSExpression');
+    expect(container.value).toBe('this.utils.legaoBuiltin.execEventFlow.bind(this, [this.onTestChange])');
+    // 已有 value 的容器不被覆盖（设计器手配金标准保持原样）
+    const schema2 = freshSchema();
+    schemaPush.applyBindings(schema2, [
+      { field: 'textField_kk91ezq9', event: 'onChange', fn: 'onTestChange' }
+    ], schemaPush.extractExportNames(CODE));
+    const c2 = schemaPush.findComponent(schemaPush.getComponentsTree(schema2), 'textField_kk91ezq9').component;
+    const designerValue = 'this.utils.legaoBuiltin.execEventFlow.bind(this, [this.onDesignerFn])';
+    c2.props.onChange.value = designerValue;
+    schemaPush.applyBindings(schema2, [
+      { field: 'textField_kk91ezq9', event: 'onChange', fn: 'onTestChange' }
+    ], schemaPush.extractExportNames(CODE));
+    expect(c2.props.onChange.value).toBe(designerValue);
+    // verifyPushedSchema 对 value 缺失的绑定报失败
+    delete c2.props.onChange.value;
+    const v = schemaPush.verifyPushedSchema(schema2, {
+      bindings: [{ field: 'textField_kk91ezq9', event: 'onChange', fn: 'onTestChange' }]
+    });
+    expect(v.ok).toBe(false);
+    expect(v.failures.join()).toMatch(/事件流 value 缺失/);
+  });
+
   test('中文名定位成功；歧义/未知函数/非法事件名被拦截', () => {
     const schema = freshSchema();
     const r = schemaPush.applyBindings(schema, [

@@ -1,6 +1,13 @@
 /**
- * 宜搭服务管理器 v3.2.0
+ * 宜搭服务管理器 v3.3.0
  * 一键启动/停止/检查宜搭开发所需的本地服务
+ *
+ * v3.3.0 新增单项目部署模式开关：
+ * - 项目根存在 单项目模式.txt 时 staticRoot=项目根（访问 URL 不带项目段），
+ *   多组织并存（静态根=公共父目录）形态不变；新增 urlProjectSegment 统一拼接访问地址
+ * - 单项目模式强制使用内置静态服务器（其提供 /__yida_health、/__yida_start_service 管理接口，
+ *   http-server 没有这些接口，会导致页面启动按钮失效、端口占用被误判而重启）
+ * - 内置服务器新增根路径 302 重定向到组织门户；resolveTargetProjectRoot 单项目布局兜底回退静态根
  *
  * v3.2.0 修复两处真实缺陷（导航条「启动宜搭服务」按钮 + 端口复用判定）：
  * - fix1 内置静态服务器 /__yida_start_service：argv[2] 实为 staticRoot（公共父目录），
@@ -66,11 +73,19 @@ const CONFIG = {
   /**
    * 静态服务根（多组织并存的"公共父目录"）。
    * 项目目录 = 含 .agents 且含 组织及应用信息.md 的目录。
-   * 按方案：staticRoot = 当前项目根的父目录（各项目互为兄弟目录），
-   * 8080 统一通过 URL 首段（项目目录名）区分项目。单项目也保持此形态，访问路径始终带项目段。
+   * 单项目部署开关：项目根存在 单项目模式.txt 时，静态根=项目根（8080 直接以项目根为根，
+   * 访问 URL 不再携带项目目录段），适配"仓库根=工作区根、无兄弟项目"的部署形态；
+   * 多组织并存（各项目为兄弟目录）保持 v3.0.0 形态：静态根=公共父目录。
    */
   get staticRoot() {
-    return path.dirname(this.projectRoot);
+    const root = this.projectRoot;
+    if (fs.existsSync(path.join(root, '单项目模式.txt'))) return root;
+    return path.dirname(root);
+  },
+  // URL 中的项目目录段：单项目形态为空串，多项目形态为 /{项目目录名}
+  get urlProjectSegment() {
+    if (normalizePath(this.staticRoot) === normalizePath(this.projectRoot)) return '';
+    return `/${encodeURIComponent(path.basename(this.projectRoot))}`;
   },
   syncServerScript: '.agents/skills/form_creator/scripts/sync_server.js',
   builtInServerScript: path.join(__dirname, '_builtin_server.js')
@@ -282,6 +297,9 @@ function resolveTargetProjectRoot(projectDir) {
     // 必须已存在且是合法项目根，避免 spawn 带无效 cwd 静默失败
     if (isValidProjectRoot(dir)) return dir;
   }
+  // 兜底：单项目布局（静态根=项目根）下显式候选可能是页面目录等非项目根（如"本地操作页面"），
+  // 静态根自身即项目根时优先回退，避免 spawn 带错误 cwd
+  if (isValidProjectRoot(staticRoot)) return staticRoot;
   // 兜底：传入目录存在即用（老版本项目可能既无 .agents 也无 组织及应用信息.md）
   for (const dir of candidates) {
     try { if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) return dir; } catch (_) {}
@@ -294,6 +312,12 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+  // 根路径重定向到组织门户（单项目布局下静态根=项目根，根目录无 index.html）
+  if (req.url === '/' && fs.existsSync(path.join(staticRoot, '本地操作页面', 'index.html'))) {
+    res.writeHead(302, { Location: '/' + encodeURIComponent('本地操作页面') + '/index.html' });
+    res.end();
+    return;
+  }
   const decodedUrl = decodeURIComponent(req.url);
   const urlInfo = decodedUrl.split('?');
   if (urlInfo[0] === '/__yida_health') {
@@ -402,7 +426,10 @@ async function startHttpService() {
   const localHttpServerDirect = path.join(staticRoot, 'node_modules', 'http-server', 'bin', 'http-server');
   const localHttpServerCmd = path.join(staticRoot, 'node_modules', '.bin', 'http-server.cmd');
 
-  if (fs.existsSync(localHttpServerDirect)) {
+  // 单项目形态固定使用内置静态服务器：其提供 /__yida_health、/__yida_start_service 管理接口，
+  // http-server 没有这些接口，会导致页面「启动宜搭服务」按钮失效、启动时端口占用被误判而重启
+  const useBuiltin = normalizePath(staticRoot) === normalizePath(CONFIG.projectRoot);
+  if (!useBuiltin && fs.existsSync(localHttpServerDirect)) {
     startMethod = '本地http-server (node直接调用)';
     logStep('2/4', `找到http-server脚本: ${localHttpServerDirect}`, 'green');
     logStep('2/4', `使用 ${startMethod} 启动...`, 'blue');
@@ -412,7 +439,7 @@ async function startHttpService() {
       stdio: ['ignore', 'ignore', 'ignore'],
       windowsHide: true
     });
-  } else if (fs.existsSync(localHttpServerCmd)) {
+  } else if (!useBuiltin && fs.existsSync(localHttpServerCmd)) {
     startMethod = '本地http-server (cmd调用)';
     logStep('2/4', `找到http-server.cmd: ${localHttpServerCmd}`, 'green');
     logStep('2/4', `使用 ${startMethod} 启动...`, 'blue');
@@ -424,7 +451,7 @@ async function startHttpService() {
     });
   } else {
     startMethod = '内置静态服务器';
-    logStep('2/4', `未找到本地http-server，使用内置静态服务器`, 'yellow');
+    logStep('2/4', useBuiltin ? `单项目模式：使用内置静态服务器（需其管理接口）` : `未找到本地http-server，使用内置静态服务器`, 'yellow');
     const builtinScript = ensureBuiltinServerScript();
     logStep('2/4', `内置服务器脚本: ${builtinScript}`, 'cyan');
     logStep('2/4', `使用 ${startMethod} 启动...`, 'blue');
@@ -578,7 +605,7 @@ async function checkStatus() {
   if (httpHealthy) {
     console.log(`\n📁 HTTP 静态服务根: ${CONFIG.staticRoot}`);
     console.log(`🌐 当前项目: ${CONFIG.projectRoot}`);
-    console.log(`🌐 访问地址: http://127.0.0.1:${CONFIG.httpPort}/${encodeURIComponent(path.basename(CONFIG.projectRoot))}/`);
+    console.log(`🌐 访问地址: http://127.0.0.1:${CONFIG.httpPort}${CONFIG.urlProjectSegment}/本地操作页面/index.html`);
   }
 
   return {
@@ -675,13 +702,13 @@ async function startAll() {
     console.log('─'.repeat(60));
     console.log('\n📖 使用说明:');
     console.log('   1. 访问路径携带项目目录段，例如:');
-    console.log(`      http://127.0.0.1:8080/${encodeURIComponent(path.basename(CONFIG.projectRoot))}/本地操作页面/index.html`);
+    console.log(`      http://127.0.0.1:8080${CONFIG.urlProjectSegment}/本地操作页面/index.html`);
     console.log('   2. 不要使用 file:// 打开本地文件');
     console.log('   3. 点击"同步配置"按钮即可同步表单配置');
     console.log('\n📁 示例访问路径:');
-    console.log(`   http://127.0.0.1:8080/${encodeURIComponent(path.basename(CONFIG.projectRoot))}/项目管理/01需求梳理/原型页面/index.html`);
+    console.log(`   http://127.0.0.1:8080${CONFIG.urlProjectSegment}/项目管理/01需求梳理/原型页面/index.html`);
     console.log('\n🏠 组织门户:');
-    console.log(`   http://127.0.0.1:8080/${encodeURIComponent(path.basename(CONFIG.projectRoot))}/本地操作页面/index.html`);
+    console.log(`   http://127.0.0.1:8080${CONFIG.urlProjectSegment}/本地操作页面/index.html`);
 
     await updateOrgInfo();
     updateInitDoc();
@@ -699,10 +726,9 @@ function updateInitDoc() {
 
   try {
     let content = fs.readFileSync(docPath, 'utf-8');
-    const projectName = path.basename(CONFIG.projectRoot);
     const oldPattern = /http:\/\/127\.0\.0\.1:8080\/\{项目目录名\}\//g;
     if (!oldPattern.test(content)) return; // 无占位符则跳过
-    content = content.replace(oldPattern, `http://127.0.0.1:8080/${encodeURIComponent(projectName)}/`);
+    content = content.replace(oldPattern, `http://127.0.0.1:8080${CONFIG.urlProjectSegment}/`);
     fs.writeFileSync(docPath, content, 'utf-8');
     console.log(`\n✅ 已将 02应用初始化.md 中的占位符替换为项目名: ${projectName}`);
   } catch (error) {
@@ -753,7 +779,7 @@ async function updateOrgInfo() {
     const apps = [];
     const items = fs.readdirSync(CONFIG.projectRoot);
     // v3.0.0: URL 增加项目目录段，如 http://127.0.0.1:8080/{项目目录名}/{应用名}/01需求梳理/原型页面/index.html
-    const projectSegment = encodeURIComponent(path.basename(CONFIG.projectRoot));
+    const projectSegment = CONFIG.urlProjectSegment;
 
     for (const item of items) {
       const appPath = path.join(CONFIG.projectRoot, item);
@@ -762,7 +788,7 @@ async function updateOrgInfo() {
       if (fs.existsSync(prototypePath)) {
         apps.push({
           name: item,
-          url: `http://127.0.0.1:${CONFIG.httpPort}/${projectSegment}/${encodeURIComponent(item)}/01需求梳理/原型页面/index.html`,
+          url: `http://127.0.0.1:${CONFIG.httpPort}${projectSegment}/${encodeURIComponent(item)}/01需求梳理/原型页面/index.html`,
           synced: true
         });
       }

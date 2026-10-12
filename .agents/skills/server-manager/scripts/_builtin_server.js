@@ -52,6 +52,9 @@ function resolveTargetProjectRoot(projectDir) {
     // 必须已存在且是合法项目根，避免 spawn 带无效 cwd 静默失败
     if (isValidProjectRoot(dir)) return dir;
   }
+  // 兜底：单项目布局（静态根=项目根）下显式候选可能是页面目录等非项目根（如"本地操作页面"），
+  // 静态根自身即项目根时优先回退，避免 spawn 带错误 cwd
+  if (isValidProjectRoot(staticRoot)) return staticRoot;
   // 兜底：传入目录存在即用（老版本项目可能既无 .agents 也无 组织及应用信息.md）
   for (const dir of candidates) {
     try { if (fs.existsSync(dir) && fs.statSync(dir).isDirectory()) return dir; } catch (_) {}
@@ -64,6 +67,12 @@ const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
   if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+  // 根路径重定向到组织门户（单项目布局下静态根=项目根，根目录无 index.html）
+  if (req.url === '/' && fs.existsSync(path.join(staticRoot, '本地操作页面', 'index.html'))) {
+    res.writeHead(302, { Location: '/' + encodeURIComponent('本地操作页面') + '/index.html' });
+    res.end();
+    return;
+  }
   const decodedUrl = decodeURIComponent(req.url);
   const urlInfo = decodedUrl.split('?');
   if (urlInfo[0] === '/__yida_health') {
