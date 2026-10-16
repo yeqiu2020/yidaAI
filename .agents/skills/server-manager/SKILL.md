@@ -193,6 +193,11 @@ node .agents/skills/server-manager/scripts/server_manager.js stop
 
 **现象（仅旧版 v2.x 单项目模式适用）**：用户在 A 项目（如 V2.0.22）启动过服务，之后切到 B 项目（如 V2.0.23）开发，忘记重启服务。浏览器打开门户页面时，页面内容和"同步到本地"都指向 **旧项目 A 的目录**，新项目 B 下找不到同步出来的文件夹。
 
+**⚠️ 变体（2026-10-13/14 新鑫科技AI助手实测）：从项目内子目录启动 3457 + 旧版前端缓存劫持**——两个叠加根因：
+1. **服务 cwd 落在项目内子文件夹（如 本地操作页面）**：不报任何错，`组织及应用信息.md`、`.cookies.json`、门户创建的应用文件夹全部写进该子目录。识别特征：`/health` 返回的 `cwd` 不是项目根；「组织及应用信息.md」中「本地门户」URL 出现双重段（如 `…/本地操作页面/本地操作页面/index.html`）。
+2. **前端缓存劫持（修复 cwd 后仍复发的原因）**：index.html 引用 dashboard.js 的缓存参数长期停在 `?v=1.8.0`，浏览器永远拿不到 v1.10.0 的单项目布局适配，把 URL 首段 `本地操作页面` 当项目名发 `projectDir=本地操作页面`；服务端 `resolveProjectDir` v3.0.1「目录存在即接受」分支放行，定位被劫持。且错位目录一旦有 md 残留，referer 兜底/唯一项目扫描也会持续命中，**自我延续**。
+处置：杀 3457 → 子目录里的 md/cookies/应用文件夹移到项目根并合并数据 → 修 dir-ops.js（v3.1.0 单项目布局防护：hasOrgConfig(staticRoot) 时相对 projectDir 一律落 staticRoot、跳过 referer/子目录扫描）→ 升 dashboard.js 缓存参数（?v=1.10.1）→ 以项目根为 cwd 重启（见问题8）。
+
 **根因（旧版）**：HTTP(8080) 与同步服务(3457) 是全局端口，由**第一次启动它们的项目目录**持有。页面/同步接口通过 `process.cwd()` 定位项目目录，进程 cwd = 旧项目 A，所以数据全部写入 A。
 
 **识别方法**：
@@ -344,6 +349,44 @@ schtasks /Delete /TN YidaServiceStart /F                      # 删除任务
 
 **教训**：病根在「启动方是谁」而非「前台/后台」。任何在 Trae 终端内启动的 node 进程都受 Job Object 管控，改启动参数（detached/unref/Background）无法根治；必须换启动方到 Trae 之外。
 
+### 问题10：`schtasks /Run` 显示 SUCCESS 但服务未拉起——计划任务指向旧项目路径（v3.6.2 实测踩坑）
+
+**现象**：执行 `schtasks /Run /TN YidaServiceStart` 返回 SUCCESS，但随后 `server_manager.js status` 两个端口仍 🔴。
+
+**根因**：计划任务注册时的脚本路径是**注册那一刻的项目根**。项目目录升级/改名（如 `新鑫科技AI助手V2.0.33` → `新鑫科技AI助手`）后，任务仍指向旧路径，旧路径下脚本不存在 → 任务执行失败。`schtasks /Run` 只表示"已尝试触发"，**不代表任务内部命令执行成功**。
+
+**识别方法**：
+```powershell
+schtasks /Query /TN YidaServiceStart /V /FO LIST | Select-String -Pattern "上次结果|Last Result|要运行的任务|Task To Run"
+```
+- `Last Result: 1` = 任务命令执行失败
+- `Task To Run` 中的脚本路径 ≠ 当前项目根 → 路径漂移
+
+**解决方案**：用 `/F` 覆盖重注册为当前项目路径，再触发：
+```powershell
+schtasks /Create /TN YidaServiceStart /TR '"<node.exe绝对路径>" "<当前项目根>\.agents\skills\server-manager\scripts\server_manager.js" start' /SC ONSTART /RU "$env:USERNAME" /RL LIMITED /F
+schtasks /Run /TN YidaServiceStart
+```
+注册后必须 `status` + `curl --noproxy '*' http://127.0.0.1:3457/health` 双验证（脚本自报成功 ≠ 存活，同问题8）。
+
+**教训**：`/Run` 的 SUCCESS ≠ 服务启动成功；项目目录改名/升级后计划任务不会自动跟随，必须重注册。
+
+### 问题11：单项目布局下「进入应用」/「组织主页」404——URL 项目段格式不匹配（v3.6.3 实测踩坑）
+
+**现象**：门户页点「📂 进入应用」打开 not found；原型页点「🏠 组织主页」也是 404。服务状态、静态页本身均正常。
+
+**根因（三层叠加，2026-10-14 新鑫科技AI助手实测）**：server_manager v3.4.0 staticRoot 有效性校验把"资料目录型父目录"（合法项目占比 <50%，本项目 2/22）回退**单项目布局**（staticRoot=项目根，8080 URL 不带项目段），但三处仍按多项目格式拼 URL：
+1. **sync_server.js org-info 的 prototypeUrl** 硬编码 `http://127.0.0.1:8080/{项目名}/{应用名}/...` → 8080 上不存在 `/{项目名}/` 层 → 进入应用 404
+2. **dashboard.js getProjectName()** 拿 URL 编码段（`%E6%9C%AC...`）与 `'本地操作页面'` 比较，永远 false → 单项目布局判断失效，PROJECT_NAME 被错设为 `本地操作页面`
+3. **原型页 app.js buildPortalUrl()**（v3.0.7）把 URL 首段当项目段拼接——单项目布局下原型页 URL 是 `/{应用名}/01需求梳理/...`，首段是**应用名**，拼出 `/{应用名}/本地操作页面/` → 组织主页 404
+
+**修复方案（已实施）**：
+1. sync_server v3.3.0：新增 `buildEntryUrlBase(projectDir)`——按「项目目录相对静态根的路径段」生成 URL 前缀（单项目 → 无段；多项目 → `/{项目名}`），三处 prototypeUrl 统一走该函数
+2. dashboard.js v1.10.2：getProjectName 先 `decodeURIComponent(segments[0])` 再比较 `'本地操作页面'`（index.html 缓存参数同步升 ?v=1.10.2）
+3. prototype_generator v2.42.0：app.js 模板改探测法 `rewritePortalLinks()`——`HEAD /本地操作页面/index.html` 可达 → 单项目（门户链接不带段）；404 → 多项目（按首段拼）；探测异常保持模板原 href；GENERATOR_VERSION 递增触发全量重建，存量页面 app.js 手动同步 + HTML 引用加 `?v=2.42.0`
+
+**教训**：URL 拼接逻辑（服务端 prototypeUrl、前端门户链接）必须与 server_manager 的 staticRoot 布局判定**同一标准**；单项目/多项目布局并存时，任何"URL 首段 = 项目段"的假设都要显式验证（前端无法直接判断首段语义，用探测法或让服务端下发布局信息）。
+
 ## 六、检查清单
 
 执行前确认：
@@ -359,26 +402,18 @@ schtasks /Delete /TN YidaServiceStart /F                      # 删除任务
 
 ## 七、版本更新记录
 
-### v3.6.0 (2026-09-28)
-- **新增**：统一环境预检脚本 `scripts/agent_capabilities.js`（P5-3，对齐 OpenYida agent-capabilities 模式）——一条命令输出机器可读 JSON 摘要：Skill 概况（含 verifyStatus 分布）、.cookies.json 存在性与登录态探测（GET getAppList 轻量接口，失效退出码 1）、8080/3457 服务健康、关键配置文件可读性；检查清单已接入。轻量摘要为主，完整诊断按需。
+### v3.6.3 (2026-10-14)
+- **新增**：问题11「单项目布局下『进入应用』/『组织主页』404」——sync_server org-info 的 prototypeUrl 无条件按
+  多项目格式拼 `/{项目名}/{应用名}/`，而 v3.4.0 staticRoot 校验回退单项目形态（URL 无项目段）后链接 404；
+  修复为 sync_server v3.3.0 `buildEntryUrlBase`（按项目目录相对静态根的路径段生成 URL 前缀）+
+  dashboard.js v1.10.2（getProjectName 必须先 decodeURIComponent 再比较'本地操作页面'，编码段比较永远 false）+
+  prototype_generator v2.42.0（组织主页链接改探测法 rewritePortalLinks）。
 
-### v3.5.0 (2026-09-28)
-- **新增**：问题9「关 Trae 服务就掉——Job Object 病根只能用计划任务根治」。实测根治：用
-  `schtasks /Create /SC ONSTART` + `schtasks /Run` 由 Task Scheduler 拉起服务，完全脱离 Trae 的 Job Object，
-  关 Trae 不再掉线，且支持手动触发立即拉起。
-- **修正（推翻 v3.4.0 药方）**：问题8 的 Background 模式仍跑在 Agent 宿主的 Job Object 内，治标不治本；
-  问题5 中「autostart-on 比手动建计划任务更简单」的旧结论已作废（autostart-on 只覆盖开机场景，
-  不解决本次会话内关 Trae，且与计划任务功能重叠需二选一）。
-- **明确**：病根在「启动方是谁」而非前台/后台；任何 Trae 内启动的 node 进程都受 Job Object 管控，
-  detached/unref/Background 均无法根治，必须换启动方到 Trae 之外。
-
-### v3.4.0 (2026-09-22)
-- **新增**：问题8「Background 模式启动 8080/3457 的正确姿势」——`STATIC_ROOT = process.cwd()`，
-  3457 的 cwd 必须是 staticRoot；给出 Background 模式双脚本启动命令（比 `server_manager.js start` 更稳，
-  后者 detached 子进程会被宿主回收）。
-- **新增**：验证三连（netstat + 直连 health + 门户 200）与 **`--noproxy '*'` 强制要求**
-  （本机 HTTP 代理会拦截 127.0.0.1 造成假失败）。
-- **联动**：sync_server v3.0.9 修复 `resolveProjectDir` 单项目模式误报「projectDir 无效」并回退误定位。
+### v3.6.2 (2026-10-14)
+- **新增**：问题10「`schtasks /Run` 显示 SUCCESS 但服务未拉起」——项目目录升级/改名后计划任务仍指向旧项目路径（Last Result: 1），给出 `/V /FO LIST` 识别法与 `/F` 重注册方案；明确 `/Run` 的 SUCCESS ≠ 任务内部命令执行成功。
+- **修正**：问题5 变体补充完整根因链——旧版前端缓存（?v=1.8.0）发 projectDir=本地操作页面 +
+  resolveProjectDir v3.0.1「目录存在即接受」+ md 残留后 referer/唯一项目扫描自我延续；
+  已由 dir-ops.js v3.1.0 单项目布局防护根治，dashboard.js 缓存参数升 ?v=1.10.1。
 
 ## 八、快速参考
 

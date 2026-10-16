@@ -13,6 +13,12 @@
  * - 同步操作 → lib/sync-server/sync-ops.js
  * - 组织配置 → lib/sync-server/org-config.js
  *
+ * v3.3.0: 修复单项目布局下「进入应用」404 — org-info 的 prototypeUrl 原先无条件按
+ *         多项目格式拼 /{项目名}/{应用名}/，而 server_manager v3.4.0 staticRoot 有效性
+ *         校验对"资料目录型父目录"（合法项目占比<50%）回退单项目形态（staticRoot=项目根、
+ *         8080 URL 不带项目段），链接指向不存在的项目段目录（2026-10-14 实测）。
+ *         新增 buildEntryUrlBase：按「项目目录相对静态根的路径段」生成 URL 前缀，
+ *         单项目布局 → 无项目段；多项目布局 → /{项目名}。同步修复前端 dashboard.js v1.10.2。
  * v3.2.9: /health 新增 projectVersion 字段 — 项目版本唯一真相源 package.json（与 git tag 对应），本地操作页面状态检查同步展示
  * v3.2.0: 【重构】/sync-form-actions 改为服务端内联实现（lib/sync-server/action-code-sync.js），
  *         不再 spawn 子进程 — 消除动作代码同步唯一的子进程链路（关联两次 IDE 卡死事故排查）；
@@ -85,7 +91,7 @@ const { pushActionCode, listActionCodeVersions } = require('../../../../lib/sync
 
 // ── 常量 ────────────────────────────────────────────────
 const PORT = parseInt(process.env.SYNC_SERVICE_PORT || '3457', 10);
-const SERVER_VERSION = '3.2.9';
+const SERVER_VERSION = '3.3.0';
 // 项目版本（唯一真相源 = package.json 的 version 字段，与 git tag vX.Y.Z 对应）
 let PROJECT_VERSION = '未知';
 try { PROJECT_VERSION = require('../../../../package.json').version || '未知'; } catch (e) { /* 读取失败保持"未知" */ }
@@ -94,6 +100,17 @@ try { PROJECT_VERSION = require('../../../../package.json').version || '未知';
 //  多项目模式 cwd=公共父目录（静态根 staticRoot=process.cwd()，项目目录是其子目录）
 //  因此 PROCESS_ROOT 不再作为唯一根使用，所有按请求解析项目目录。
 const STATIC_ROOT = process.cwd();
+
+// v3.3.0: 应用入口 URL 前缀——按「项目目录相对静态根的路径段」生成，与 server_manager
+// v3.4.0 staticRoot 有效性校验对齐：
+//   多项目布局（projectDir = STATIC_ROOT/{项目名}）→ http://127.0.0.1:8080/{项目名}
+//   单项目布局（projectDir == STATIC_ROOT）        → http://127.0.0.1:8080（无项目段）
+function buildEntryUrlBase(projectDir) {
+  const resolved = path.resolve(projectDir || STATIC_ROOT);
+  const rel = path.relative(path.resolve(STATIC_ROOT), resolved);
+  const seg = (!rel || rel === '.') ? '' : `/${encodeURIComponent(path.basename(resolved))}`;
+  return `http://127.0.0.1:8080${seg}`;
+}
 
 // ── HTTP 服务器 ─────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
@@ -822,7 +839,7 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
                 appId: appId,
                 synced: isSynced,
                 hasPrototype: hasPrototype,
-                prototypeUrl: hasPrototype ? `http://127.0.0.1:8080/${encodeURIComponent(path.basename(projectDir))}/${encodeURIComponent(appName)}/01需求梳理/原型页面/index.html` : null
+                prototypeUrl: hasPrototype ? `${buildEntryUrlBase(projectDir)}/${encodeURIComponent(appName)}/01需求梳理/原型页面/index.html` : null
               });
               knownAppNames.add(appName);
             }
@@ -859,7 +876,7 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
               appId: '待创建',
               synced: false,
               hasPrototype: hasPrototype,
-              prototypeUrl: hasPrototype ? `http://127.0.0.1:8080/${encodeURIComponent(path.basename(projectDir))}/${encodeURIComponent(dirName)}/01需求梳理/原型页面/index.html` : null
+              prototypeUrl: hasPrototype ? `${buildEntryUrlBase(projectDir)}/${encodeURIComponent(dirName)}/01需求梳理/原型页面/index.html` : null
             });
             log(`[org-info] 发现本地未记录应用: ${dirName}`, 'green');
           }
@@ -1411,7 +1428,7 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
                 synced: isSynced,
                 hasPrototype: hasPrototype,
                 formCount,
-                prototypeUrl: hasPrototype ? `http://127.0.0.1:8080/${encodeURIComponent(path.basename(projectDirHost))}/${encodeURIComponent(appName)}/01需求梳理/原型页面/index.html` : null
+                prototypeUrl: hasPrototype ? `${buildEntryUrlBase(projectDirHost)}/${encodeURIComponent(appName)}/01需求梳理/原型页面/index.html` : null
               });
             }
           } else if (!trimmed.startsWith('|')) {

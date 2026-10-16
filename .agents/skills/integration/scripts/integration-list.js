@@ -5,7 +5,7 @@ const path = require('path');
 const coreUtils = require('../../../../lib/core/utils');
 const { loadCookieData, resolveBaseUrl } = coreUtils;
 const { triggerLogin } = require(path.resolve(__dirname, '../../api-client/scripts/api_client'));
-const { listLogicflows, switchLogicflow } = require('./integration-api');
+const { listLogicflows, listFormLogicflows, switchLogicflow } = require('./integration-api');
 
 async function createAuthRef() {
   let cookieData = loadCookieData();
@@ -28,6 +28,7 @@ function parseListArgs(args) {
     key: '',
     pageIndex: 1,
     pageSize: 50,
+    source: 'form',
     json: false,
   };
 
@@ -44,7 +45,9 @@ function parseListArgs(args) {
       if (Number.isFinite(n) && n > 0) { parsed.pageIndex = n; }
     } else if (arg === '--size' && args[i + 1]) {
       const n = Number.parseInt(args[++i], 10);
-      if (Number.isFinite(n) && n > 0) { parsed.pageSize = Math.min(n, 100); }
+      if (Number.isFinite(n) && n > 0) { parsed.pageSize = Math.min(n, 50); }
+    } else if (arg === '--source' && args[i + 1]) {
+      parsed.source = args[++i] === 'app' ? 'app' : 'form';
     } else if (arg === '--json') {
       parsed.json = true;
     } else if (!arg.startsWith('--') && !parsed.appType) {
@@ -58,18 +61,32 @@ function flattenFlowList(content) {
   const groups = (content && content.data) || [];
   const flows = [];
   for (const group of groups) {
-    const formUuid = group.formUuid || '';
-    const formName = group.formName || group.title || '';
-    const flowList = Array.isArray(group.flowList) ? group.flowList : [];
-    for (const flow of flowList) {
+    // 【v2.10.3】两种返回结构兼容：
+    //   appLogicflowBinding = 分组结构（{formUuid, flowList:[...]}）
+    //   formLogicflowBinding = 平铺结构（每个元素本身就是 flow，直接含 processCode）
+    if (Array.isArray(group.flowList)) {
+      const formUuid = group.formUuid || '';
+      const formName = group.formName || group.title || '';
+      for (const flow of group.flowList) {
+        flows.push({
+          formUuid,
+          formName,
+          processCode: flow.processCode || '',
+          name: flow.name || flow.title || '',
+          status: flow.status || '',
+          gmtModified: flow.gmtModified || flow.gmtCreate || '',
+          modifier: flow.modifier || flow.creator || '',
+        });
+      }
+    } else if (group.processCode) {
       flows.push({
-        formUuid,
-        formName,
-        processCode: flow.processCode || '',
-        name: flow.name || flow.title || '',
-        status: flow.status || '',
-        gmtModified: flow.gmtModified || flow.gmtCreate || '',
-        modifier: flow.modifier || flow.creator || '',
+        formUuid: group.formUuid || '',
+        formName: group.formName || group.title || '',
+        processCode: group.processCode || '',
+        name: group.name || group.title || '',
+        status: group.status || '',
+        gmtModified: group.gmtModified || group.gmtCreate || '',
+        modifier: group.modifier || group.creator || '',
       });
     }
   }
@@ -105,7 +122,10 @@ async function runList(args) {
   }
 
   const authRef = await createAuthRef();
-  const result = await listLogicflows(authRef, {
+  // 【v2.10.3 双清单陷阱】appLogicflowBinding（Connector.getListflow）不含原生设计器创建的流（实测26 vs 43条）。
+  //   默认走 formLogicflowBinding（Connector.getTriggerList）= 全量清单；--source app 仅作对照。
+  const useAppSource = parsed.source === 'app';
+  const result = await (useAppSource ? listLogicflows : listFormLogicflows)(authRef, {
     appType: parsed.appType,
     formUuid: parsed.formUuid,
     status: parsed.status,
@@ -123,6 +143,7 @@ async function runList(args) {
   printFlowTable(flows);
   console.log(JSON.stringify({
     appType: parsed.appType,
+    source: parsed.source,
     total: flows.length,
     totalCount: result.totalCount,
     hasMore: result.hasMore,
