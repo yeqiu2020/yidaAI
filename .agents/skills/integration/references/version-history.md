@@ -2,6 +2,73 @@
 
 > 本文件从 SKILL.md 拆分而来（渐进式披露）。按需加载：需要了解某个能力何时引入/修复了什么问题时查阅。
 
+## v2.10.5 (2026-10-16)
+
+**场景**：新鑫采购付款链路修复验证期，6Y866V81（原生设计器流）API saveProcess 保存成功+回读正确，但执行行为完全不变；待付款金额赋值（公式/字面量 888）落地恒 0。
+
+**两个新实锤（判定实验链）**：
+
+1. **原生流 API 保存 ≠ 运行时生效（最重要）**：把已付款累加 #3 改成 literal 555 → 保存成功+回读 555 → 发付款执行 → 已付仍按**旧公式**累加（110+10=120，无视 555）。即原生设计器创建的流，`saveProcess` 只改了配置存储，**运行时定义不刷新**；用户在设计器里点一次"保存并发布"后立即生效（140/860 实证）。对照：**自建流（流A2）API 保存立即生效**。⚠️ 凡是修改原生流的配置，API 保存后必须请用户在设计器里重新保存/发布一次。
+2. **公式字段作为引用源在流上下文求值=0（v2.10.4 的补充面）**：待付公式 `ADD(kl5u8j6c, PRODUCT(ADD(mkv8f07t, kkkskxbj), -1))` 执行落地 **-130 = 0-(120+10)**——公式字段 kl5u8j6c（=SUM(子表)）作为**引用源**读到 0，普通字段引用（mkv8f07t=120、kkkskxbj=10）全部正常。规则扩展：**流公式中既禁止把公式字段当赋值目标（v2.10.4），也禁止把公式字段当引用源**；需要总额类数据时改用普通字段源（本例改用付款明细行上的 numberField_kkkskxba 订单总额，最终公式 `ADD(#{numberField_kkkskxba},PRODUCT(ADD(#{FORM-.../numberField_mkv8f07t},#{numberField_kkkskxbj}),-1))`，订单A 860 / 订单B 500 双实证）。
+
+**其他**：API 直改普通字段（updateFormData.json）不受上述限制，可作字段可写性判别手段（777 直改落地成功 → 排除字段锁定的关键一步）；审批 executeTask 必须带 remark（审批意见），否则报"参数校验失败"。
+
+## v2.10.4 (2026-10-15)
+
+**场景**：新鑫系统采购付款链路四轮端到端重测，订单主表「待付款金额」（mkv8f07y）无论流里赋什么值（自算公式 900、ADD+PRODUCT 安全模式、甚至字面量 888）落地恒为 0；同流其他字段（已付款累加、付款状态、对账状态）全部正常。
+
+**判定实验链（排除法收口）**：①Round3 流A2 子表行赋值 ADD+PRODUCT 公式成功（行已付 10/5、行未付 990/595）→ 排除"减号不解析"理论；②`getFormSchema` 核对订单字段：mkv8f07y **valueType=formula**（公式=`#{numberField_kl5u8j6c}`，而 kl5u8j6c=SUM(子表 kl5u8j6o)），mkv8f07t **valueType=custom**——唯一差异变量浮出；③字面量 888 实验：仍为 0 → 排除一切公式语法问题，坐实"公式字段写入覆盖"。
+
+**根因（平台机制，本项目首次实锤）**：集成自动化更新数据节点对 `valueType=formula` 的目标字段赋值时，平台**不落存储写入值，而是用字段自身公式重算覆盖**；公式链含 `SUM(子表字段)` 时在流写入事务上下文中求值为 **0** → 任何赋值都变 0。对照组：valueType=custom 的 READONLY 字段（mkv8f07t）赋值正常；未被流写的同公式字段（mkv8f080=`#{kl5u8j6c}`）保持原值 1000。
+
+**修复**：无脚本修复空间——按规则25由用户手动把 mkv8f07y 从公式字段改为普通数字字段（6Y866V81 #4 与流A2 #2 的公式已恢复 ADD+PRODUCT 安全模式并回读验证，改完字段即通）。
+
+**教训（全部固化到 SKILL.md）**：①流赋值目标字段先查 valueType，公式字段（尤其 `=SUM(子表)`）禁写；②`getProcess()` 返回树**展开在顶层**（cfg.schema），cfg.json/cfg.viewJson 为 undefined——取树三分支 `cfg.viewJson?.schema → cfg.json?.schema → cfg.schema`；③saveProcess 必须**同一份树双槽位**写 processJson+viewJson；④`JSON.stringify` 对 undefined 值的键**静默丢弃**（付款 payload 的 snA/snB undefined → textField_q5xgfdj8 键丢失 → 订单编号空 → 全链断链），构造 payload 一律 `|| ''` 兜底；⑤宜搭公式减法安全模式 `ADD(a, PRODUCT(b, -1))`（无 SUBTRACT）；⑥中间表字段映射以流配置实锤为准：付款子表 textField_fwr6rzxa=产品编码、textField_bmrgjus5=产品规格。
+
+## v2.10.3 (2026-10-15)
+
+**场景**：新鑫系统采购订单主表"已付款金额"（mkv8f07t）每笔付款被累加两次。已排除：38 条集成流（appLogicflowBinding 清单）、表单 JS（浏览器端）、公式字段（READONLY+formula 空）、审批流定义（getProcessDesign 读不到）。
+
+**破案路径（判别实验优先）**：①停用嫌疑流A（LPROC-VN866Z91 自建主表累加流）→ 发验证付款 5228（A=30/B=15）→ 主表仍 +30/+15 → **第二写入者坐实**；②改用 `formLogicflowBinding/listflow`（_api=Connector.getTriggerList）拉清单 → **43 条 vs app 源 26 条**，秒中 LPROC-6Y866V81「采购付款后更新采购订单主表付款状态」（原生设计器创建，触发表单=付款单 processFinish，更新采购订单主表 `mkv8f07t=ADD(旧值,本次付款)`）；③`simpleProcess/getProcess.json?isLogic=true` 回读配置核实。账目闭环：A主表830=原生流累计630+流A多写200；对账单行 630/415（流H 维护）恰为干净口径旁证。
+
+**根因**：宜搭逻辑流有两个清单接口且集合不同——appLogicflowBinding（分组结构 `{formUuid, flowList}`）**不含原生设计器创建/编辑的流**；formLogicflowBinding（平铺结构）才是全量。此前"38 流全部排查完毕"的结论建立在残缺清单上。
+
+**修复**：①`integration-list.js` 默认源改 formLogicflowBinding，flattenFlowList 兼容平铺/分组两种结构，`--source app` 仅作对照，pageSize cap 50（100 报 invalid）；②硬规则 27 固化（双清单陷阱+判别实验模板+getProcess.json 回读路径）；③SKILL.md 专属硬规则第 8 条。
+
+**教训**：①"清单不全"比"排查不细"更致命——排查类任务第一步先验证清单本身的完整性（两个接口对比 totalCount）；②未知写入者定位的最快路径是"停用嫌疑流→发验证单据→测增量"实验，先于一切配置猜测；③listLog 成功执行不暴露，"无失败日志"≠"没执行"。
+
+## v2.10.2 (2026-10-15)
+
+**场景**：流A（主表模式更新节点，混合主表+子表 assignments）41 条失败日志全部报「目标列不在更新的明细下」，整流失败但部分付款金额仍被写入主表。
+
+**根因**：①builder 主表模式（无 updateSubSourceId）时写了 `subSourceId: ''`——引擎把空字符串也当作"子表模式存在"，于是全部 assignments 按子表列校验，主表字段被拒；②混合 assignments（主表字段+子表行字段混在一个更新节点）本身就是错误形态：类型不一致的赋值导致节点整体失败（原子性），拆成两个纯模式流（流A 主表 / 流A2 子表）才是正解。
+
+**修复**：`integration-process-builder.js` 主表模式时整个省略 subSourceId 键（条件展开 `...(hasSubUpdate ? { subSourceId: targetSubFieldId } : {})`，对齐删除节点金标准）。重建流A（纯主表）+ 新建流A2（纯子表行），双流回读+体检通过；验证付款两轮，行赋值全对（主表双倍系 v2.10.3 所述第二写入者叠加，非本修复引入）。
+
+**listLog 参数铁律（本次实测固化）**：必须传 `processCode`（必填但后端忽略其值，返回应用级混总）+ `status=2`（仅失败日志；0/1 报 HTTP 400；成功执行不暴露）；pageSize≤50。`formInstId` 过滤不被接受（HTTP 400）。
+
+## v2.10.1 (2026-10-15)
+
+**场景**：新鑫系统采购付款链路流A（LPROC-VN866Z91，目标=采购订单子表）保存/发布/运行全程零报错，但子表行赋值（行已付款金额累加/行状态翻转）全部未生效；同构的流H（LPROC-6G666TB1，目标=对账单子表）正常。同日修改模式重建流A时，`--update-condition` 写成 6 段式被保存前体检门禁拦截（PLACEHOLDER_LITERAL：字面量 "processVar"）。
+
+**核因**：①流A 赋值公式中目标表旧值引用无 FORM- 前缀（流H 带）——无前缀在子表行赋值场景**静默失效**（赋值被引擎丢弃而非报错）；同节点主表字段赋值"看似成功"实为 ADD(空,付款额)=付款额，首笔碰巧正确、次笔必丢累加（判别实验：XP20261015050 mkv8f07t=123.31=中间表单笔付款额实锤）。②`--update-condition` 系列实为 **7 段式**（opValue=parts[5]、valueType=parts[6]），引用触发字段时 opValue 留空；SKILL.md 参数表却写的 6 段式格式，误导使用者把 processVar 塞进字面量槽位。
+
+**修复**：SKILL.md 参数表 `--update-condition`/`--cycle-update-condition` 补正 7 段式格式与示例；硬规则 21 补充「无前缀静默失效」流A/流H 对照实测与铁律（公式赋值引用目标表旧值一律带 `#{FORM-xxx/fieldId}` 前缀 + 保存后回读核对 value 前缀 + 真实数据行验证行字段真的变了）。脚本行为无变更。
+
+**教训**：①无前缀引用不一定报错——静默失效比显式报错更危险，"运行日志无异常"不等于赋值生效，必须查数据；②参数表格式描述与解析器实现（7 段）不一致时，使用者必踩坑——文档格式必须以解析器源码为准。
+
+## v2.10.0 (2026-09-28)
+
+【运维排查对齐官方 check/diagnose（P4-1）】①`integration-check.js` 新增**静默失败检测**（默认开启，`--no-silent` 关闭）——输出「启用中但无任何执行记录」的逻辑流清单，专治本项目已知坑「内嵌节点配置错误时无执行日志」；②SKILL.md 新增「十三、运维排查」章节，明确官方 check→integration-check / diagnose→integration-validate 的映射与五步标准排查工作流。真机验证：测试应用（有执行记录）不误报，进销存一条启用中零执行记录的流程被精准抓出。
+
+## v2.9.0 (2026-09-28)
+
+【spec 声明式规格 + 更新禁区（P4-2）】①新增 `integration-spec.js` 翻译模块 + `integration-create.js --spec <文件>` 入口——spec JSON 翻译为既有 CLI 参数后走同一构建链，体检门禁/Schema 校验全保留；离线断言 15/15 通过 + 既有 builder 测试 37/37 无回归。②新增专属硬规则 6「更新禁区」；③新增专属硬规则 7「复杂逻辑流创建优先 spec 模式」。
+
+## v2.8.30 (2026-09-28)
+
+【保存后回读验证强化（P0-4/P0-5）】①「修改集成自动化」第 4 步升级为强制回读验证——必须 `integration-get.js` 回读核对节点配置与预期一致 + `integration-validate.js` 体检，回读不一致按失败处理；②新增「启用/停用后回读」小节。背景坑：内嵌节点配置错误时无执行日志，回读是唯一前置防线。
+
 ## v2.8.28 (2026-08-22)
 
 **场景**：v2.8.27 后（`id` 已带 `${}` 包裹）用户测试 LPROC-KKC66 仍报"span 显示'获取单条数据.实例ID'是对的，但下拉（ul）里没选中该字段"。

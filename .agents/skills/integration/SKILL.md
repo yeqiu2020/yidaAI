@@ -21,6 +21,8 @@ description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集
    - bundle 逆向佐证：`parseListFieldsToVars` 中 `formSuffix = "Object"===type ? "//" : "targetForm"===type ? "/" : ""`；`handleDialogEnter` 的 value 转换只处理 `//`（双斜杠），不处理 `/`（单斜杠），所以单斜杠格式的 `__source` 会原样保留到 `value`
 6. **【强制·v2.9.0】更新禁区——已有逻辑流禁止盲改** — 官方路由规则原义（raw 直链已核实）：*「集成自动化从上游节点子表取数或新增一行」应使用新建路径；不要用 update 或现网 replace*。落地三则：①修改已有逻辑流仅限既有 `--process-code` 模式，且修改前必须回读展示当前配置供确认（专属硬规则 3）；②「从上游节点子表取数或新增一行」场景一律走**新建**（推荐 spec 模式）；③既有沉淀规则**原样保留**：「字段方式无法引用目标字段时用公式方式赋值」「触发子表→目标子表走中间表两段式」（硬规则 20）等，本条为补充而非替代
 7. **【强制·v2.9.0】复杂逻辑流创建优先 spec 模式** — 多节点/多条件/多赋值的创建一律用 `--spec <文件>` 声明式 JSON 规格驱动（AI 生成 spec → 脚本提交），禁止在对话里逐字段拼装长 CLI 命令。spec 翻译为既有 CLI 参数后走**同一构建链**，体检门禁/Schema 校验全部保留。仅简单单节点场景（如最简消息通知）可直接用 CLI。Schema 与节点枚举见 [references/integration-spec.schema.json](references/integration-spec.schema.json)
+8. **【强制·v2.10.3】双清单陷阱——排查"谁在写这张表"/新建流前查重必须拉全量清单** — `integration-list.js list` 默认走 formLogicflowBinding（Connector.getTriggerList，实测43条，**含原生设计器创建的流**）；appLogicflowBinding（实测26条）不含原生流，仅作对照（`--source app`）。配套判别实验：停用嫌疑流 → 发小额验证单据 → 测目标字段增量（增量=预期值→写入者另有其人；增量=0→该流即唯一写入者）；嫌疑流配置用 `simpleProcess/getProcess.json?isLogic=true` 回读。详见 [references/集成自动化硬规则.md](references/集成自动化硬规则.md) 规则27。**铁律：新建/重建集成流前必须按「触发表单+目标表单」双维度查重，防止与既有流功能重复导致双写。**
+9. **【强制·v2.10.4】公式字段写入覆盖禁忌——流赋值目标字段禁止是 valueType=formula** — 集成自动化对公式字段（如 `=SUM(子表字段)`）赋值时，平台用字段自身公式重算覆盖写入值；公式链含 SUM(子表) 在流写入事务上下文求值为 0 → 任何赋值（公式/字面量）落地恒 0（四轮判定实验实锤，详见「十、已知限制」第 8 条）。配置更新节点前先用 getFormSchema 核对目标字段 valueType；公式字段须用户手动改为普通字段（规则25）；`valueType=custom` 的 READONLY 字段不受影响。
 
 ---
 
@@ -341,7 +343,7 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
 | `--connector-inputs` | 连接器完整入参schema JSON文件路径 | 否 |
 | `--connector-assignment` | 连接器入参映射（可多次）：column:valueType:value | 否 |
 | `--update-form-uuid` | 更新数据目标表单UUID | 否 |
-| `--update-condition` | 更新数据主条件（可多次，定位主表记录） | 否 |
+| `--update-condition` | 更新数据主条件（可多次，定位主表记录）。**7 段式**：`bFieldId:bFieldName:aFieldId:componentType:opCode:opValue:valueType`——引用触发字段时 opValue 段留空，如 `field_a:名称:field_b:TextField:Equal::processVar`（6 段式会把 processVar 塞进字面量槽位被体检拦截） | 否 |
 | `--update-assignment` | 更新数据字段赋值（可多次，格式：column:valueType:value。valueType 可选：`processVar`=引用触发表单字段值、`column`=公式表达式如 `#{目标/fieldId}+#{触发/fieldId}`、`literal`=固定值） | 否 |
 | `--update-type` | 更新模式：direct_form(默认,直接更新)/node(按前置获取节点更新) | 否 |
 | `--update-sub-source-id` | 更新子表时目标子表字段ID（tableField_xxx） | 否 |
@@ -364,7 +366,7 @@ node .agents/skills/integration/scripts/integration-create.js APP_XXX FORM-XXX "
 | `--data-sub-field-id` | subform 子表来源时的触发子表字段ID（tableField_xxx） | 否 |
 | `--data-sub-source-id` | **目标表单子表直接获取（v2.8.7，单独使用无 `--data-sub-condition` 时）**：获取节点 `originalType="sub_table"` + `sourceId=#{目标表单}` + `subSourceId=该值`，从目标表单子表直接查匹配行（设计器显示"从子表中获取"）。若同时配 `--data-sub-condition` 则变为 5 节点 cascade（从数据节点中获取） | 否 |
 | `--cycle-update-form-uuid` | 循环体内更新数据目标表单UUID（⚠️ 数据同步场景禁用此方案，一律用 direct_form `--update-*`；仅保留给确需逐条独立处理的特殊拓扑） | 否 |
-| `--cycle-update-condition` | 循环体更新主条件（可多次，格式同 `--update-condition`：bFieldId:bFieldName:aFieldId[:componentType[:opCode[:valueType]]]） | 否 |
+| `--cycle-update-condition` | 循环体更新主条件（可多次，**7 段式同 `--update-condition`**：bFieldId:bFieldName:aFieldId:componentType:opCode:opValue:valueType，引用触发字段 opValue 留空） | 否 |
 | `--cycle-update-assignment` | 循环体更新赋值（可多次，格式同 `--update-assignment`：column:valueType:value，valueType 可选 `processVar`/`column`/`literal`） | 否 |
 | `--cycle-update-none-operation` | 循环体未匹配处理：`ignored`(跳过) / `add`(新增=upsert，默认) | 否 |
 | `--cycle-initiate-approval-form-uuid` | 循环体内发起审批目标流程表单UUID（场景：遍历子表行逐行发起审批） | 否 |
@@ -531,6 +533,7 @@ node .agents/skills/integration/scripts/integration-delete.js <appType> <formUui
    - **v2.8.2 历史事故**：发起人(initiator)为空导致设计器保存弹窗"假保存" + `form_inst_creator` 显示不友好。三阶段修复：①空值→回退 `form_inst_creator`（能保存但显示原始文本）②`findSubmitterFieldId` 增加二级回退——主表第一个 EmployeeField（设计器显示字段中文名）③新增 `--cycle-initiate-approval-initiator` CLI 参数。正确保存流程：面板保存(React onClick)→检查弹窗→退出→发布(React onClick)→检查弹窗→等待API。详见硬规则 10/12。
 6. **连接器预设有限**：仅内置钉钉待办预设，其他连接器需传入 `--connector-inputs`。
 7. **组合场景测试已全部通过（2026-07-28）**：4 个复杂场景 API 直建均成功 + 设计器保存均通过（ConnectorNode currentStep、EmployeeField literal 数组、连接器必填入参，详见 node-playbook.md 避坑清单 13-15 条）。
+8. **公式字段写入覆盖机制（v2.10.4 四轮判定实验实锤）**：更新数据节点对 `valueType=formula` 的目标字段赋值时，平台**不落存储写入值，而是用字段自身公式重算覆盖**；若公式链含 `SUM(子表字段)`，在流写入事务上下文求值为 0 → 任何赋值（计算公式 / ADD+PRODUCT / 字面量 888）落地恒 0。对照组：`valueType=custom` 的 READONLY 字段赋值正常；未被流写的同公式字段保持原值。**规避**：需要被流写入的字段禁止设计为公式字段（尤其 `=SUM(子表)`）；配置前用 getFormSchema 核对目标字段 valueType。案例：新鑫采购订单 mkv8f07y（`=#{kl5u8j6c}`，kl5u8j6c=SUM(子表)）。**v2.10.5 扩展：公式字段作为引用源在流上下文同样求值=0**（-130 实锤），流公式禁止引用公式字段（目标与源双向禁止）；**原生设计器流 API saveProcess 后运行时不刷新，须用户在设计器重新保存/发布**（lit3 555 实验实锤；自建流不受限）。**配套教训**：①`getProcess()` 返回树展开在顶层（cfg.schema），cfg.json/cfg.viewJson 为 undefined，取树三分支 `cfg.viewJson?.schema → cfg.json?.schema → cfg.schema`；②saveProcess 必须同一份树双槽位写 processJson+viewJson；③`JSON.stringify` 对 undefined 值的键静默丢弃（曾致付款单订单编号为空 → 全链断链），构造 payload 一律 `|| ''` 兜底；④宜搭公式减法安全模式 `ADD(a, PRODUCT(b, -1))`（无 SUBTRACT）；⑤审批 executeTask 必须带 remark。
 
 > 3 条回归流：LPROC-N7C6...SMP5 / LPROC-9K96...SM24 / LPROC-3Y86...SME4，均保存成功+设计器面板回读正常；仅并行分支/Groovy/复杂拓扑需走设计器路径（见 node-playbook.md 第 3 节）。
 
@@ -618,9 +621,7 @@ node .agents/skills/integration/scripts/integration-validate.js --file <processJ
 
 ## 版本历史
 
-- **v2.10.0 (2026-09-28)**：【运维排查对齐官方 check/diagnose（P4-1）】①`integration-check.js` 新增**静默失败检测**（默认开启，`--no-silent` 关闭）——输出「启用中但无任何执行记录」的逻辑流清单，专治本项目已知坑「内嵌节点配置错误时无执行日志」；②SKILL.md 新增「十三、运维排查」章节，明确官方 check→integration-check / diagnose→integration-validate 的映射与五步标准排查工作流。真机验证：测试应用（有执行记录）不误报，进销存一条启用中零执行记录的流程被精准抓出。
-- **v2.9.0 (2026-09-28)**：【spec 声明式规格 + 更新禁区（P4-2）】①新增 `integration-spec.js` 翻译模块 + `integration-create.js --spec <文件>` 入口——spec JSON（Schema 见 references/integration-spec.schema.json）翻译为既有 CLI 参数后走同一构建链，体检门禁/Schema 校验全保留；节点枚举 getSelf/getFormData/addData/initiateApproval/updateData/deleteData/message，未建模参数走 extraArgs 透传；离线断言 15/15 通过（金标准=硬规则 5/14/16 文档模板逐字符比对）+ 既有 builder 测试 37/37 无回归。②新增专属硬规则 6「更新禁区」——官方路由规则原义（从上游节点子表取数或新增一行必须新建，禁止 update/replace 盲改），既有中间表两段式等规则原样保留；③新增专属硬规则 7「复杂逻辑流创建优先 spec 模式」。真机 E2E 见当日验收记录。
-- **v2.8.30 (2026-09-28)**：【保存后回读验证强化（P0-4/P0-5）】①「修改集成自动化」第 4 步从"检查输出确认修改成功"升级为强制回读验证——必须 `integration-get.js` 回读核对节点配置与预期一致 + `integration-validate.js` 体检，回读不一致按失败处理；②新增「启用/停用后回读」小节——enable/disable 后必须 `integration-list.js list --status` 回读确认状态真实切换。依据：OpenYida 借鉴改造清单 P0-5（官方 Changelog 2026.9.21「导航设置保存后再次核实」原义）；背景坑：内嵌节点配置错误时无执行日志，回读是唯一前置防线。
-- **v2.8.29 (2026-09-28)**：【新增「十一、停止规则」】防 AI 试错死循环——①输入未修改不重复执行；②连续 2 次修复仍返回相同错误集合即停止并向用户说明已试方案/失败原因/替代路径；③引擎级异常（JSONArray cast 崩溃、静默空转等）不重试同路径，直接按硬规则 17 决策矩阵切换替代架构（如中间表两段式）；④与体检门禁互补（[ERROR] 必修，但修复必须换思路）。依据：OpenYida 借鉴改造清单 P0-4（官方 Changelog 2026.9.23 停止规则原义 + 本项目试错 5 轮 100+ 积分事故）。
+- **v2.10.5 (2026-10-16)**：【原生流运行时不随 API 保存刷新 + 公式字段引用源=0】①lit3 555 实验：原生流 saveProcess 成功+回读正确但执行仍走旧定义，须用户设计器保存/发布（自建流不受限）；②待付公式引用 SUM 公式字段 kl5u8j6c 作源求值 0（落地-130），流公式目标/源双向禁用公式字段，总额源改用付款行 kkkskxba（860/500 双实证）。详见 references/version-history.md。
+- **v2.10.4 (2026-10-15)**：【公式字段写入覆盖机制破案】流对 valueType=formula 目标字段赋值被字段自身公式重算覆盖（SUM(子表) 链在流上下文=0，公式/字面量全变 0，四轮判定实验实锤）；专属硬规则 9 + 已知限制 8 固化。配套：getProcess 树展开在顶层取树三分支、saveProcess 双槽位、JSON.stringify undefined 丢键兜底、减法 ADD+PRODUCT 安全模式、中间表字段映射实锤（付款子表 fwr6rzxa=产品编码/bmrgjus5=产品规格）。
 
 完整版本历史见 [references/version-history.md](references/version-history.md)。

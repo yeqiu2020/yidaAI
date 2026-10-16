@@ -74,7 +74,7 @@ const path = require('path');
  * 每次功能升级时递增，sync-ops.js 会比对 .generator-version 文件，
  * 版本不符则强制全量重建原型页面（保证 manifest 等新功能覆盖所有应用）。
  */
-const GENERATOR_VERSION = '2.41.2';
+const GENERATOR_VERSION = '2.43.1';
 // 导出 GENERATOR_VERSION：供 lib/sync-server/sync-ops.js 的版本感知重建机制动态读取，
 // 使 sync 期望版本与生成器版本由单一来源驱动，避免"两套版本号人工同步遗漏"导致存量应用不自动重建。
 module.exports = module.exports || {};
@@ -515,7 +515,7 @@ function generateIndexHtml(systemInfo, allForms) {
     </main>
   </div>
   
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=2.43.1"></script>
   <script src="js/form-config.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async function() {
@@ -648,7 +648,7 @@ function generateListTemplateHtml(allForms) {
     </div>
   </div>
 
-  <script src="../js/app.js"></script>
+  <script src="../js/app.js?v=2.43.1"></script>
   <script src="../js/form-config.js"></script>
   <script>
     // 页面初始化
@@ -836,7 +836,7 @@ function generateFormTemplateHtml(allForms) {
     </main>
   </div>
 
-  <script src="../js/app.js"></script>
+  <script src="../js/app.js?v=2.43.1"></script>
   <script src="../js/form-config.js"></script>
   <script>
     // 页面初始化
@@ -1099,7 +1099,7 @@ function generateGuideHtml() {
     </main>
   </div>
 
-  <script src="../js/app.js"></script>
+  <script src="../js/app.js?v=2.43.1"></script>
   <script src="../js/form-config.js"></script>
   <script>
     function copyGuidePrompt(el) {
@@ -1443,7 +1443,7 @@ function generateManifestHtml(markdownPath, outputDir, systemName) {
     };
 
     // ===== 同步服务地址 =====
-    const SYNC_SERVICE = 'http://localhost:3457';
+    const SYNC_SERVICE = 'http://127.0.0.1:3457';
     const CURRENT_FILE = {
       groups: '字段清单所在目录的应用分组.md（由后端按 file 参数定位）'
     };
@@ -2277,7 +2277,7 @@ function generateManifestHtml(markdownPath, outputDir, systemName) {
       refreshManifestData(window.location.search.indexOf('refresh=1') < 0);
     });
   </script>
-  <script src="../js/app.js"></script>
+  <script src="../js/app.js?v=2.43.1"></script>
   <script src="../js/form-config.js"></script>
 </body>
 </html>`;
@@ -3952,7 +3952,7 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 // 同步服务配置
-const SYNC_SERVICE_URL = 'http://localhost:3457';
+const SYNC_SERVICE_URL = 'http://127.0.0.1:3457';
 const SYNC_SERVICE_CHECK_INTERVAL = 5000; // 5秒检查一次
 
 // v3.0.3 双布局识别应用目录名：/app-info 与 /sync-app 的 findProjectDir 期望
@@ -3976,13 +3976,37 @@ function getProjectSegmentFromUrl() {
   const decodePart = (s) => { try { return decodeURIComponent(s); } catch (e) { return s; } };
   return decodePart(parts[0] || '');
 }
+// v3.1.0 单项目布局适配：server_manager v3.4.0 staticRoot 校验会把"资料目录型父目录"
+// 回退单项目布局（静态根=项目根），此时原型页 URL 为 /{应用名}/01需求梳理/...，
+// 首段是应用名而非项目段，v3.0.7 的拼接逻辑会产生 /{应用名}/本地操作页面/ 404（2026-10-14 实测）。
+// 改用探测法：/本地操作页面/index.html 可达 → 单项目布局，门户链接不带项目段；
+// 探测 404 → 多项目布局，按 URL 首段（项目段）拼接；探测异常保持模板原 href（单项目下恰好正确）。
+async function rewritePortalLinks() {
+  const links = document.querySelectorAll('a.btn-portal-link');
+  if (!links.length) return;
+  try {
+    const res = await fetch('/本地操作页面/index.html', { method: 'HEAD', signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      window.__portalBase = '/本地操作页面/index.html';
+      links.forEach(function(a) { a.href = window.__portalBase; });
+      return;
+    }
+  } catch (_) { return; }
+  const seg = getProjectSegmentFromUrl();
+  if (seg) {
+    window.__portalBase = '/' + encodeURIComponent(seg) + '/本地操作页面/index.html';
+    links.forEach(function(a) { a.href = window.__portalBase; });
+  }
+}
+// v3.1.1: 同步版门户 URL（登录失效提示等 4 处调用）——优先读 rewritePortalLinks 探测缓存，
+// 未探测到时按 URL 首段拼接（多项目布局正确；单项目布局下首段是应用名会多一层，属降级可接受）
 function buildPortalUrl() {
+  if (window.__portalBase) return window.__portalBase;
   const seg = getProjectSegmentFromUrl();
   return seg ? ('/' + encodeURIComponent(seg) + '/本地操作页面/index.html') : '/本地操作页面/index.html';
 }
 document.addEventListener('DOMContentLoaded', function() {
-  const portalUrl = buildPortalUrl();
-  document.querySelectorAll('a.btn-portal-link').forEach(a => { a.href = portalUrl; });
+  rewritePortalLinks();
 });
 
 // 加载应用信息（应用名称等）
@@ -5119,19 +5143,25 @@ async function generatePrototype(markdownPath, outputDir) {
   console.log('\n使用方式:');
   // v3.1.0: 多组织并存模式下，URL 需要带项目目录段
   let projectDirName = '';
+  let orgDirPath = '';
   try {
     let dir = path.resolve(outputDir);
     const root = path.parse(dir).root;
     while (dir !== root) {
       if (fs.existsSync(path.join(dir, '组织及应用信息.md'))) {
         projectDirName = path.basename(dir);
+        orgDirPath = dir;
         break;
       }
       dir = path.dirname(dir);
     }
   } catch (_) {}
   const appDirName = path.basename(path.dirname(path.dirname(outputDir)));
-  const urlPrefix = projectDirName
+  // v3.1.1: URL 项目段判定与 server_manager v3.4.0 staticRoot 有效性校验对齐——
+  // 仅当 org md 所在目录的父目录是"多项目容器"（≥2 合法项目且占比≥50%）时 URL 带项目段；
+  // 否则单项目布局（静态根=项目根），URL 不带项目段
+  const isMultiProject = orgDirPath && looksLikeProjectContainerDir(orgDirPath);
+  const urlPrefix = (projectDirName && isMultiProject)
     ? `http://127.0.0.1:8080/${encodeURIComponent(projectDirName)}/${encodeURIComponent(appDirName)}`
     : `http://127.0.0.1:8080/${encodeURIComponent(appDirName)}`;
   console.log('  1. 启动宜搭服务: node .agents/skills/server-manager/scripts/server_manager.js start');
@@ -5160,6 +5190,28 @@ async function generatePrototype(markdownPath, outputDir) {
  * 与 server_manager.js / sync_all_configs.js 保持完全一致的格式和逻辑
  * @param {string} outputDir - 原型页面输出目录
  */
+// v3.1.1: 「多项目容器」判定——与 server_manager v3.4.0 staticRoot 有效性校验同一标准：
+// dir 的父目录下合法宜搭项目（含 .agents 或 组织及应用信息.md）≥2 个且占父目录条目 ≥50%。
+// 用于生成 URL 时决定是否携带项目目录段（单项目布局不带，多项目布局带）。
+function looksLikeProjectContainerDir(dir) {
+  try {
+    const parent = path.dirname(path.resolve(dir));
+    if (parent === path.parse(parent).root) return false;
+    const isLegalProject = (d) => {
+      try {
+        return fs.existsSync(path.join(d, '.agents')) || fs.existsSync(path.join(d, '组织及应用信息.md'));
+      } catch (_) { return false; }
+    };
+    let siblingProjects = 0, totalEntries = 0;
+    for (const e of fs.readdirSync(parent, { withFileTypes: true })) {
+      totalEntries++;
+      if (!e.isDirectory()) continue;
+      if (isLegalProject(path.join(parent, e.name))) siblingProjects++;
+    }
+    return siblingProjects >= 2 && siblingProjects / totalEntries >= 0.5;
+  } catch (_) { return false; }
+}
+
 function updateOrgInfoPrototypeUrl(outputDir) {
   const HTTP_PORT = 8080;
 
@@ -5212,11 +5264,14 @@ function updateOrgInfoPrototypeUrl(outputDir) {
       const prototypePath = path.join(appPath, '01需求梳理', '原型页面', 'index.html');
 
       if (fs.existsSync(prototypePath)) {
+        // v3.1.1: URL 项目段判定与 server_manager v3.4.0 staticRoot 有效性校验对齐——
+        // rootDir（org md 所在目录）的父目录是"多项目容器"时 URL 带项目段，否则单项目布局无项目段
+        const isMulti = looksLikeProjectContainerDir(rootDir);
         apps.push({
           name: item,
-          // v3.0.7: 静态服务根是项目根的父目录（URL 带项目段），地址必须含项目目录名，
-          // 否则写进 组织及应用信息.md 的链接在外部浏览器打开是 404
-          url: `http://127.0.0.1:${HTTP_PORT}/${encodeURIComponent(path.basename(rootDir))}/${item}/01需求梳理/原型页面/index.html`,
+          url: isMulti
+            ? `http://127.0.0.1:${HTTP_PORT}/${encodeURIComponent(path.basename(rootDir))}/${item}/01需求梳理/原型页面/index.html`
+            : `http://127.0.0.1:${HTTP_PORT}/${encodeURIComponent(item)}/01需求梳理/原型页面/index.html`,
           synced: true
         });
       }

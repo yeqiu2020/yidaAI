@@ -797,10 +797,13 @@ function buildProcessJson(options) {
       ? buildUpdateConditions(options.updateSubConditions || [])
       : {};
 
+    // 【v2.10.2 修复】主表模式（无 updateSubSourceId）时严禁写 subSourceId 键（包括空字符串）。
+    //   引擎把 subSourceId:'' 也当作"子表模式存在"→ 主表字段被校验"目标列不在更新的明细下"拒绝写入。
+    //   金标准对齐删除节点（line 831 注释）：无 subSourceId 时整个键不存在。
     const updateDataProps = {
       type: updateType,
       sourceId: targetMainFormUuid,
-      subSourceId: targetSubFieldId,
+      ...(hasSubUpdate ? { subSourceId: targetSubFieldId } : {}),
       // 主条件：定位目标主表记录
       condition: mainCondition,
       // 子条件：仅子表更新时非空（引擎对子表行逐行匹配）

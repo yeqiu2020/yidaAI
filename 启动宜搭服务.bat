@@ -1,32 +1,92 @@
 @echo off
 chcp 65001 >nul 2>&1
-
 rem ============================================================
-rem  Æô¶¯ÒË´î·þÎñ
-rem  v2: ¸ÄÎª"×Ô¶¯¶¨Î»½Å±¾ËùÔÚÄ¿Â¼"£¬²»ÔÙÐ´ËÀ¾ø¶ÔÂ·¾¶¡£
-rem      Ô­ÊµÏÖ cd /d "d:\ÒË´îAIÖúÊÖÖ±²¥\ÒË´îAIÖúÊÖV2.0.31" ÊÇ¸´ÖÆÏîÄ¿Ê±
-rem      ²ÐÁôµÄÓ²±àÂëÂ·¾¶£¬Ë«»÷ºó»áÈ¥Æô¶¯¡¾ÁíÒ»¸öÏîÄ¿¡¿µÄ·þÎñ£¬
-rem      µ±Ç°ÏîÄ¿µÄÒ³Ãæ×ÔÈ»´ò²»¿ª¡£
+rem  å®œæ­æœåŠ¡å¸¸é©»å¯åŠ¨å™¨ï¼ˆæŽ¨èæ–¹å¼ï¼‰
+rem  ------------------------------------------------------------
+rem  ä¸ºä»€ä¹ˆéœ€è¦å®ƒï¼š
+rem    åœ¨ WorkBuddy Agent å®¿ä¸»é‡Œæ‰§è¡Œå¯åŠ¨å‘½ä»¤ï¼ŒåŽå°è¿›ç¨‹ä¼šéš
+rem    ã€Œå‘½ä»¤ç»“æŸ / ä¼šè¯å…³é—­ã€è¢«æ•´æ£µè¿›ç¨‹æ ‘å›žæ”¶ï¼ŒæœåŠ¡èµ·ä¸æ¥æˆ–
+rem    å¾ˆå¿«æ¶ˆå¤±ã€‚æœ¬è„šæœ¬ç”±ä½ **åœ¨çœŸå®žç»ˆç«¯ä¸­åŒå‡»/è¿è¡Œ**ï¼Œè¿›ç¨‹æ ‘
+rem    ä¸å— Agent å®¿ä¸»ç®¡è¾–ï¼ŒæœåŠ¡å³å¯é•¿æœŸå¸¸é©»ã€‚
+rem
+rem  èœå•ï¼š
+rem    1 å¯åŠ¨ï¼ˆå¸¸é©»ï¼Œå…³é—­æœ¬çª—å£å³åœæ­¢æœåŠ¡ï¼‰
+rem    2 åŽå°å¯åŠ¨ï¼ˆå…³çª—å£ä¹Ÿä¸åœï¼ŒæŽ¨èæ—¥å¸¸ä½¿ç”¨ï¼‰
+rem    3 åœæ­¢
+rem    4 æŸ¥çœ‹çŠ¶æ€
+rem    5 å¥åº·æ£€æŸ¥
 rem ============================================================
 
 cd /d "%~dp0"
 
+:menu
+cls
 echo ============================================================
-echo   ÕýÔÚÆô¶¯ÒË´î·þÎñ
-echo   ÏîÄ¿Ä¿Â¼: %CD%
+echo   å®œæ­æœåŠ¡ç®¡ç†  -  %CD%
 echo ============================================================
 echo.
-
-if not exist ".agents\skills\server-manager\scripts\server_manager.js" (
-  echo [´íÎó] Î´ÕÒµ½·þÎñ¹ÜÀíÆ÷½Å±¾£¬ÇëÈ·ÈÏ±¾ bat Î»ÓÚÒË´îÏîÄ¿¸ùÄ¿Â¼£º
-  echo        .agents\skills\server-manager\scripts\server_manager.js
-  echo.
-  pause
-  exit /b 1
-)
-
-node .agents\skills\server-manager\scripts\server_manager.js start
-
+echo    [1] å¯åŠ¨æœåŠ¡ï¼ˆå‰å°å¸¸é©»ï¼Œå…³é—­çª—å£å³åœæ­¢ï¼‰
+echo    [2] åŽå°å¯åŠ¨ï¼ˆå…³çª—å£ä¹Ÿä¸åœï¼ŒæŽ¨èï¼‰
+echo    [3] åœæ­¢æœåŠ¡
+echo    [4] æŸ¥çœ‹çŠ¶æ€
+echo    [5] å¥åº·æ£€æŸ¥
+echo    [0] é€€å‡º
 echo.
-echo ·þÎñÒÑÔÚºóÌ¨ÔËÐÐ¡£°´ÈÎÒâ¼ü¹Ø±Õ±¾´°¿Ú£¨²»Ó°Ïì·þÎñ£©¡£
-pause >nul
+set /p choice=è¯·é€‰æ‹© [1-5,0]:
+
+if "%choice%"=="1" goto start_fg
+if "%choice%"=="2" goto start_bg
+if "%choice%"=="3" goto stop
+if "%choice%"=="4" goto status
+if "%choice%"=="5" goto health
+if "%choice%"=="0" goto end
+goto menu
+
+:start_fg
+echo.
+echo [å¯åŠ¨] å‰å°å¸¸é©»æ¨¡å¼...
+echo        å…³é—­æœ¬çª—å£å°†åœæ­¢æœåŠ¡ã€‚å¦‚éœ€é•¿æœŸåŽå°è¿è¡Œè¯·ç”¨èœå• [2]ã€‚
+echo.
+node ".workbuddy-ai\run\persistent-launcher.js" start
+echo.
+echo æœåŠ¡å·²åœæ­¢ã€‚
+pause
+goto menu
+
+:start_bg
+echo.
+echo [å¯åŠ¨] åŽå°æ¨¡å¼...
+if not exist ".workbuddy-ai\run" mkdir ".workbuddy-ai\run"
+rem è°ƒç”¨ç‹¬ç«‹è¾…åŠ©è„šæœ¬ï¼Œé¿å… start+cmd /c+é‡å®šå‘+åµŒå¥—å¼•å·çš„è§£æžé™·é˜±
+start "å®œæ­æœåŠ¡" /min cmd /c "%~dp0.workbuddy-ai\run\start-bg.cmd"
+echo.
+echo å·²æ´¾å‘åŽå°å¯åŠ¨ï¼Œç­‰å¾…å°±ç»ª...
+timeout /t 8 /nobreak >nul
+node ".workbuddy-ai\run\healthcheck.js"
+echo.
+pause
+goto menu
+
+:stop
+echo.
+node ".workbuddy-ai\run\persistent-launcher.js" stop
+echo.
+pause
+goto menu
+
+:status
+echo.
+node ".workbuddy-ai\run\persistent-launcher.js" status
+echo.
+pause
+goto menu
+
+:health
+echo.
+node ".workbuddy-ai\run\healthcheck.js"
+echo.
+pause
+goto menu
+
+:end
+exit /b 0

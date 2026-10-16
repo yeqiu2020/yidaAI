@@ -1,6 +1,18 @@
 /**
- * 宜搭服务管理器 v3.3.0
+ * 宜搭服务管理器 v3.4.0
  * 一键启动/停止/检查宜搭开发所需的本地服务
+ *
+ * v3.4.0 修复 staticRoot 推导缺陷（访问地址与脚本打印不一致 / 端口"启动成功却404"）：
+ * - 原 staticRoot 无条件取 projectRoot 的父目录，隐含假设「各项目为兄弟目录的公共父目录」。
+ *   但本项目克隆在 <公司目录>/新鑫科技AI助手，其父目录是 <公司目录>，其中还混有
+ *   合同、发票、xlsx 等大量非项目文件，且存在旧版本目录（如 新鑫科技AI助手V2.0.37）。
+ *   于是静态根被挂到公司目录，访问路径多出一层「公司目录名」，与脚本打印的
+ *   项目目录段 URL 不一致 ⇒ 按文档地址访问报 404。
+ * - 现改为「staticRoot 有效性校验」：仅当父目录确实符合多项目布局语义
+ *   （父目录下没有与本项目无关的文件/目录混杂判断结果不可靠时）才用父目录，
+ *   否则回退项目根自身，保证服务根始终是有效内容根、URL 与打印一致。
+ * - urlProjectSegment 相应由「staticRoot 是否等于 projectRoot」统一推导，
+ *   两者不会再出现「打印带项目段、实际却不带」的错位。
  *
  * v3.3.0 新增单项目部署模式开关：
  * - 项目根存在 单项目模式.txt 时 staticRoot=项目根（访问 URL 不带项目段），
@@ -73,14 +85,54 @@ const CONFIG = {
   /**
    * 静态服务根（多组织并存的"公共父目录"）。
    * 项目目录 = 含 .agents 且含 组织及应用信息.md 的目录。
+   *
    * 单项目部署开关：项目根存在 单项目模式.txt 时，静态根=项目根（8080 直接以项目根为根，
    * 访问 URL 不再携带项目目录段），适配"仓库根=工作区根、无兄弟项目"的部署形态；
    * 多组织并存（各项目为兄弟目录）保持 v3.0.0 形态：静态根=公共父目录。
+   *
+   * v3.4.0 新增有效性校验：父目录仅当"确实像多项目公共父目录"时才作为静态根。
+   *   判定条件（需同时满足）：
+   *     ① 父目录下含本项目在内 ≥2 个合法宜搭项目（含 .agents 或 组织及应用信息.md）；
+   *     ② 父目录的"未识别条目占比"不超过 50%——即父目录里绝大多数条目都应是
+   *        合法的宜搭项目目录。若父目录混有大量合同/发票/xlsx/压缩包等业务文件
+   *        （如本项目所在的公司资料目录，21 个条目里只有 2 个项目），说明它是
+   *        "资料目录"而非"多项目容器"，把它当静态根会让访问路径凭空多出一层
+   *        父目录名，与脚本打印的项目目录段 URL 错位，按文档地址访问即报 404。
+   *   不满足时回退 staticRoot=项目根（单项目形态，URL 不带项目段）。
    */
   get staticRoot() {
     const root = this.projectRoot;
     if (fs.existsSync(path.join(root, '单项目模式.txt'))) return root;
-    return path.dirname(root);
+
+    const parent = path.dirname(root);
+    // 父目录本身不应是盘根（否则说明项目直接放在盘根，无兄弟项目可言）
+    if (parent === path.parse(parent).root) return root;
+
+    const isLegalProject = (dir) => {
+      try {
+        return fs.existsSync(path.join(dir, '.agents')) ||
+               fs.existsSync(path.join(dir, '组织及应用信息.md'));
+      } catch (_) { return false; }
+    };
+
+    // 统计父目录下的合法宜搭项目数量与条目总数
+    let siblingProjects = 0;
+    let totalEntries = 0;
+    try {
+      for (const e of fs.readdirSync(parent, { withFileTypes: true })) {
+        totalEntries++;
+        if (!e.isDirectory()) continue;
+        if (isLegalProject(path.join(parent, e.name))) siblingProjects++;
+      }
+    } catch (_) {
+      return root;
+    }
+
+    // ① 至少 2 个合法项目  ② 合法项目占父目录条目多数（≥50%）
+    const looksLikeProjectContainer =
+      siblingProjects >= 2 && siblingProjects / totalEntries >= 0.5;
+
+    return looksLikeProjectContainer ? parent : root;
   },
   // URL 中的项目目录段：单项目形态为空串，多项目形态为 /{项目目录名}
   get urlProjectSegment() {

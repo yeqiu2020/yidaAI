@@ -1,5 +1,13 @@
 /**
  * 宜搭组织管理门户 - Dashboard JS
+ * v1.10.2: 修复单项目布局判断失效 — window.location.pathname 返回 URL 编码形式，
+ *          原实现拿编码后的段（%E6%9C%AC...）与'本地操作页面'比较永远为 false，
+ *          导致 PROJECT_NAME 被错误设为'本地操作页面'、请求携带错误 projectDir。
+ *          改为先 decodeURIComponent 再比较（2026-10-14 实测）。
+ * v1.10.1: 缓存参数修正——index.html 引用参数长期停留在 ?v=1.8.0，导致浏览器缓存旧版
+ *          （v1.8.x 无单项目布局适配，会把 URL 首段"本地操作页面"当项目名发 projectDir），
+ *          旧参数下用户永远拉不到 v1.10.0 修复，间接引发 2026-10-14 同步定位劫持事故。
+ *          本次仅升版本号强制刷新缓存，逻辑与 v1.10.0 一致。
  * v1.10.0: 单项目布局适配——URL 直接以 /本地操作页面/ 开头（静态根=项目根、无项目段）时
  *         不再提取项目名，请求不携带 projectDir，由同步服务端按 referer/cwd 兜底定位项目
  * v1.9.0: 服务异常横幅增加「启动宜搭服务」按钮——同步服务(3457)未启动时不再提示"去对话框输入"，
@@ -24,10 +32,13 @@ const HTTP_SERVICE = 'http://127.0.0.1:8080';
 function getProjectName() {
   const segments = window.location.pathname.split('/').filter(Boolean);
   if (segments.length === 0) return '';
+  // v1.10.2: pathname 是 URL 编码形式，必须先解码再比较——原实现拿编码后的段比较
+  // '本地操作页面'永远为 false，单项目布局判断失效
+  const first = decodeURIComponent(segments[0]);
   // 单项目布局（静态根=项目根）：URL 无项目段、直接以 /本地操作页面/ 开头，此时不提取项目名，
   // 同步服务端按 referer/cwd 兜底定位项目
-  if (segments[0] === '本地操作页面') return '';
-  return decodeURIComponent(segments[0]);
+  if (first === '本地操作页面') return '';
+  return first;
 }
 const PROJECT_NAME = getProjectName();
 // projectDir 查询串（相对静态根的项目目录名），用于同步服务 resolveProjectDir
