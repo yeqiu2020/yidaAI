@@ -32,66 +32,61 @@ description: 宜搭服务管理器，一键启动和管理宜搭开发所需的�
 - **停止服务**：用户说"停止服务"、"关闭服务"等
 - **重启服务**：用户说"重启服务"、"重新启动"等
 
-### 第2步：执行对应命令
+### 第2步：执行统一启动命令（宿主无关）
 
-**【v3.3.0 强制】启动服务必须走『前台 8080 + start-sync』两段式流程**（通过 integrated_code_mode 的 `Exec` 调用 `tools.run_command` 执行，**禁用普通 Shell 后台启动**）。
-
-> 原因：`open_preview` 预览框要求 `command_id` 对应一个**正在运行（Running）**的 `web_server` 类型命令；`server_manager.js start` 是 daemon 化启动（脚本退出，命令 Exited），永远无法生成预览框。
-
-**步骤A — 前台启动 8080 静态服务**（在 Exec 中执行 `tools.run_command`）：
-
-```js
-const r = await tools.run_command({
-  command: 'node .agents/skills/server-manager/scripts/_builtin_server.js "D:\\宜搭AI助手直播" 8080',
-  blocking: false,              // 必须 false：web 服务器长驻
-  command_type: 'web_server',   // 必须 web_server：让 IDE 识别为本地服务器
-  target_terminal: 'new',
-  requires_approval: false,
-  wait_ms_before_async: 2500,
-  cwd: 'D:\\宜搭AI助手直播\\宜搭AI助手V2.0.32'
-});
-// r.status 应为 Running，r.command_id 记下来 → 第4步 open_preview 必须用它
-```
-
-**步骤B — 启动同步配置服务**（短命令，3457 已运行会自动复用，不会触碰 8080）：
+**【v3.7.0 强制】只有一条启动命令，所有宿主（DSH / Trae / Cursor / Claude Code / Codex 等）完全相同：**
 
 ```bash
-node .agents/skills/server-manager/scripts/server_manager.js start-sync
+node .agents/skills/server-manager/scripts/server_manager.js start
 ```
 
-**若 8080 被旧的后台服务占用**，先执行清理再走步骤A：
+> **为什么不再分宿主**：旧版要求 Trae 走「前台 8080 + start-sync」两段式（为配合 `open_preview` 拿 Running 的 `command_id`），
+> 而 DSH 等宿主没有 `open_preview`，于是 AI 各自发挥——有的手拼 URL、有的用 `Start-Process` 拉外部浏览器、有的干脆不给地址。
+> **同一件事在不同工具下结果不同，根因是「地址生成」和「打开方式」被交给 AI 判断。**
+> v3.7.0 起两者都收敛进 `server_manager.js`：脚本启动服务并打印**权威地址 + 可粘贴 Markdown**，
+> AI 的唯一职责是**原样转达**，不再自己拼 URL、不再自己选打开方式。
+
+其他操作同样用普通命令（无需任何宿主特有能力）：
 
 ```bash
-node .agents/skills/server-manager/scripts/server_manager.js stop
+node .agents/skills/server-manager/scripts/server_manager.js status   # 状态 + 权威地址
+node .agents/skills/server-manager/scripts/server_manager.js url      # 仅输出权威地址（不启停）
+node .agents/skills/server-manager/scripts/server_manager.js stop     # 停止
+node .agents/skills/server-manager/scripts/server_manager.js restart  # 重启
 ```
 
-其他操作（检查状态/停止/重启）仍用普通命令：
+> 若 8080 被旧的后台服务占用，`start` 会自动识别并复用/升级，无需手工 `stop`。
 
-```bash
-node .agents/skills/server-manager/scripts/server_manager.js status
-node .agents/skills/server-manager/scripts/server_manager.js stop
-# 重启 = stop 后走步骤A + 步骤B
-```
 ### 第3步：解析脚本输出
 
-根据脚本返回的结果判断：
-- 服务是否成功启动/停止
-- 服务是否已在运行
-- 是否有错误发生
+脚本会打印一段机器可读行，**优先用它判定结果**（不要解析中文装饰文本）：
 
-### 第4步：打开首页（生成预览框）
+```
+YIDA_READY {"ok":true,...,"url":{"portal":"http://127.0.0.1:8080/<项目目录段>/本地操作页面/index.html"},"markdown":"[🏠 打开本地操作页面](...)"}
+```
 
-服务启动成功后，**必须执行以下操作**：
+- `ok: true` → 两个服务都就绪，取 `markdown` 字段
+- `ok: false` → 看 `http.error` / `sync.error` 说明原因
+- 若进程被中断没有该行，用 `status` 复查
 
-1. **【首选】调用 open_preview 生成预览框**（在 Exec 中执行 `tools.open_preview`）：
-   - `preview_url` **只能设为** `http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html`（⚠️ 严禁打开 `http://127.0.0.1:8080/` 组织门户首页，无实际意义）
-   - `command_id` **必须用第2步步骤A返回的、状态为 Running 的 command_id**（这是成败关键：传已退出命令的 ID 会超时）
-   - 成功标志：返回 `success: true`，对话中渲染出可点击的预览框，点击即跳转 Trae 内部浏览器
-2. **失败处理（最多重试 1 次）**：OpenPreview 可能返回 `net::ERR_ABORTED` 或 `IDE Command timeout`——这是 Trae IDE 预览/命令通道的间歇性故障，不代表服务未启动；重试 1 次仍失败立即切换兜底，禁止反复重试
-3. **【兜底】内置浏览器直接打开**（在 Exec 中执行）：
-   - `await tools.browser_navigate({url: 'http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html'})`（URL 中文路径建议用编码形式）
-   - 兜底也超时则输出完整 URL 文字，并说明服务已正常运行
-4. **【强制】严禁调用外部浏览器**：禁止 `start http://...`、`Start-Process http://...` 等打开系统默认浏览器的命令
+### 第4步：向用户输出地址（唯一动作）
+
+**服务就绪后 AI 只做一件事：把脚本输出的 `markdown` 行原样贴给用户。**
+
+- ✅ 正确：直接复制脚本打印的 `[🏠 打开本地操作页面](http://127.0.0.1:8080/.../本地操作页面/index.html)`
+- ❌ 禁止：自己拼接 URL（极易漏项目目录段 → 404）
+- ❌ 禁止：把地址改写成 `file://`
+- ❌ 禁止：用 `start` / `Start-Process` / `explorer` / `open` 拉起系统外部浏览器
+- ❌ 禁止：打开 `http://127.0.0.1:8080/` 组织门户首页（无实际意义）
+
+**关于"谁来打开"**：地址交给用户点击即可，各宿主的点击行为天然一致——
+聊天里的 HTTP(S) 链接在 DSH 下默认进右侧栏 Sidebar Browser（`ui-chat.linkOpening = "sidebar"`），
+在 Trae 下进内置浏览器；两者都不需要 AI 介入。用户也可按 `Ctrl+T`（DSH）或右侧栏 guide 按钮手输地址。
+
+**可选增强（仅在宿主确实提供时使用，绝不作为必需步骤）**：Trae 有 `tools.open_preview`，可在给出链接之外**额外**生成预览框；
+调用失败（`net::ERR_ABORTED` / `IDE Command timeout`）不必重试，因为链接已经给到用户了。
+DSH 没有该工具，跳过即可——**不给预览框不影响结果，链接始终是主通道**。
+
 ### 第5步：向用户报告结果
 
 使用结构化格式展示结果：
@@ -108,7 +103,7 @@ node .agents/skills/server-manager/scripts/server_manager.js stop
 
 ## 访问地址
 
-- [🏠 打开本地操作页面](http://127.0.0.1:8080/{项目目录名}/本地操作页面/index.html)（页面已通过内置浏览器自动打开，此链接仅作备份）
+- [🏠 打开本地操作页面](http://127.0.0.1:8080/<项目目录段>/本地操作页面/index.html)（点击后在宿主的内部浏览器中打开）
 
 ## 使用说明
 
@@ -117,10 +112,12 @@ node .agents/skills/server-manager/scripts/server_manager.js stop
 3. 所有应用共享此 HTTP 服务，无需重复启动
 ```
 
+> ⚠️ 报告里的链接**直接取自脚本输出的 `markdown`**，必须是可点击的完整地址（含项目目录段，不留 `{项目目录名}` 占位符）。
+
 ## 三、输出规范
 
 1. **必须展示服务状态表格**：包含服务名称、端口、运行状态
-2. **必须用内部浏览器打开页面**：优先调用 OpenPreview 生成预览框（点击即跳转内部浏览器）；OpenPreview 不可用时通过 Exec 调用 `browser_navigate` 兜底；同时输出完整 URL 文字备份；严禁调用外部浏览器（禁止 `start http://...` / `Start-Process http://...` 等命令）
+2. **必须输出脚本给出的可点击地址**：直接转达 `server_manager.js` 打印的 `markdown` 行，**禁止自行拼接 URL**；该规则对所有宿主一致，不因宿主有无 `open_preview` 而改变
 3. **必须说明使用方式**：提醒用户不要使用 file:// 打开页面
 4. **错误时必须说明原因**：如果启动失败，说明具体原因和解决方法
 
@@ -132,6 +129,7 @@ node .agents/skills/server-manager/scripts/server_manager.js stop
 - ❌ 禁止修改同步服务的端口（原型页面中的 `SYNC_SERVICE_URL` 固定为 3457）
 - ❌ **禁止手动使用 `npx http-server` 启动服务**（必须使用 `server_manager.js` 统一管理）
 - ❌ **禁止打开 `http://127.0.0.1:8080/` 组织门户首页**（无实际意义，必须打开 `/{项目目录名}/本地操作页面/index.html`）
+- ❌ **禁止调用外部浏览器**（`start http://...` / `Start-Process http://...` / `explorer http://...`）：只输出可点击链接，由用户在宿主内置浏览器中打开
 
 ## 五、常见问题与解决方案
 
@@ -397,10 +395,25 @@ schtasks /Run /TN YidaServiceStart
 执行后确认：
 - [ ] 脚本执行完成并返回结果
 - [ ] 已向用户展示服务状态
+- [ ] **已输出可点击的访问地址**（Trae：预览框或 `browser_navigate`；DSH：Markdown 链接 + `Ctrl+T` 备选说明）
 - [ ] 已提供访问地址和使用说明
 - [ ] 遇到错误时提供了明确的错误信息和解决建议
 
 ## 七、版本更新记录
+
+### v3.7.0 (2026-10-16)
+- **重构（宿主无关统一方案）**：把「地址生成」和「打开方式」从 AI 判断收敛进 `server_manager.js`——
+  - 新增 `getAccessUrls()`（唯一地址来源，禁止任何地方再手拼 URL）+ `printAccessReport()`（统一报告）；
+  - `start` / `status` 均打印**权威地址 + 可粘贴 Markdown + `YIDA_READY` 机器可读行**；
+  - 新增 `url` 命令：仅输出权威地址、不启停服务；
+  - 启动失败也输出 `YIDA_READY {ok:false,...}`，AI 无需解析中文装饰文本。
+- **第2步**：删除「Trae 走前台 8080 + start-sync 两段式」的宿主分叉，改为**所有宿主同一条 `start` 命令**。
+- **第4步**：由「按宿主选择打开方式」改为「**把脚本输出的 markdown 原样转达**」；`open_preview` 降级为可选增强，
+  没有它的宿主（DSH）跳过不影响结果——链接始终是主通道。
+- **顺带修复**：`updateInitDoc()` 引用未定义的 `projectName`（命中占位符替换时抛 ReferenceError 被 catch 吞掉，
+  成功提示反而显示"更新失败"），改为 `path.basename(CONFIG.projectRoot)`。
+- **事故来源**：2026-10-16 AI 在 DSH 下误判"没有内置浏览器通道"，用 `Start-Process` 开外部浏览器；
+  根因是旧文档把地址拼接与打开方式留给 AI 自行判断，导致同一件事在不同工具下结果不同。
 
 ### v3.6.3 (2026-10-14)
 - **新增**：问题11「单项目布局下『进入应用』/『组织主页』404」——sync_server org-info 的 prototypeUrl 无条件按
@@ -421,14 +434,18 @@ schtasks /Run /TN YidaServiceStart
 
 | 操作 | 命令 |
 |------|------|
-| 启动服务（完整两段式） | 按第2步：run_command 前台启动 8080（web_server）→ `server_manager.js start-sync` |
-| 仅启动同步服务 | `node .agents/skills/server-manager/scripts/server_manager.js start-sync` |
+| **启动服务（所有宿主统一）** | `node .agents/skills/server-manager/scripts/server_manager.js start` |
+| 检查状态 + 权威地址 | `node .agents/skills/server-manager/scripts/server_manager.js status` |
+| **仅取访问地址**（不启停服务） | `node .agents/skills/server-manager/scripts/server_manager.js url` |
 | 停止服务 | `node .agents/skills/server-manager/scripts/server_manager.js stop` |
-| 检查状态 | `node .agents/skills/server-manager/scripts/server_manager.js status` |
+| 重启服务 | `node .agents/skills/server-manager/scripts/server_manager.js restart` |
+| 仅启动同步服务 | `node .agents/skills/server-manager/scripts/server_manager.js start-sync` |
 | 注册开机自启 | `node .agents/skills/server-manager/scripts/server_manager.js autostart-on` |
 | 取消开机自启 | `node .agents/skills/server-manager/scripts/server_manager.js autostart-off` |
-| 手动拉起服务（脱离 Trae，推荐） | `schtasks /Run /TN YidaServiceStart` |
+| 手动拉起服务（脱离宿主进程树） | `schtasks /Run /TN YidaServiceStart` |
 | 删除计划任务 | `schtasks /Delete /TN YidaServiceStart /F` |
+
+> **AI 唯一职责**：运行 `start` → 把脚本打印的 `markdown` 行原样转达。**不要自己拼 URL、不要自己开浏览器。**
 
 ### 服务配置
 

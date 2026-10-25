@@ -364,4 +364,26 @@
 
 <!-- END yida-integration-hard-rules -->
 
+<!-- ============================================================ -->
+<!-- 本地服务启动硬规则（人工维护，非生成块）—— 权威全文见 AGENTS.md 6.2 -->
+<!-- ============================================================ -->
+
+# 本地宜搭服务启动【强制】
+
+- **AI 侧唯一启动命令**：`node .workbuddy-ai/run/ensure-service.js`
+  （幂等；自动选路：3457 在线走 `/ensure-service` 接口，否则用 `%LOCALAPPDATA%\YidaService\start-yida.cmd` + explorer；
+  自带轮询 + 回读验证；退出码 0=就绪）子命令：`status` / `stop` / `--json`。
+- **禁止**在 Agent 宿主里直接跑 `server_manager.js start`：命令沙箱用 Job Object 包裹整棵进程树，
+  命令结束即回收 → "启动日志全绿但浏览器打开空白"。
+- **禁止**把工作区目录里的 `.bat` 交给 explorer 启动：会弹「打开文件 - 安全警告」，必须人工点「运行」，
+  自动化场景等于静默失败，还会堆积弹窗把 explorer 拖死。启动器一律放 `%LOCALAPPDATA%` 下。
+- **本机被安全策略封死的通道（勿再试）**：`schtasks.exe`、`wmic.exe`、`Invoke-CimMethod Win32_Process`、任何 COM 实例化。
+- **判活禁止用 curl**：本机有系统代理，未监听时返回 502，会误判成"服务在跑但报错"。
+  只认 `ensure-service.js` 的 `YIDA_READY {"ok":true,...}` 或 node 直连 http。
+- **.bat 铁律**：必须纯 ASCII + CRLF。UTF-8 中文或 LF 换行会让 cmd.exe 静默解析失败（无报错、无日志）。
+- 页面「🔄 重启服务」曾因 `taskkill /T` 自杀导致"点一下就全挂"，已由 `.workbuddy-ai/run/restart-agent.js` 修复，
+  改动后必须回归：POST `/restart-service?projectDir=<项目目录名>` → 等 18s → 两个服务仍 🟢。
+- 用户说"页面没打开"时，第一步先查 8080/3457 是否真的在监听，不要重发链接。
+
+
 

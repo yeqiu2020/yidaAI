@@ -115,6 +115,70 @@ const CONFIG = {
   builtInServerScript: path.join(__dirname, '_builtin_server.js')
 };
 
+/**
+ * 【唯一来源】访问地址生成器 —— v3.7.0 新增。
+ *
+ * 所有地址输出（start / status / url 命令、文档更新、AI 转达）都必须走这里，
+ * **禁止任何地方再手拼 URL**。
+ *
+ * 为什么必须集中：此前 URL 由各 AI 按宿主自行拼接，DSH / Trae / Cursor 下
+ * 拼出的地址与打开方式各不相同（有的漏项目目录段 → 404，有的用 file:// → 同步失效，
+ * 有的自行拉起外部浏览器 → 违背用户意愿）。收敛到脚本后，任何宿主拿到的都是同一串地址。
+ *
+ * @returns {{origin:string, projectSegment:string, portal:string, portalEncoded:string, markdown:string}}
+ */
+function getAccessUrls() {
+  const seg = CONFIG.urlProjectSegment; // 多项目: /%E9%A1%B9%E7%9B%AE%E5%90%8D ；单项目: ''
+  const origin = `http://127.0.0.1:${CONFIG.httpPort}`;
+  const portalPath = '/本地操作页面/index.html';
+  const portal = `${origin}${seg}${portalPath}`;
+  return {
+    origin,
+    projectSegment: seg,
+    portal,
+    // 全编码形态：供 curl / 命令行 / 终端直接使用（中文路径在部分终端会被截断）
+    portalEncoded: `${origin}${seg}${encodeURI(portalPath)}`,
+    markdown: `[🏠 打开本地操作页面](${portal})`
+  };
+}
+
+/**
+ * 【统一输出】访问结果报告 —— v3.7.0 新增。
+ *
+ * 无论宿主是 DSH、Trae、Cursor 还是 Claude Code，AI 都只需：
+ *   ① 运行 `server_manager.js start`
+ *   ② 把本函数打印的 Markdown 行原样贴给用户
+ * 结果因此完全一致，不再依赖宿主是否有 open_preview / 内置浏览器工具。
+ *
+ * @param {{http?:{running:boolean,pid?:number}, sync?:{running:boolean,pid?:number}}} status
+ */
+function printAccessReport(status = {}) {
+  const u = getAccessUrls();
+  const httpRunning = !!(status.http && status.http.running);
+  const syncRunning = !!(status.sync && status.sync.running);
+  const ready = httpRunning && syncRunning;
+
+  console.log('\n' + '─'.repeat(60));
+  log('🔗 访问地址（权威地址，AI 请原样转达，勿自行拼接）', 'green');
+  console.log('─'.repeat(60));
+  console.log(`   ${u.portal}`);
+  console.log('\n   Markdown（可直接粘贴给用户）:');
+  console.log(`   ${u.markdown}`);
+  console.log('\n   ⚠️  请勿使用 file:// 打开（会导致"同步配置"按钮失效）');
+
+  // 机器可读块：任何宿主的 AI 都可 grep 这一行拿到结构化结果，无需解析装饰性文本
+  console.log('\nYIDA_READY ' + JSON.stringify({
+    ok: ready,
+    projectRoot: CONFIG.projectRoot,
+    projectDirName: path.basename(CONFIG.projectRoot),
+    staticRoot: CONFIG.staticRoot,
+    http: { port: CONFIG.httpPort, running: httpRunning, pid: (status.http && status.http.pid) || null },
+    sync: { port: CONFIG.syncPort, running: syncRunning, pid: (status.sync && status.sync.pid) || null },
+    url: { portal: u.portal, portalEncoded: u.portalEncoded },
+    markdown: u.markdown
+  }));
+}
+
 const colors = {
   reset: '\x1b[0m',
   green: '\x1b[32m',
@@ -626,16 +690,31 @@ async function checkStatus() {
 
   console.log('└─────────────────────┴────────┴──────────────────────────┘');
 
-  if (httpHealthy) {
-    console.log(`\n📁 HTTP 静态服务根: ${CONFIG.staticRoot}`);
-    console.log(`🌐 当前项目: ${CONFIG.projectRoot}`);
-    console.log(`🌐 访问地址: http://127.0.0.1:${CONFIG.httpPort}${CONFIG.urlProjectSegment}/本地操作页面/index.html`);
-  }
+  // v3.7.0: status 与 start 输出同一份权威地址（唯一来源 getAccessUrls）
+  printAccessReport({
+    http: { running: httpHealthy, pid: httpPid },
+    sync: { running: syncRunning, pid: syncPid }
+  });
 
   return {
     http: { running: httpHealthy, pid: httpPid },
     sync: { running: syncRunning, pid: syncPid }
   };
+}
+
+/**
+ * v3.7.0: 仅输出访问地址（不启停服务）——供 AI 在任何宿主下快速取地址。
+ * 同时确认服务是否真的在跑，避免给出打不开的地址。
+ */
+async function printUrlOnly() {
+  const httpHealthy = await httpHealthCheck(CONFIG.httpPort, 2, 500);
+  const httpPid = httpHealthy ? await getProcessOnPort(CONFIG.httpPort) : null;
+  const syncPid = await getProcessOnPort(CONFIG.syncPort);
+  printAccessReport({
+    http: { running: httpHealthy, pid: httpPid },
+    sync: { running: !!syncPid, pid: syncPid }
+  });
+  return { http: { running: httpHealthy }, sync: { running: !!syncPid } };
 }
 
 async function forceStopPorts() {
@@ -724,18 +803,26 @@ async function startAll() {
     console.log('\n' + '─'.repeat(60));
     log('🎉 所有服务已就绪！', 'green');
     console.log('─'.repeat(60));
-    console.log('\n📖 使用说明:');
-    console.log('   1. 访问路径携带项目目录段，例如:');
-    console.log(`      http://127.0.0.1:8080${CONFIG.urlProjectSegment}/本地操作页面/index.html`);
-    console.log('   2. 不要使用 file:// 打开本地文件');
-    console.log('   3. 点击"同步配置"按钮即可同步表单配置');
-    console.log('\n📁 示例访问路径:');
-    console.log(`   http://127.0.0.1:8080${CONFIG.urlProjectSegment}/项目管理/01需求梳理/原型页面/index.html`);
-    console.log('\n🏠 组织门户:');
-    console.log(`   http://127.0.0.1:8080${CONFIG.urlProjectSegment}/本地操作页面/index.html`);
 
+    // v3.7.0: 地址与使用说明统一由 printAccessReport 输出（唯一来源，宿主无关）
     await updateOrgInfo();
     updateInitDoc();
+
+    // 复用实时探测，确保报告里的 running 状态真实（而非仅凭启动返回值）
+    const httpPid = await getProcessOnPort(CONFIG.httpPort);
+    const syncPid = await getProcessOnPort(CONFIG.syncPort);
+    printAccessReport({
+      http: { running: true, pid: httpPid },
+      sync: { running: true, pid: syncPid }
+    });
+  } else {
+    // 启动失败也要给出结构化结论，便于 AI 判定，不必解析中文装饰文本
+    console.log('\nYIDA_READY ' + JSON.stringify({
+      ok: false,
+      projectRoot: CONFIG.projectRoot,
+      http: { port: CONFIG.httpPort, running: !!httpResult.success, error: httpResult.error || null },
+      sync: { port: CONFIG.syncPort, running: !!syncResult.success, error: syncResult.error || null }
+    }));
   }
 
   return { http: httpResult, sync: syncResult };
@@ -754,7 +841,7 @@ function updateInitDoc() {
     if (!oldPattern.test(content)) return; // 无占位符则跳过
     content = content.replace(oldPattern, `http://127.0.0.1:8080${CONFIG.urlProjectSegment}/`);
     fs.writeFileSync(docPath, content, 'utf-8');
-    console.log(`\n✅ 已将 02应用初始化.md 中的占位符替换为项目名: ${projectName}`);
+    console.log(`\n✅ 已将 02应用初始化.md 中的占位符替换为项目名: ${path.basename(CONFIG.projectRoot)}`);
   } catch (error) {
     console.log('\n⚠️  更新 02应用初始化.md 失败:', error.message);
   }
@@ -860,6 +947,10 @@ async function main() {
     case 'status':
       await checkStatus();
       break;
+    case 'url':
+      // v3.7.0: 只输出权威访问地址（宿主无关），不启停任何服务
+      await printUrlOnly();
+      break;
     case 'restart':
       await restartAll();
       break;
@@ -873,12 +964,13 @@ async function main() {
       disableAutoStart();
       break;
     default:
-      console.log('用法: node server_manager.js [start|stop|status|restart|autostart-on|autostart-off]');
+      console.log('用法: node server_manager.js [start|stop|status|url|restart|autostart-on|autostart-off]');
       console.log('');
       console.log('命令:');
       console.log('  start          启动所有服务（默认）');
       console.log('  stop           停止所有服务');
-      console.log('  status         检查服务状态');
+      console.log('  status         检查服务状态 + 输出权威访问地址');
+      console.log('  url            仅输出权威访问地址（不启停服务）');
       console.log('  restart        重启所有服务');
       console.log('  autostart-on   注册开机自启');
       console.log('  autostart-off  取消开机自启');

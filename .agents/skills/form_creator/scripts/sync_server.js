@@ -162,18 +162,38 @@ const server = http.createServer(async (req, res) => {
       staticRoot: STATIC_ROOT,
       projectDir: projectDir || process.cwd()
     }));
-    log('🔄 收到重启服务请求，启动 server_manager restart...', 'yellow');
+    log('🔄 收到重启服务请求，启动 restart-agent...', 'yellow');
     try {
       // server_manager 位于项目目录 .agents 下；多项目模式下用任意项目副本重启全局服务即可
       const mgrDir = projectDir || STATIC_ROOT;
-      const serverManagerPath = path.join(mgrDir, '.agents', 'skills', 'server-manager', 'scripts', 'server_manager.js');
-      const child = spawn(process.execPath, [serverManagerPath, 'restart', mgrDir], {
-        cwd: STATIC_ROOT,
-        detached: true,
-        stdio: 'ignore',
-        windowsHide: true
-      });
-      child.unref();
+      const restartAgent = path.join(mgrDir, '.workbuddy-ai', 'run', 'restart-agent.js');
+
+      // 【2026-10-17 修复】restartAll() 的 stopAll() 会执行
+      //   taskkill /PID <同步服务PID> /F /T
+      // 而旧实现 spawn 的 server_manager restart 正是同步服务的**子进程** → /T 把它一起杀掉：
+      // 8080 已停、3457 已停，restart 再也走不到 startAll，两个服务全挂
+      // （页面「🔄 重启服务」按钮一点就把服务打死的根因）。
+      // 现在改为 spawn restart-agent.js：它不执行 stopAll，只杀 8080（自己不是 8080 的后代），
+      // 然后跑 server_manager start。同步服务自己退出，永远不会"自己杀自己"。
+      if (fs.existsSync(restartAgent)) {
+        const child = spawn(process.execPath, [restartAgent, mgrDir], {
+          cwd: mgrDir,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true
+        });
+        child.unref();
+      } else {
+        // 兜底：旧行为（restart-agent 缺失时仍可尝试，但可能被 /T 连带杀死）
+        const serverManagerPath = path.join(mgrDir, '.agents', 'skills', 'server-manager', 'scripts', 'server_manager.js');
+        const child = spawn(process.execPath, [serverManagerPath, 'restart', mgrDir], {
+          cwd: STATIC_ROOT,
+          detached: true,
+          stdio: 'ignore',
+          windowsHide: true
+        });
+        child.unref();
+      }
       // 给响应 1 秒时间发送完毕，然后让当前进程退出（端口将由重启后的新进程接管）
       setTimeout(() => {
         log('🔄 同步服务进程退出，等待重启完成...', 'yellow');
@@ -182,6 +202,41 @@ const server = http.createServer(async (req, res) => {
     } catch (err) {
       log(`❌ 重启服务失败: ${err.message}`, 'red');
     }
+    return;
+  }
+
+  // 确保服务运行接口（2026-10-17 新增）
+  // 只「启动」不「停止」，供 AI/脚本在 3457 还活着时把掉线的 8080 拉起来。
+  // 关键前提：同步服务本身运行在 AI 宿主进程树之外（孤儿进程），它 spawn 的子进程同样常驻，
+  // 不受宿主命令 Job Object 回收影响 —— 这是冷启动唯一不依赖系统弹窗的通道。
+  if (parsedUrl.pathname === '/ensure-service') {
+    const projectDir = resolveProjectDir(req, {
+      projectDir: (parsedUrl.query && parsedUrl.query.projectDir) || undefined,
+      staticRoot: STATIC_ROOT
+    });
+    const mgrDir = projectDir || STATIC_ROOT;
+    const serverManagerPath = path.join(mgrDir, '.agents', 'skills', 'server-manager', 'scripts', 'server_manager.js');
+    let spawned = false;
+    let errMsg = '';
+    try {
+      const child = spawn(process.execPath, [serverManagerPath, 'start'], {
+        cwd: mgrDir,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+      spawned = true;
+    } catch (e) {
+      errMsg = e.message;
+      log(`❌ ensure-service 启动失败: ${e.message}`, 'red');
+    }
+    res.writeHead(200);
+    res.end(JSON.stringify({
+      success: spawned,
+      message: spawned ? '正在启动服务' : '启动失败: ' + errMsg,
+      projectDir: mgrDir
+    }));
     return;
   }
 
