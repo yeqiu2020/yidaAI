@@ -120,6 +120,7 @@ const STATIC_ROOT = path.resolve(options.staticRoot || process.cwd());
 const protectRequest = createSecurity(options);
 return http.createServer(async (req, res) => {
   if (protectRequest(req, res)) return;
+  req.setEncoding('utf8'); // StringDecoder preserves Chinese split across HTTP chunks.
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
 
   const parsedUrl = url.parse(req.url, true);
@@ -1908,7 +1909,7 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
       res.writeHead(200);
       res.end(JSON.stringify({ success: true, data: content, mtime: stat.mtimeMs }));
     } catch (error) {
-      res.writeHead(500);
+      res.writeHead(error.statusCode || 500);
       res.end(JSON.stringify({ success: false, error: error.message }));
     }
     return;
@@ -1996,7 +1997,7 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
           }
         } catch (e) { /* 清理失败不影响主流程 */ }
       } catch (bakErr) {
-        log(`[local-files] 备份失败（不影响写入）: ${bakErr.message}`, 'yellow');
+        throw new Error('备份失败，已中止写入: ' + bakErr.message);
       }
 
       // 写回（保持 Windows 环境 CRLF，避免整文件 diff 爆炸）
@@ -2007,7 +2008,7 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
       res.writeHead(200);
       res.end(JSON.stringify({ success: true, mtime: newStat.mtimeMs }));
     } catch (error) {
-      res.writeHead(500);
+      res.writeHead(error.statusCode || 500);
       res.end(JSON.stringify({ success: false, error: error.message }));
     }
     return;

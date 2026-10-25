@@ -15,7 +15,7 @@ function setup(options={}) {
   });
   const window={fetch:originalFetch,location:{href:'http://127.0.0.1:8080/project/portal.html'}};
   const EventSource=jest.fn(function(url){this.url=url;});
-  vm.runInNewContext(source,{window,URL,Request,Response,Headers,Map,Set,EventSource});
+  vm.runInNewContext(source,{window,URL,Request,Response,Headers,Map,Set,EventSource,AbortSignal});
   return {window,calls,originalFetch,EventSource};
 }
 

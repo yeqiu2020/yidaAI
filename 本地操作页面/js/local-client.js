@@ -11,7 +11,7 @@
     var cached=sessions.get(origin);
     if(cached && cached.until>Date.now()) return cached.value;
     if(!pending.has(origin)) pending.set(origin,(async function(){
-      var response=await originalFetch(origin+'/get-session-token',{cache:'no-store'});
+      var response=await originalFetch(origin+'/get-session-token',{cache:'no-store',signal:AbortSignal.timeout(5000)});
       var result=await response.json();
       if(!response.ok || !result.token) throw new Error(result.error || '本地服务会话获取失败');
       sessions.set(origin,{value:result.token,until:Date.now()+Math.max(1000,result.expiresIn-30000)});

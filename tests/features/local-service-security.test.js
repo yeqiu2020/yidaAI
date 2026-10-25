@@ -75,11 +75,38 @@ describe('本地服务真实 HTTP 边界（短生命周期、隔离假数据）'
     const r=await request(syncServer,'/push-form-actions',{method:'POST',headers:{'X-Session-Token':session.token}},'{}');
     expect(r.status).toBe(400);
     const secret=await request(syncServer,'/local-files?file=.cookies.json');
-    expect(secret.status).not.toBe(200);expect(secret.text).not.toContain('FAKE_COOKIE');
+    expect(secret.status).toBe(403);expect(secret.text).not.toContain('FAKE_COOKIE');
   });
   test('Node CLI 公共客户端能够获取 token 并到达业务参数校验',async()=>{
     const response=await requestJson('http://127.0.0.1:'+syncServer.address().port,'/push-form-actions',{});
     expect(response.status).toBe(400);expect(response.json.error).toContain('缺少表单');
+  });
+  test('正常本地编辑有备份；备份失败时不得覆盖原文件',async()=>{
+    const session=JSON.parse((await request(syncServer,'/get-session-token')).text);
+    const headers={'X-Session-Token':session.token,'Content-Type':'application/json'};
+    const file=path.join(project,'README.md');
+    const body=JSON.stringify({file:'README.md',content:'edited fixture',projectDir:path.basename(project),expectedMtime:fs.statSync(file).mtimeMs});
+    expect((await request(syncServer,'/local-files',{method:'POST',headers},body)).status).toBe(200);
+    expect(fs.readdirSync(path.join(project,'.manifest-bak')).length).toBeGreaterThan(0);
+    const fail=jest.spyOn(fs,'copyFileSync').mockImplementation(()=>{throw new Error('fixture backup failure');});
+    try {
+      const response=await request(syncServer,'/local-files',{method:'POST',headers},JSON.stringify({file:'README.md',content:'must not write',projectDir:path.basename(project)}));
+      expect(response.status).toBe(500);expect(response.text).toContain('已中止写入');
+      expect(fs.readFileSync(file,'utf8')).toBe('edited fixture');
+    } finally {fail.mockRestore();}
+  });
+  test('中文字符跨 HTTP chunk 仍完整写入',async()=>{
+    const session=JSON.parse((await request(syncServer,'/get-session-token')).text);
+    const payload=Buffer.from(JSON.stringify({file:'README.md',content:'中文内容',projectDir:path.basename(project)}),'utf8');
+    const start=payload.indexOf(Buffer.from('中文'));
+    const response=await new Promise((resolve,reject)=>{
+      const req=http.request({hostname:'127.0.0.1',port:syncServer.address().port,path:'/local-files',method:'POST',headers:{'X-Session-Token':session.token}},res=>{
+        res.resume();res.on('end',()=>resolve(res.statusCode));
+      });
+      req.on('error',reject);req.write(payload.subarray(0,start+1));
+      setTimeout(()=>{req.write(payload.subarray(start+1,start+2));setTimeout(()=>req.end(payload.subarray(start+2)),5);},5);
+    });
+    expect(response).toBe(200);expect(fs.readFileSync(path.join(project,'README.md'),'utf8')).toBe('中文内容');
   });
   test('任意网站和 DNS rebinding Host 被拒绝，可信 Origin 精确回显',async()=>{
     expect((await request(syncServer,'/get-session-token',{headers:{Origin:'https://evil.example'}})).status).toBe(403);
