@@ -81,10 +81,9 @@ function runNode(script, cmdArgs, label) {
   }
 }
 async function postJson(url, body) {
-  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-  const text = await r.text();
-  try { return { status: r.status, json: JSON.parse(text) }; }
-  catch (e) { return { status: r.status, json: null, text }; }
+  const { requestJson } = require('../lib/local-service/client');
+  const parsed = new URL(url);
+  return requestJson(parsed.origin, parsed.pathname + parsed.search, body, 'POST', { timeout: 120000 });
 }
 
 /* ---------- 【1/5】定位项目与表单 ---------- */

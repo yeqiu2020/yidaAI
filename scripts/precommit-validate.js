@@ -78,10 +78,13 @@ function isBusinessArtifact(relPath) {
 // 命中即追加执行代码门禁（npm test + validate-skill-config）的代码路径规则：
 // .agents/**/*.js（技能脚本）、lib/**（核心库）、scripts/**（工程脚本）、tests/**（测试）
 const CODE_PATH_RULES = [
-  rel => rel.startsWith('.agents/') && rel.endsWith('.js'),
+  rel => rel.startsWith('.agents/') && (rel.endsWith('.js') || rel.endsWith('/SKILL.md') || rel.endsWith('/skill-config.json')),
   rel => rel.startsWith('lib/'),
   rel => rel.startsWith('scripts/'),
-  rel => rel.startsWith('tests/')
+  rel => rel.startsWith('tests/'),
+  rel => rel.startsWith('.workbuddy-ai/run/'),
+  rel => rel.startsWith('本地操作页面/'),
+  rel => ['package.json', 'package-lock.json', 'jest.config.js'].includes(rel)
 ];
 
 function isCodeChange(relPath) {
@@ -94,7 +97,8 @@ function runCodeQualityGate() {
   const steps = [
     // npm 在 Windows 上是 npm.cmd，需经 shell 解析
     ['npm test', 'npm', ['test'], true],
-    ['node scripts/validate-skill-config.js', process.execPath, [path.join(__dirname, 'validate-skill-config.js')], false]
+    ['node scripts/validate-skill-config.js', process.execPath, [path.join(__dirname, 'validate-skill-config.js')], false],
+    ['routing', process.execPath, [path.join(__dirname, 'eval_routing.js'), '--min-rate', '100'], false]
   ];
   let allPassed = true;
   for (const [label, cmd, cmdArgs, useShell] of steps) {

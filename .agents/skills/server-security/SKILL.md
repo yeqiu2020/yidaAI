@@ -1,7 +1,7 @@
 ---
 name: server-security
-version: 1.0.0
-description: 宜搭本地服务安全加固补丁。以 Monkey-patch 方式接管 sync_server.js，不修改原文件任何代码：绑定 127.0.0.1、CORS 白名单、写接口 token 校验、清空数据二次确认。当用户说“安全加固”、“加固本地服务”、“服务安全补丁”、“启动加固服务”、“本地服务不安全”时触发此skill。适用于启动 sync_server.js 本地同步服务时防止外部访问、跨域滥用和误清空数据的场景。
+version: 1.1.0
+description: 宜搭本地服务安全边界。默认静态与同步服务统一启用 127.0.0.1 绑定、精确 CORS、写请求会话 token、清空数据确认 nonce、凭证文件和跨项目路径隔离。当用户说“安全加固”、“加固本地服务”、“服务安全补丁”、“启动加固服务”、“本地服务不安全”时触发。兼容入口保留，不依赖 Monkey-patch，不提供静默关闭保护的默认路径。
 risk_level: R2
 phase: "0"
 created: 2026-07-10
@@ -9,7 +9,7 @@ created: 2026-07-10
 
 # server-security
 
-宜搭本地服务安全加固补丁，以 Monkey-patch 方式加固 `sync_server.js`，不修改原文件任何代码。
+宜搭本地服务安全加固补丁，默认安全边界已直接接入同步服务和静态服务。原脚本保留为兼容入口，不再依赖 Monkey-patch；默认启动即启用保护。
 
 ## 加固内容
 
@@ -30,8 +30,8 @@ created: 2026-07-10
 # 启动加固服务
 node .agents/skills/server-security/scripts/server-security-patch.js
 
-# 关闭加固（直接运行原始服务）
-SECURITY_PATCH_ENABLED=false node .agents/skills/form_creator/scripts/sync_server.js
+# 默认启动（AI 会话唯一入口）
+node .workbuddy-ai/run/ensure-service.js
 ```
 
 ## API 端点
@@ -44,4 +44,4 @@ SECURITY_PATCH_ENABLED=false node .agents/skills/form_creator/scripts/sync_serve
 
 ## 回退方式
 
-设置环境变量 `SECURITY_PATCH_ENABLED=false` 后直接运行原始 `sync_server.js`。
+安全边界不提供静默关闭开关。遇到兼容问题应修复请求客户端或回滚完整版本，禁止单独绕过安全检查。

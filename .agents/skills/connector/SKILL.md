@@ -52,71 +52,71 @@ description: 宜搭 HTTP 连接器创建与管理。支持自然语言描述 API
 
 ```bash
 # 列出所有连接器
-node .agents/candidates/connector/scripts/connector-manager.js list --appType <appType>
+node .agents/skills/connector/scripts/connector-manager.js list --appType <appType>
 
 # 创建连接器
-node .agents/candidates/connector/scripts/connector-manager.js create --appType <appType> --name "连接器名称" --host "api.example.com" [--auth "NONE|BasicAuth|ApiKeyAuth|DingAuth|AliyunApiGateway|DingTrustGW" --username <用户名> --password <密码> --api-key <密钥> --app-key <应用Key> --app-secret <应用Secret>]
+node .agents/skills/connector/scripts/connector-manager.js create --appType <appType> --name "连接器名称" --host "api.example.com" [--auth "NONE|BasicAuth|ApiKeyAuth|DingAuth|AliyunApiGateway|DingTrustGW" --username <用户名> --password <密码> --api-key <密钥> --app-key <应用Key> --app-secret <应用Secret>]
 
 # 获取详情
-node .agents/candidates/connector/scripts/connector-manager.js detail --appType <appType> --connectorId <connector-id>
+node .agents/skills/connector/scripts/connector-manager.js detail --appType <appType> --connectorId <connector-id>
 
 # 删除连接器
-node .agents/candidates/connector/scripts/connector-manager.js delete --appType <appType> --connectorId <connector-id>
+node .agents/skills/connector/scripts/connector-manager.js delete --appType <appType> --connectorId <connector-id>
 ```
 
 ### 执行动作管理
 
 ```bash
 # 列出执行动作
-node .agents/candidates/connector/scripts/action-manager.js list-actions --appType <appType> --connectorId <connector-id>
+node .agents/skills/connector/scripts/action-manager.js list-actions --appType <appType> --connectorId <connector-id>
 
 # 添加执行动作
-node .agents/candidates/connector/scripts/action-manager.js add-action --appType <appType> --connectorId <connector-id> --operations <action-file>
+node .agents/skills/connector/scripts/action-manager.js add-action --appType <appType> --connectorId <connector-id> --operations <action-file>
 
 # 删除执行动作
-node .agents/candidates/connector/scripts/action-manager.js delete-action --appType <appType> --connectorId <connector-id> --actionId <action-id>
+node .agents/skills/connector/scripts/action-manager.js delete-action --appType <appType> --connectorId <connector-id> --actionId <action-id>
 
 # 测试连接器
-node .agents/candidates/connector/scripts/action-manager.js test --appType <appType> --connectorId <connector-id> --action <action-file>
+node .agents/skills/connector/scripts/action-manager.js test --appType <appType> --connectorId <connector-id> --action <action-file>
 ```
 
 ### 连接账号管理
 
 ```bash
 # 列出连接账号
-node .agents/candidates/connector/scripts/connection-manager.js list-connections --appType <appType> --connectorId <connector-id>
+node .agents/skills/connector/scripts/connection-manager.js list-connections --appType <appType> --connectorId <connector-id>
 
 # 创建连接账号
-node .agents/candidates/connector/scripts/connection-manager.js create-connection --appType <appType> --connectorId <connector-id> --name "账号名" [--username <用户名> --password <密码> --api-key <密钥>]
+node .agents/skills/connector/scripts/connection-manager.js create-connection --appType <appType> --connectorId <connector-id> --name "账号名" [--username <用户名> --password <密码> --api-key <密钥>]
 ```
 
 ### 智能创建（推荐）
 
 ```bash
 # 从 cURL 命令创建
-node .agents/candidates/connector/scripts/smart-create.js --appType <appType> --curl "curl 'https://api.example.com/v1/data' -H 'Authorization: Bearer xxx'" --name "连接器名称"
+node .agents/skills/connector/scripts/smart-create.js --appType <appType> --curl "curl 'https://api.example.com/v1/data' -H 'Authorization: Bearer xxx'" --name "连接器名称"
 
 # 解析 API 文档
-node .agents/candidates/connector/scripts/smart-create.js --appType <appType> --doc <api-doc.md路径>
+node .agents/skills/connector/scripts/smart-create.js --appType <appType> --doc <api-doc.md路径>
 
 # 生成接口文档模板
-node .agents/candidates/connector/scripts/smart-create.js gen-template
+node .agents/skills/connector/scripts/smart-create.js gen-template
 ```
 
 ### 安全动作模板
 
 ```bash
 # 生成安全动作模板
-node .agents/candidates/connector/scripts/safe-action-templates.js generate --type <GET|POST|PUT|DELETE> --url <接口路径> --name <动作名称>
+node .agents/skills/connector/scripts/safe-action-templates.js generate --type <GET|POST|PUT|DELETE> --url <接口路径> --name <动作名称>
 
 # 列出可用模板
-node .agents/candidates/connector/scripts/safe-action-templates.js list
+node .agents/skills/connector/scripts/safe-action-templates.js list
 ```
 
 ## 文件结构
 
 ```
-.agents/candidates/connector/
+.agents/skills/connector/
 ├── SKILL.md                          ← 本文件
 ├── scripts/
 │   ├── connector-manager.js          ← 连接器管理（list/create/detail/delete）

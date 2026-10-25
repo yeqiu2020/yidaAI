@@ -2,13 +2,13 @@
 
 > 基于AI的宜搭低代码平台开发助手，提供从需求分析到表单生成、公式代码、测试验证的完整解决方案。
 >
-> - **版本：V2.0.39**
+> - **版本：V2.0.40**
 > - **作者：叶秋**
 > - 钉钉/微信：15270909736
 
 ## 项目简介
 
-宜搭AI助手是一个专为阿里巴巴宜搭低代码平台设计的AI辅助开发工具集，支持 Trae / Cursor / Claude Code / CodeBuddy 等多 IDE 环境。通过 42 个 Skill 目录（40 个有效 Skill），覆盖从需求分析到部署验证的全生命周期。
+宜搭AI助手是一个专为阿里巴巴宜搭低代码平台设计的AI辅助开发工具集，支持 Trae / Cursor / Claude Code / CodeBuddy 等多 IDE 环境。通过 43 个 Skill 文档目录（42 个登记能力、1 个示例），覆盖从需求分析到部署验证的全生命周期。
 
 核心能力：
 
@@ -25,9 +25,9 @@
 ## 项目结构
 
 ```
-宜搭AI助手V2.0.39/
+宜搭AI助手V2.0.40/
 ├── .agents/
-│   └── skills/                       # 42个Skill目录（40个有效）
+│   └── skills/                       # 43个Skill文档目录（42个登记能力）
 │       ├── architect/           # 需求架构师
 │       ├── flow-to-form/            # 流程图转表单
 │       ├── excel-to-form/           # Excel转字段清单
@@ -309,4 +309,16 @@ npx playwright install chromium
 
 > 注意：本项目仅供学习和参考使用，使用宜搭平台请遵守阿里巴巴相关服务条款。
 >
-> V2.0.39 | 2026-10-16
+> V2.0.40 | 2026-10-16
+
+
+## 本地服务与质量检查
+
+AI 会话启动统一使用 `node .workbuddy-ai/run/ensure-service.js`，等待 `YIDA_READY.ok=true` 后原样转达链接，在宿主内置浏览器打开。正式启动脚本已随 Git 跟踪。服务默认启用回环绑定、精确 CORS、会话 token 和文件访问隔离。
+
+- `npm test`：单元/契约测试 + 自动化构建器 + 声明式规格测试；默认限制两个 worker，避免宿主进程膨胀。
+- `npm run validate:skills`：校验目录登记、description 同步与文档 CLI 入口。
+- `npm run skills:sync-descriptions`：从权威 frontmatter 重建索引描述。
+- `npm run validate:routing`：离线意图边界评测，默认要求全部用例通过；不代表实际模型选技准确率。
+
+自定义页面发布先建立 baseline、预览 diff，再保存与回读核对。CLI 不能替代内置浏览器的运行验收。动作推送返回 saved 和 verified；保存但回读失败不算交付完成。

@@ -48,23 +48,23 @@ description: 宜搭应用表单实体关系图（ER 图）生成器。从表单 
 
 ```bash
 # 单个 Schema 文件
-node .agents/candidates/er-diagram/scripts/generate-er.js --file <schema.json>
+node .agents/skills/er-diagram/scripts/generate-er.js --file <schema.json>
 
 # 多个 Schema 文件（逗号分隔）
-node .agents/candidates/er-diagram/scripts/generate-er.js --files <a.json>,<b.json>,<c.json>
+node .agents/skills/er-diagram/scripts/generate-er.js --files <a.json>,<b.json>,<c.json>
 
 # 目录下所有 Schema JSON 文件
-node .agents/candidates/er-diagram/scripts/generate-er.js --dir <schema-dir>
+node .agents/skills/er-diagram/scripts/generate-er.js --dir <schema-dir>
 
 # 指定输出目录（默认 .cache/er-diagram/）
-node .agents/candidates/er-diagram/scripts/generate-er.js --dir <schema-dir> --output <output-dir>
+node .agents/skills/er-diagram/scripts/generate-er.js --dir <schema-dir> --output <output-dir>
 ```
 
 ### 从线上应用获取 Schema 并生成
 
 ```bash
 # 需要登录态（.cookies.json）
-node .agents/candidates/er-diagram/scripts/generate-er.js --appType <appType> --forms <formUuid1>,<formUuid2>,...
+node .agents/skills/er-diagram/scripts/generate-er.js --appType <appType> --forms <formUuid1>,<formUuid2>,...
 ```
 
 ### 输出说明
@@ -85,7 +85,7 @@ node .agents/candidates/er-diagram/scripts/generate-er.js --appType <appType> --
 ## 文件结构
 
 ```
-.agents/candidates/er-diagram/
+.agents/skills/er-diagram/
 ├── SKILL.md                          ← 本文件
 ├── scripts/
 │   └── generate-er.js                ← ER 图生成核心脚本

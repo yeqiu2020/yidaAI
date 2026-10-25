@@ -273,21 +273,21 @@ function renderOrgHeader(orgInfo, projectDir) {
 // ========== 重启服务 ==========
 // v1.8.0: 多组织并存模式下，重启全局服务（所有项目短暂不可访问），不再针对单一项目目录
 // 重启后轮询 /health 等待服务恢复，自动刷新页面
-function restartService() {
+async function restartService() {
   const btn = document.getElementById('btnRestartService');
   if (btn) {
     btn.disabled = true;
     btn.innerHTML = '&#128260; 重启中...';
   }
 
-  if (!window.confirm('确定要重启全局服务吗？\n将重启 HTTP(8080) 与同步服务(3457)，所有项目会短暂不可访问。')) {
+  if (!await localConfirm('确定要重启全局服务吗？所有项目会短暂不可访问。')) {
     if (btn) { btn.disabled = false; btn.innerHTML = '&#128260; 重启服务'; }
     return;
   }
 
   // 标记页面正在重启，防止用户误操作
   sessionStorage.setItem('serviceRestarting', '1');
-  window.alert('全局服务正在重启，页面将自动刷新，请稍候...');
+  showToast('全局服务正在重启，请稍候...', 'info');
 
   // 通知同步服务执行重启（同步服务会 spawn 独立 server_manager restart 进程后自行退出）
   fetch(`${SYNC_SERVICE}/restart-service?${PROJECT_DIR_QUERY}`, { method: 'POST' })
@@ -313,7 +313,7 @@ function waitForServiceRestart(maxAttempts = 30) {
     if (attempt > maxAttempts) {
       clearInterval(timer);
       sessionStorage.removeItem('serviceRestarting');
-      window.alert('服务重启超时，请手动刷新页面或重新启动服务。');
+      showToast('服务重启超时，请重新启动服务。', 'error');
       return;
     }
     fetch(`${SYNC_SERVICE}/health`, { signal: AbortSignal.timeout(3000) })
@@ -412,7 +412,7 @@ function renderAppList(apps) {
 }
 
 // ========== 同步应用到本地（SSE 流式版） ==========
-function syncAppToLocal(appName, appId, btnEl) {
+async function syncAppToLocal(appName, appId, btnEl) {
   if (!serviceRunning) {
     showToast('同步服务未启动，请在对话框中输入"启动宜搭服务"', 'error');
     return;
@@ -439,7 +439,7 @@ function syncAppToLocal(appName, appId, btnEl) {
 
   // 使用 SSE 流式接收同步进度
   const sseUrl = `${SYNC_SERVICE}/sync-app-to-local-stream?${PROJECT_DIR_QUERY}`;
-  const es = new EventSource(sseUrl + '&appName=' + encodeURIComponent(appName) + '&appId=' + encodeURIComponent(appId));
+  const es = await window.YidaLocalClient.eventSource(sseUrl + '&appName=' + encodeURIComponent(appName) + '&appId=' + encodeURIComponent(appId));
   const syncLog = document.getElementById('syncLog');
   if (syncLog) syncLog.classList.add('show');
 
@@ -766,7 +766,7 @@ async function refreshLoginState(btnEl) {
 
   // v1.8.1: 携带 projectDir — 否则服务端 fallback 到 STATIC_ROOT，Cookie 写错位置，
   // 且无法读取项目历史组织做「登录组织校验」（曾导致登录到其他组织后同步全部报登录失效）
-  const es = new EventSource(`${SYNC_SERVICE}/refresh-login${PROJECT_DIR_QUERY ? '?' + PROJECT_DIR_QUERY : ''}`);
+  const es = await window.YidaLocalClient.eventSource(`${SYNC_SERVICE}/refresh-login${PROJECT_DIR_QUERY ? '?' + PROJECT_DIR_QUERY : ''}`);
   let closed = false;
 
   const finish = () => {
@@ -884,7 +884,7 @@ async function _runOrgInit(btnEl, opts) {
   addLog(o.startLog, 'info');
   setProgress(null, o.progressText);
 
-  const es = new EventSource(`${SYNC_SERVICE}/refresh-org-apps?${PROJECT_DIR_QUERY}`);
+  const es = await window.YidaLocalClient.eventSource(`${SYNC_SERVICE}/refresh-org-apps?${PROJECT_DIR_QUERY}`);
   let closed = false;
 
   const finish = () => {
@@ -1085,4 +1085,21 @@ function fallbackCopy(text, el) {
     showToast('复制失败，请手动复制', 'error');
   }
   document.body.removeChild(textarea);
+}
+
+// Asynchronous DOM confirmation; native dialogs can block embedded WebViews.
+function localConfirm(message) {
+  return new Promise(resolve => {
+    const backdrop = document.createElement('div');
+    backdrop.style.cssText = 'position:fixed;inset:0;background:#0006;z-index:10000;display:flex;align-items:center;justify-content:center';
+    const panel = document.createElement('div');
+    panel.style.cssText = 'background:white;border-radius:12px;padding:24px;max-width:460px;color:#222';
+    const text = document.createElement('p'); text.textContent = message; panel.appendChild(text);
+    ['取消', '确认重启'].forEach((label, index) => {
+      const button = document.createElement('button'); button.textContent = label;
+      button.onclick = () => { backdrop.remove(); resolve(index === 1); };
+      panel.appendChild(button);
+    });
+    backdrop.appendChild(panel); document.body.appendChild(backdrop);
+  });
 }

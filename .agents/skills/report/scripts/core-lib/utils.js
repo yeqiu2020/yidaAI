@@ -235,20 +235,7 @@ function getNodeExecutable() {
  * @returns {string} 项目根目录的绝对路径
  */
 function findProjectRoot() {
-  const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..', '..');
-  if (fs.existsSync(path.join(PROJECT_ROOT, '.cookies.json'))) {
-    return PROJECT_ROOT;
-  }
-
-  const activeTool = detectActiveTool();
-
-  if (activeTool) {
-    if (fs.existsSync(activeTool.workspaceRoot)) {
-      return activeTool.workspaceRoot;
-    }
-  }
-
-  return PROJECT_ROOT;
+  return require('../../../../../lib/core/utils').findProjectRoot();
 }
 
 // ── Cookie 解析 ───────────────────────────────────────
@@ -351,37 +338,8 @@ function loadCookieData(projectRoot, defaultBaseUrl) {
  * @param {boolean} [options.force=false] - 是否跳过本地缓存，强制重新登录
  * @returns {object} loginResult
  */
-function triggerLogin(options = {}) {
-  warn(t('login.trigger_login'));
-  const { ensureLogin } = require('../auth/login');
-  let loopStatus = null;
-  try {
-    const { recordLoginEvent } = require('../feedback/feedback');
-    loopStatus = recordLoginEvent('trigger', {
-      mode: options.force ? 'force' : 'auto',
-      reason: 'trigger_login',
-      command: 'triggerLogin',
-    });
-  } catch {
-    // Feedback loop tracking is best-effort and must never block login.
-  }
-
-  const result = ensureLogin(options);
-  try {
-    const { recordLoginEvent, printLoginLoopFeedbackHint } = require('../feedback/feedback');
-    const ok = !!(result && result.csrf_token);
-    loopStatus = recordLoginEvent(ok ? 'success' : 'failed', {
-      mode: options.force ? 'force' : 'auto',
-      reason: ok ? 'login_ok' : (result && result.status) || 'login_failed',
-      command: 'triggerLogin',
-    });
-    if (!ok) {
-      printLoginLoopFeedbackHint(loopStatus);
-    }
-  } catch {
-    // Best-effort only.
-  }
-  return result;
+async function triggerLogin(options = {}) {
+  return require('../../../../../lib/core/auth-recovery').requestLogin(options);
 }
 
 /**
@@ -389,9 +347,7 @@ function triggerLogin(options = {}) {
  * @returns {object} loginResult
  */
 function refreshCsrfToken() {
-  warn(t('login.csrf_refresh'));
-  const { refreshCsrfFromCache } = require('../auth/login');
-  return refreshCsrfFromCache();
+  return require('../../../../../lib/core/auth-recovery').refreshCsrfFromCache({ projectRoot: findProjectRoot() });
 }
 
 // ── 响应检测 ──────────────────────────────────────────
@@ -640,13 +596,14 @@ async function requestWithAutoLogin(requestFn, authRef) {
       authRef.baseUrl = resolveBaseUrl(refreshedData);
       warn(t('common.csrf_refreshed'));
       result = await requestFn(authRef);
+      if (result && result.__csrfExpired) result = { __needLogin: true };
     } else {
       result = { __needLogin: true };
     }
   }
 
   if (result && result.__needLogin) {
-    const newCookieData = triggerLogin({ force: true });
+    const newCookieData = await triggerLogin({ force: true, loginProvider: authRef.loginProvider });
     if (!newCookieData || !newCookieData.cookies || !newCookieData.csrf_token) {
       return {
         success: false,

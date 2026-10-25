@@ -13,6 +13,9 @@
 module.exports = {
   // 测试环境
   testEnvironment: 'node',
+  roots: ['<rootDir>/tests'],
+  maxWorkers: 2,
+  cacheDirectory: '<rootDir>/temp-file/jest-cache',
 
   // 测试文件匹配模式
   testMatch: [
@@ -25,6 +28,9 @@ module.exports = {
   // 覆盖率配置
   collectCoverageFrom: [
     'lib/core/**/*.js',
+    'lib/local-service/**/*.js',
+    'lib/sync-server/action-code-sync.js',
+    '.agents/skills/publish-guard/scripts/publish-guard.js',
     '!lib/core/**/*.test.js',
     // 高频改动技能脚本的最小回归覆盖（report / form_creator）
     '.agents/skills/report/scripts/report-lib/field-utils.js',

@@ -82,8 +82,7 @@ function compileSource(sourceCode, moduleType) {
     }
     return compiled;
   } catch(babelErr) {
-    console.log('  Babel 不可用，使用原始代码');
-    return sourceCode;
+    throw new Error('页面编译失败，已中止发布: ' + babelErr.message);
   }
 }
 

@@ -14,61 +14,24 @@
 
 'use strict';
 
-const path = require('path');
-
-// 尝试加载 yida_field_templates.js（不含 process.exit，可安全 require）
-let fieldTemplates;
-try {
-  fieldTemplates = require('../../.agents/skills/form_creator/scripts/yida_field_templates.js');
-} catch (err) {
-  // 如果模块内部有顶层 process.exit 或 require 失败，跳过
-  fieldTemplates = null;
-}
-
+const { FieldTemplates, generateFieldId, i18n } = require('../../.agents/skills/form_creator/scripts/field_templates.js');
 describe('核心功能：Schema 构建', () => {
-  // 如果无法 require，测试替代逻辑
-  (fieldTemplates ? describe : describe.skip)('yida_field_templates.js', () => {
-    test('generateFieldId 返回字符串', () => {
-      if (typeof fieldTemplates.generateFieldId === 'function') {
-        const id = fieldTemplates.generateFieldId('TextField');
-        expect(typeof id).toBe('string');
-        expect(id.length).toBeGreaterThan(0);
-      }
+  describe('真实字段模板库', () => {
+    test('generateFieldId 返回正确前缀且不重复', () => {
+      const first = generateFieldId('TextField');
+      expect(first).toMatch(/^textField_/);
+      expect(generateFieldId('TextField')).not.toBe(first);
     });
-
-    test('i18n 返回包含 zh_CN 的对象', () => {
-      if (typeof fieldTemplates.i18n === 'function') {
-        const result = fieldTemplates.i18n('测试文本');
-        expect(result).toHaveProperty('type', 'i18n');
-        expect(result).toHaveProperty('zh_CN', '测试文本');
-        expect(result).toHaveProperty('en_US', '测试文本');
-      }
+    test('i18n 生成中文和英文显示值', () => expect(i18n('字段')).toMatchObject({type:'i18n',zh_CN:'字段',en_US:'字段'}));
+    test('只读状态真实进入生成组件', () => expect(FieldTemplates.TextField({label:'字段',status:'readonly'}).props.behavior).toBe('READONLY'));
+    test('隐藏状态同时写入组件行为与 hidden', () => {
+      const field = FieldTemplates.TextField({label:'字段',status:'hidden'});
+      expect(field.props.behavior).toBe('HIDDEN'); expect(field.hidden).toBe(true);
     });
-
-    test('getBehaviorByStatus 正确映射', () => {
-      if (typeof fieldTemplates.getBehaviorByStatus === 'function') {
-        expect(fieldTemplates.getBehaviorByStatus('readonly')).toBe('READONLY');
-        expect(fieldTemplates.getBehaviorByStatus('hidden')).toBe('HIDDEN');
-        expect(fieldTemplates.getBehaviorByStatus('editable')).toBe('NORMAL');
-        expect(fieldTemplates.getBehaviorByStatus('unknown')).toBe('NORMAL');
-      }
-    });
-
-    test('getHiddenByStatus 正确映射', () => {
-      if (typeof fieldTemplates.getHiddenByStatus === 'function') {
-        expect(fieldTemplates.getHiddenByStatus('hidden')).toBe(true);
-        expect(fieldTemplates.getHiddenByStatus('editable')).toBe(false);
-        expect(fieldTemplates.getHiddenByStatus('readonly')).toBe(false);
-      }
-    });
-
-    test('baseProps 包含必要属性', () => {
-      if (fieldTemplates && fieldTemplates.baseProps) {
-        expect(fieldTemplates.baseProps).toHaveProperty('__category__');
-        expect(fieldTemplates.baseProps).toHaveProperty('behavior');
-        expect(fieldTemplates.baseProps).toHaveProperty('validation');
-        expect(fieldTemplates.baseProps).toHaveProperty('visibility');
-      }
+    test('必填规则与基础属性真实落在 props', () => {
+      const field = FieldTemplates.TextField({label:'字段',required:true});
+      expect(field.props.validation).toContainEqual({type:'required'});
+      expect(field.props.visibility).toEqual(['PC','MOBILE']);
     });
   });
 

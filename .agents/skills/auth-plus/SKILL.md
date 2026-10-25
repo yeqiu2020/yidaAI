@@ -49,7 +49,7 @@ description: 多策略登录认证工具，提供CDP浏览器登录、环境变�
 chrome.exe --remote-debugging-port=9222
 
 # 运行CDP登录
-node .agents/candidates/auth-plus/scripts/cdp-login.js
+node .agents/skills/auth-plus/scripts/cdp-login.js
 ```
 
 ### 2. 环境变量注入
@@ -60,19 +60,19 @@ set YIDA_COOKIE_B64=base64编码的cookie_json
 set YIDA_AUTH_ENABLED=1
 
 # 验证注入
-node .agents/candidates/auth-plus/scripts/env-inject-login.js
+node .agents/skills/auth-plus/scripts/env-inject-login.js
 ```
 
 ### 3. 终端二维码登录
 
 ```bash
-node .agents/candidates/auth-plus/scripts/qr-login.js
+node .agents/skills/auth-plus/scripts/qr-login.js
 ```
 
 ### 4. 通用入口（自动选择策略）
 
 ```bash
-node .agents/candidates/auth-plus/scripts/index.js
+node .agents/skills/auth-plus/scripts/index.js
 ```
 
 策略选择优先级：环境变量注入 > CDP浏览器 > 终端二维码 > Playwright降级

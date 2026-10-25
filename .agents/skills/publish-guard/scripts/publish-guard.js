@@ -32,9 +32,10 @@ const path = require('path');
 const { fork } = require('child_process');
 
 // 项目根目录
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const SCRIPT_ROOT = path.resolve(__dirname, '..', '..', '..', '..');
+const PROJECT_ROOT = require(path.join(SCRIPT_ROOT, 'lib/core/utils')).findProjectRoot();
 const CACHE_DIR = path.join(PROJECT_ROOT, '.cache', 'publish-guard');
-const PUBLISH_PAGE_PATH = path.join(PROJECT_ROOT, '.agents', 'skills', 'custom-page', 'scripts', 'publish-page.js');
+const PUBLISH_PAGE_PATH = path.join(SCRIPT_ROOT, '.agents', 'skills', 'custom-page', 'scripts', 'publish-page.js');
 
 // ── 工具函数 ───────────────────────────────────────────
 
@@ -101,13 +102,14 @@ function loadLocalCache(formUuid) {
 /**
  * 保存 Schema 快照到本地缓存
  */
-function saveLocalCache(formUuid, schema) {
+function saveLocalCache(formUuid, schema, metadata = {}) {
   fs.mkdirSync(CACHE_DIR, { recursive: true });
   const cachePath = path.join(CACHE_DIR, `${formUuid}.json`);
   const cacheData = {
     formUuid,
     cachedAt: new Date().toISOString(),
     schema: schema,
+    ...metadata,
   };
   fs.writeFileSync(cachePath, JSON.stringify(cacheData, null, 2), 'utf-8');
   return cachePath;
@@ -117,84 +119,58 @@ function saveLocalCache(formUuid, schema) {
  * 生成 Schema 摘要（用于对比）
  * 只对比关键字段，忽略时间戳等易变字段
  */
+function stable(value) {
+  if (Array.isArray(value)) return value.map(stable);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]));
+  return value;
+}
 function summarizeSchema(schema) {
   if (!schema) return null;
-  const summary = {
-    formUuid: schema.formUuid || schema.id || '',
-    actionsSource: extractSourceCode(schema),
-    fieldCount: 0,
-    componentCount: 0,
-  };
-
-  // 统计组件数量
-  if (schema.pages && Array.isArray(schema.pages)) {
-    for (const page of schema.pages) {
-      if (page.componentsTree) {
-        summary.componentCount += countComponents(page.componentsTree);
-      }
-    }
-  }
-
-  // 统计 action 数量
-  if (schema.actions && schema.actions.list) {
-    summary.actionCount = schema.actions.list.length;
-  }
-
-  return summary;
+  return stable({ actions: schema.actions || null, pages: schema.pages || null, componentsTree: schema.componentsTree || null, config: schema.config || null });
 }
-
-/**
- * 递归统计组件数量
- */
-function countComponents(components) {
-  let count = 0;
-  if (!Array.isArray(components)) return count;
-  for (const comp of components) {
-    if (!comp) continue;
-    count++;
-    if (comp.children && Array.isArray(comp.children)) {
-      count += countComponents(comp.children);
-    }
-  }
-  return count;
-}
-
-/**
- * 对比两个 Schema 摘要，返回差异描述
- */
 function diffSchemas(localSummary, onlineSummary) {
-  const diffs = [];
-
-  if (!localSummary) {
-    return { hasDiff: true, diffs: ['本地无缓存，首次发布'], isUnsynced: false };
-  }
-
-  // 对比代码内容
-  if (localSummary.actionsSource && onlineSummary.actionsSource) {
-    if (localSummary.actionsSource !== onlineSummary.actionsSource) {
-      const localLen = localSummary.actionsSource.length;
-      const onlineLen = onlineSummary.actionsSource.length;
-      diffs.push(`代码内容已变更（本地 ${localLen} 字符 → 线上 ${onlineLen} 字符）`);
+  const changed = !localSummary || JSON.stringify(stable(localSummary)) !== JSON.stringify(stable(onlineSummary));
+  return { hasDiff: changed, isUnsynced: changed, diffs: changed ? ['线上内容与同步基线不同（含代码、编译产物、组件或配置）'] : [] };
+}
+const normalize = value => String(value || '').replace(/\r\n/g, '\n').trim();
+function findCanvas(schema) {
+  if (!schema || typeof schema !== 'object') return null;
+  if (schema.componentName === 'YidaCodeCanvas') return schema.props || {};
+  for (const value of Object.values(schema)) {
+    if (value && typeof value === 'object') {
+      const found = findCanvas(value);
+      if (found) return found;
     }
   }
-
-  // 对比组件数量
-  if (localSummary.componentCount !== onlineSummary.componentCount) {
-    diffs.push(`组件数量已变更（本地 ${localSummary.componentCount} → 线上 ${onlineSummary.componentCount}）`);
+  return null;
+}
+function compileExpected(codePath) {
+  const source = fs.readFileSync(codePath, 'utf8');
+  if (/\.canvas\.(jsx|tsx)$/i.test(codePath)) {
+    const artifact = require('../../custom-page/scripts/canvas-publish').compileCanvasLocal(source);
+    return { type: 'canvas', runtimeCode: artifact.runtimeCode, importedModules: artifact.importedModules };
   }
-
-  // 对比 action 数量
-  if (localSummary.actionCount !== undefined && onlineSummary.actionCount !== undefined) {
-    if (localSummary.actionCount !== onlineSummary.actionCount) {
-      diffs.push(`Action 数量已变更（本地 ${localSummary.actionCount} → 线上 ${onlineSummary.actionCount}）`);
-    }
+  const publisher = require('../../custom-page/scripts/publish-page');
+  const compiled = publisher.compileSource(source, 'commonjs');
+  new (require('vm').Script)(compiled);
+  return { type: 'native', source, compiled, functions: publisher.extractExportedFunctions(source) };
+}
+function verifyPublishedSchema(schema, expected) {
+  const failures = [];
+  if (!expected) return { passed: false, failures: ['缺少本次代码预期，请使用 publish 或 health --code 核对'], runtimeVerified: false };
+  if (expected.type === 'canvas') {
+    const canvas = findCanvas(schema);
+    if (!canvas || normalize(canvas.runtimeCode) !== normalize(expected.runtimeCode) || normalize(canvas.code) !== normalize(expected.runtimeCode)) failures.push('Canvas 运行代码与本次产物不一致');
+    if (!canvas || JSON.stringify(stable(canvas.importedModules)) !== JSON.stringify(stable(expected.importedModules))) failures.push('Canvas 依赖不一致');
+  } else {
+    const actions = schema && schema.actions || {};
+    const module = actions.module || {};
+    if (normalize(module.source) !== normalize(expected.source)) failures.push('source 与本次源码不一致');
+    if (normalize(module.compiled) !== normalize(expected.compiled)) failures.push('compiled 与本次编译产物不一致');
+    const ids = new Set((actions.list || []).map(item => item.id));
+    for (const name of expected.functions || []) if (!ids.has(name)) failures.push('函数注册表缺失: ' + name);
   }
-
-  return {
-    hasDiff: diffs.length > 0,
-    diffs,
-    isUnsynced: diffs.length > 0,
-  };
+  return { passed: failures.length === 0, failures, runtimeVerified: false };
 }
 
 /**
@@ -240,7 +216,7 @@ function generateCodeDiff(localCode, onlineCode) {
 /**
  * 命令 check：检查线上页面是否有未同步改动
  */
-async function cmdCheck(appType, formUuid) {
+async function cmdCheck(appType, formUuid, services = {}) {
   console.log('=== 发布守卫 · 检查线上状态 ===');
   console.log(`应用 ID: ${appType}`);
   console.log(`页面 ID: ${formUuid}`);
@@ -250,7 +226,7 @@ async function cmdCheck(appType, formUuid) {
   console.log('[1/3] 获取线上 Schema...');
   let onlineSchema;
   try {
-    onlineSchema = await fetchOnlineSchema(appType, formUuid);
+    onlineSchema = await (services.fetchSchema || fetchOnlineSchema)(appType, formUuid);
     console.log('  ✅ 线上 Schema 获取成功');
   } catch (err) {
     console.error(`  ❌ ${err.message}`);
@@ -260,11 +236,11 @@ async function cmdCheck(appType, formUuid) {
 
   // 2. 加载本地缓存
   console.log('[2/3] 加载本地缓存...');
-  const localCache = loadLocalCache(formUuid);
+  const localCache = (services.loadCache || loadLocalCache)(formUuid);
   if (!localCache) {
     console.log('  ⚠️ 本地无缓存（首次发布或缓存已清除）');
-    console.log('  → 跳过未同步改动检查（视为无冲突）');
-    return { passed: true, reason: '无本地缓存，跳过检查', onlineSchema };
+    console.log('  → 请先检查线上内容并执行 baseline 建立同步基线');
+    return { passed: false, reason: '无同步基线，禁止盲目覆盖', onlineSchema };
   }
   console.log(`  ✅ 本地缓存存在（缓存时间: ${localCache.cachedAt}）`);
 
@@ -352,142 +328,54 @@ async function cmdDiff(appType, formUuid, codePath) {
 /**
  * 命令 publish：安全发布（检查 → 发布 → health check）
  */
-async function cmdPublish(appType, formUuid, codePath, force) {
-  console.log('=== 发布守卫 · 安全发布 ===');
-  console.log(`应用 ID: ${appType}`);
-  console.log(`页面 ID: ${formUuid}`);
-  console.log(`代码文件: ${codePath}`);
-  console.log(`强制覆盖: ${force ? '是' : '否'}`);
-  console.log('');
-
-  // Step 1: 检查线上状态
-  console.log('[Step 1/4] 发布前检查...');
-  if (!force) {
-    const checkResult = await cmdCheck(appType, formUuid);
-    if (!checkResult.passed) {
-      console.error('\n❌ 发布前检查未通过，发布中止。');
-      console.error(`   原因: ${checkResult.reason}`);
-      console.error('   如需强制覆盖，请使用 --force 参数。');
-      return { passed: false, reason: checkResult.reason };
-    }
-  } else {
-    console.log('  ⚠️ 已使用 --force，跳过未同步改动检查');
-  }
-
-  // Step 2: 调用 publish-page.js 发布
-  console.log('\n[Step 2/4] 调用 publish-page.js 发布...');
-
-  if (!fs.existsSync(PUBLISH_PAGE_PATH)) {
-    console.error(`  ❌ publish-page.js 不存在: ${PUBLISH_PAGE_PATH}`);
-    return { passed: false, reason: 'publish-page.js 不存在' };
-  }
-
-  const publishArgs = [codePath, appType, formUuid];
-  console.log(`  命令: node publish-page.js ${publishArgs.join(' ')}`);
-
-  const publishResult = await new Promise((resolve) => {
-    const child = fork(PUBLISH_PAGE_PATH, publishArgs, {
-      stdio: 'inherit',
-      cwd: PROJECT_ROOT,
-    });
-    child.on('exit', (code) => {
-      resolve({ success: code === 0, exitCode: code });
-    });
-    child.on('error', (err) => {
-      resolve({ success: false, error: err.message });
-    });
+async function publishFile(codePath, appType, formUuid) {
+  return new Promise(resolve => {
+    const child = fork(PUBLISH_PAGE_PATH, [codePath, appType, formUuid], { stdio: 'inherit', cwd: PROJECT_ROOT });
+    child.on('exit', code => resolve({ success: code === 0, exitCode: code }));
+    child.on('error', error => resolve({ success: false, error: error.message }));
   });
-
-  if (!publishResult.success) {
-    console.error(`\n❌ 发布失败（退出码: ${publishResult.exitCode}）`);
-    return { passed: false, reason: 'publish-page.js 执行失败' };
-  }
-
-  console.log('  ✅ 发布成功');
-
-  // Step 3: 更新本地缓存
-  console.log('\n[Step 3/4] 更新本地缓存...');
-  try {
-    const onlineSchema = await fetchOnlineSchema(appType, formUuid);
-    saveLocalCache(formUuid, onlineSchema);
-    console.log('  ✅ 本地缓存已更新');
-  } catch (err) {
-    console.log(`  ⚠️ 更新缓存失败: ${err.message}（不影响发布结果）`);
-  }
-
-  // Step 4: Health check
-  console.log('\n[Step 4/4] 发布后 health check...');
-  const healthResult = await cmdHealth(appType, formUuid, true);
-
-  if (!healthResult.passed) {
-    console.error('\n⚠️ Health check 未通过！页面可能存在异常。');
-    console.error('   建议检查页面是否正常加载。');
-    return { passed: false, reason: 'health check 失败', publishSuccess: true };
-  }
-
-  console.log('\n=== 安全发布完成 ===');
-  return { passed: true };
 }
 
-/**
- * 命令 health：发布后 health check
- */
-async function cmdHealth(appType, formUuid, silent) {
-  if (!silent) {
-    console.log('=== 发布守卫 · Health Check ===');
-    console.log(`应用 ID: ${appType}`);
-    console.log(`页面 ID: ${formUuid}`);
-    console.log('');
-  }
+async function cmdPublish(appType, formUuid, codePath, force, services = {}) {
+  const fetchSchema = services.fetchSchema || fetchOnlineSchema;
+  const expected = (services.compileExpected || compileExpected)(codePath);
+  const before = force ? { passed: true, onlineSchema: await fetchSchema(appType, formUuid) } : await cmdCheck(appType, formUuid, services);
+  if (!before.passed) return before;
+  const source = fs.readFileSync(codePath, 'utf8');
+  const canvas = expected.type === 'canvas' && findCanvas(before.onlineSchema);
+  const diff = generateCodeDiff(expected.type === 'canvas' ? expected.runtimeCode : source,
+    expected.type === 'canvas' ? String(canvas && canvas.runtimeCode || '') : extractSourceCode(before.onlineSchema));
+  console.log('发布差异：新增 ' + diff.addedCount + ' 行，删除 ' + diff.removedCount + ' 行');
+  diff.added.forEach(line => console.log('  + ' + line));
+  diff.removed.forEach(line => console.log('  - ' + line));
+  // Detect edits made after the check, before starting the publisher.
+  const latest = await fetchSchema(appType, formUuid);
+  if (diffSchemas(summarizeSchema(before.onlineSchema), summarizeSchema(latest)).hasDiff) return { passed: false, reason: '检查后线上再次变化，请重新核对' };
+  const result = await (services.publish || publishFile)(codePath, appType, formUuid);
+  if (!result.success) return { passed: false, reason: '发布命令失败', saved: false };
+  const health = await cmdHealth(appType, formUuid, true, expected, services);
+  if (!health.passed) return { passed: false, saved: true, verified: false, reason: health.failures.join('；'), health };
+  // Advance the baseline only after comparing this release's actual payload.
+  (services.saveCache || saveLocalCache)(formUuid, health.schema, { expected });
+  console.log('保存与回读已验证；请在内置浏览器完成页面运行验收。');
+  return { passed: true, saved: true, verified: true, runtimeVerified: false, nextAction: 'in_app_browser_validation', diff };
+}
 
-  const http = loadHttp();
-  const checks = [];
-
-  // Check 1: 页面 Schema 可获取
-  if (!silent) console.log('[1/2] 检查页面 Schema 可获取...');
+async function cmdHealth(appType, formUuid, silent, expected, services = {}) {
   try {
-    const schema = await fetchOnlineSchema(appType, formUuid);
-    if (schema) {
-      checks.push({ name: 'Schema 可获取', passed: true });
-      if (!silent) console.log('  ✅ 页面 Schema 获取成功');
-    } else {
-      checks.push({ name: 'Schema 可获取', passed: false, error: 'Schema 为空' });
-      if (!silent) console.log('  ❌ 页面 Schema 为空');
-    }
-  } catch (err) {
-    checks.push({ name: 'Schema 可获取', passed: false, error: err.message });
-    if (!silent) console.log(`  ❌ ${err.message}`);
-  }
+    const schema = await (services.fetchSchema || fetchOnlineSchema)(appType, formUuid);
+    const cache = !expected && (services.loadCache || loadLocalCache)(formUuid);
+    const result = verifyPublishedSchema(schema, expected || cache && cache.expected);
+    if (!silent) console.log(JSON.stringify(result, null, 2));
+    return { ...result, schema };
+  } catch (error) { return { passed: false, failures: [error.message], runtimeVerified: false }; }
+}
 
-  // Check 2: 代码内容非空
-  if (!silent) console.log('[2/2] 检查代码内容非空...');
-  try {
-    const schema = await fetchOnlineSchema(appType, formUuid);
-    const sourceCode = extractSourceCode(schema);
-    if (sourceCode && sourceCode.length > 0) {
-      checks.push({ name: '代码内容非空', passed: true, detail: `${sourceCode.length} 字符` });
-      if (!silent) console.log(`  ✅ 代码内容非空（${sourceCode.length} 字符）`);
-    } else {
-      checks.push({ name: '代码内容非空', passed: false, error: '代码内容为空（可能白屏）' });
-      if (!silent) console.log('  ❌ 代码内容为空（可能白屏）');
-    }
-  } catch (err) {
-    checks.push({ name: '代码内容非空', passed: false, error: err.message });
-    if (!silent) console.log(`  ❌ ${err.message}`);
-  }
-
-  const allPassed = checks.every(c => c.passed);
-
-  if (!silent) {
-    console.log('');
-    console.log('── Health Check 结果 ──');
-    for (const c of checks) {
-      console.log(`  ${c.passed ? '✅' : '❌'} ${c.name}${c.detail ? ': ' + c.detail : ''}${c.error ? ': ' + c.error : ''}`);
-    }
-    console.log(allPassed ? '\n✅ Health check 全部通过' : '\n❌ Health check 存在失败项');
-  }
-
-  return { passed: allPassed, checks };
+async function cmdBaseline(appType, formUuid) {
+  const schema = await fetchOnlineSchema(appType, formUuid);
+  const file = saveLocalCache(formUuid, schema);
+  console.log('同步基线已保存（未发布）: ' + file);
+  return { passed: true, file };
 }
 
 // ── 参数解析 ───────────────────────────────────────────
@@ -594,8 +482,10 @@ async function main() {
         process.exit(1);
       }
       return cmdPublish(opts.appType, opts.formUuid, path.resolve(opts.code), opts.force);
+    case 'baseline':
+      return cmdBaseline(opts.appType, opts.formUuid);
     case 'health':
-      return cmdHealth(opts.appType, opts.formUuid, false);
+      return cmdHealth(opts.appType, opts.formUuid, false, opts.code ? compileExpected(opts.code) : undefined);
     default:
       console.error(`❌ 未知命令: ${opts.command}`);
       printUsage();
@@ -616,6 +506,9 @@ module.exports = {
   cmdDiff,
   cmdPublish,
   cmdHealth,
+  cmdBaseline,
+  compileExpected,
+  verifyPublishedSchema,
 };
 
 // 命令行入口

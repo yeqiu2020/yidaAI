@@ -158,10 +158,10 @@ node .agents/skills/config-sync/scripts/sync_form_list_playwright.js "./进销�
 
 ### 场景5：反向生成字段清单（v3.6.0新增）
 **适用情况**：已有宜搭应用但没有 `字段清单.md` 和 `表单清单.md`。触发语句："为【进销存管理】生成字段清单和表单清单。"
-执行逻辑：从系统配置清单读取应用ID → 获取所有表单列表和Schema → 解析字段结构 → 生成标准格式的 `字段清单.md`（含主表和子表字段）和 `表单清单.md`。
+执行逻辑：使用真实入口 sync_all_configs.js 从系统配置清单读取应用ID，读取表单列表和 Schema，同步组件信息并生成 `字段清单.md`（含主表和子表字段）。表单列表保存在 `系统配置清单.md` 中；当前不额外生成独立的 `表单清单.md`。
 
 ```powershell
-node .agents/skills/config-sync/scripts/generate_field_list.js "./进销存管理"
+node .agents/skills/config-sync/scripts/sync_all_configs.js "./进销存管理"
 ```
 
 **字段类型映射**：TextField→单行文本、TextareaField→多行文本、NumberField→数值、DateField→日期/日期时间、RadioField→单选、MultiSelectField→复选/下拉复选、SelectField→下拉单选、AssociationFormField→关联表单、EmployeeField→成员、DepartmentSelectField→部门、AttachmentField→附件、ImageField→图片、SerialNumberField→流水号、TableField→子表
@@ -178,11 +178,9 @@ config-sync/
 │   ├── sync_config.js                # 主同步脚本
 │   ├── sync_form_list_playwright.js  # Playwright同步表单列表（v3.4.0支持删除/新增/更新）
 │   ├── sync_form_schemas.js          # 同步表单结构
-│   ├── generate_field_list.js        # 反向生成字段清单（v3.6.0新增）
-│   ├── fetch_app_info.js             # 获取应用信息
-│   ├── fetch_form_list.js            # 获取表单列表
-│   ├── fetch_components.js           # 获取组件ID
-│   └── generate_md.js                # 生成MD文件
+│   ├── sync_all_configs.js           # 配置、Schema、字段清单及原型统一同步
+│   ├── sync_form_schemas.js          # Schema 同步
+│   └── sync-utils.js                 # 同步公共工具
 └── evals/
     └── evals.json                    # 测试用例
 ```

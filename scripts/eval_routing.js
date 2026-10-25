@@ -12,6 +12,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { explicitIntent } = require('../lib/core/skill-routing');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const DEFAULT_CASES = path.join(PROJECT_ROOT, 'tests', 'eval_routing_cases.json');
@@ -50,6 +51,8 @@ function utteranceTokens(utterance) {
 }
 
 function route(utterance, skills, termIndex) {
+  const explicit = explicitIntent(utterance);
+  if (explicit && skills.some(skill => skill.name === explicit)) return { predicted: explicit, score: Infinity, scores: [] };
   const tokens = utteranceTokens(utterance);
   let best = null;
   const scores = [];
@@ -69,6 +72,9 @@ function main() {
   const casesIdx = args.indexOf('--cases');
   const casesFile = casesIdx !== -1 ? path.resolve(PROJECT_ROOT, args[casesIdx + 1]) : DEFAULT_CASES;
   const cases = JSON.parse(fs.readFileSync(casesFile, 'utf8'));
+  const minimumIndex = args.indexOf('--min-rate');
+  const minimum = minimumIndex < 0 ? 100 : Number(args[minimumIndex + 1]);
+  if (!Number.isFinite(minimum) || minimum < 0 || minimum > 100 || !cases.length) throw new Error('非法评测阈值或空用例集');
   const config = loadConfig();
   const skills = (config.skills || []).filter((s) => s.enabled !== false);
 
@@ -105,6 +111,7 @@ function main() {
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
   console.log('报告已写入: ' + outPath);
+  if (hit * 100 / cases.length < minimum) process.exitCode = 1;
 }
 
 main();

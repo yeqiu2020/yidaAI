@@ -38,6 +38,8 @@
 
 // ── Node 内置模块 ──────────────────────────────────────
 const http = require('http');
+const { createSecurity } = require('../../../../lib/local-service/security');
+const { safeFile } = require('../../../../lib/local-service/paths');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -91,7 +93,7 @@ const { pushActionCode, listActionCodeVersions } = require('../../../../lib/sync
 
 // ── 常量 ────────────────────────────────────────────────
 const PORT = parseInt(process.env.SYNC_SERVICE_PORT || '3457', 10);
-const SERVER_VERSION = '3.3.0';
+const SERVER_VERSION = '3.4.0';
 // 项目版本（唯一真相源 = package.json 的 version 字段，与 git tag vX.Y.Z 对应）
 let PROJECT_VERSION = '未知';
 try { PROJECT_VERSION = require('../../../../package.json').version || '未知'; } catch (e) { /* 读取失败保持"未知" */ }
@@ -113,19 +115,12 @@ function buildEntryUrlBase(projectDir) {
 }
 
 // ── HTTP 服务器 ─────────────────────────────────────────
-const server = http.createServer(async (req, res) => {
-  // 设置CORS头，允许本地文件访问
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+function createSyncServer(options = {}) {
+const STATIC_ROOT = path.resolve(options.staticRoot || process.cwd());
+const protectRequest = createSecurity(options);
+return http.createServer(async (req, res) => {
+  if (protectRequest(req, res)) return;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-
-  // 处理预检请求
-  if (req.method === 'OPTIONS') {
-    res.writeHead(200);
-    res.end();
-    return;
-  }
 
   const parsedUrl = url.parse(req.url, true);
 
@@ -134,6 +129,9 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200);
     res.end(JSON.stringify({
       status: 'ok',
+      securityPatch: 'enabled',
+      bindAddress: '127.0.0.1',
+      tokenRequired: true,
       time: new Date().toISOString(),
       version: SERVER_VERSION,
       projectVersion: PROJECT_VERSION,
@@ -1110,7 +1108,7 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           'Connection': 'keep-alive',
-          'Access-Control-Allow-Origin': '*',
+
         });
 
         // SSE 辅助函数
@@ -1899,7 +1897,7 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
         res.end(JSON.stringify({ success: false, error: '无法确定项目目录，请检查访问路径' }));
         return;
       }
-      const fullPath = path.join(projectDirHost, filePath);
+      const fullPath = safeFile(projectDirHost, filePath, ['.md', '.json', '.js']);
       if (!fs.existsSync(fullPath)) {
         res.writeHead(404);
         res.end(JSON.stringify({ success: false, error: '文件不存在' }));
@@ -1956,13 +1954,13 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
         res.end(JSON.stringify({ success: false, error: '只允许写入 .md, .json, .js 文件' }));
         return;
       }
-      const projectDirHost = resolveProjectDir(req, { projectDir: payload.projectDir, staticRoot: STATIC_ROOT });
+      const projectDirHost = resolveProjectDir(req, { projectDir: payload.projectDir, pageUrl: payload.pageUrl, staticRoot: STATIC_ROOT });
       if (!projectDirHost) {
         res.writeHead(400);
         res.end(JSON.stringify({ success: false, error: '无法确定项目目录，请检查访问路径' }));
         return;
       }
-      const fullPath = path.join(projectDirHost, filePath);
+      const fullPath = safeFile(projectDirHost, filePath, ['.md', '.json', '.js']);
       if (!fs.existsSync(fullPath)) {
         res.writeHead(404);
         res.end(JSON.stringify({ success: false, error: '文件不存在: ' + filePath }));
@@ -2236,9 +2234,12 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
   res.writeHead(404);
   res.end(JSON.stringify({ success: false, error: '接口不存在' }));
 });
+}
 
 // 启动服务器
-server.listen(PORT, () => {
+function startSyncServer() {
+const server = createSyncServer();
+server.listen(PORT, '127.0.0.1', () => {
   log('='.repeat(60), 'green');
   log('宜搭表单同步服务已启动', 'green');
   log('='.repeat(60), 'green');
@@ -2277,3 +2278,8 @@ process.on('SIGINT', () => {
     process.exit(0);
   });
 });
+return server;
+}
+
+module.exports = { createSyncServer, startSyncServer };
+if (require.main === module) startSyncServer();

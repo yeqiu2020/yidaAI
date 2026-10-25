@@ -19,7 +19,7 @@ const path = require('path');
  * - v1.0.0: 初始版本
  */
 
-const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
+const PROJECT_ROOT = path.resolve(__dirname, '..');
 
 // 填充规则分隔符正则常量（穷举兼容所有可能符号）
 // 规范：字段清单中多个"当前字段=源字段"对之间推荐用顿号"、"分隔
@@ -364,7 +364,7 @@ function validateContentPlaceholders(content) {
 
 function validateCookiePath(cookieFilePath) {
   const results = { valid: true, errors: [], warnings: [] };
-  const expectedPath = path.join(PROJECT_ROOT, '.cookies.json');
+  const expectedPath = path.join(require('../lib/core/utils').findProjectRoot(), '.cookies.json');
   const normalizedInput = path.resolve(cookieFilePath);
 
   if (normalizedInput !== expectedPath) {

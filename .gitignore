@@ -1,5 +1,6 @@
 node_modules/
 .cookies.json
+.cookies.json.*
 temp-cookies*.json
 # 多环境 cookie 凭证变体（cookies.json / cookies-<环境>.json 等）
 cookies*.json
@@ -60,6 +61,9 @@ logs/
 !/.vscode/
 !/lib/
 !/scripts/
+!/.workbuddy-ai/
+/.workbuddy-ai/*
+!/.workbuddy-ai/run/
 !/tests/
 !/本地操作页面/
 !/★宜搭场景案例库/

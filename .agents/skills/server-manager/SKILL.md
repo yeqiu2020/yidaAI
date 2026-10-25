@@ -32,60 +32,23 @@ description: 宜搭服务管理器，一键启动和管理宜搭开发所需的�
 - **停止服务**：用户说"停止服务"、"关闭服务"等
 - **重启服务**：用户说"重启服务"、"重新启动"等
 
-### 第2步：执行统一启动命令（宿主无关）
+### 第2步：执行受跟踪的统一入口
 
-**【v3.7.0 强制】只有一条启动命令，所有宿主（DSH / Trae / Cursor / Claude Code / Codex 等）完全相同：**
-
-```bash
-node .agents/skills/server-manager/scripts/server_manager.js start
-```
-
-> **为什么不再分宿主**：旧版要求 Trae 走「前台 8080 + start-sync」两段式（为配合 `open_preview` 拿 Running 的 `command_id`），
-> 而 DSH 等宿主没有 `open_preview`，于是 AI 各自发挥——有的手拼 URL、有的用 `Start-Process` 拉外部浏览器、有的干脆不给地址。
-> **同一件事在不同工具下结果不同，根因是「地址生成」和「打开方式」被交给 AI 判断。**
-> v3.7.0 起两者都收敛进 `server_manager.js`：脚本启动服务并打印**权威地址 + 可粘贴 Markdown**，
-> AI 的唯一职责是**原样转达**，不再自己拼 URL、不再自己选打开方式。
-
-其他操作同样用普通命令（无需任何宿主特有能力）：
+AI 会话内只运行：
 
 ```bash
-node .agents/skills/server-manager/scripts/server_manager.js status   # 状态 + 权威地址
-node .agents/skills/server-manager/scripts/server_manager.js url      # 仅输出权威地址（不启停）
-node .agents/skills/server-manager/scripts/server_manager.js stop     # 停止
-node .agents/skills/server-manager/scripts/server_manager.js restart  # 重启
+node .workbuddy-ai/run/ensure-service.js
 ```
 
-> 若 8080 被旧的后台服务占用，`start` 会自动识别并复用/升级，无需手工 `stop`。
+只查状态用 `node .workbuddy-ai/run/ensure-service.js status --json`。不要直接在 AI 宿主里执行后端的 server_manager start/restart；detached 不保证逃离宿主 Job Object。用户双击批处理与服务内部仍可调用 server_manager，它是后端实现入口。
 
-### 第3步：解析脚本输出
+### 第3步：验证并转达结果
 
-脚本会打印一段机器可读行，**优先用它判定结果**（不要解析中文装饰文本）：
+必须检查 `YIDA_READY` 的 ok=true，再原样转达 markdown 地址。失败时给出日志里的原因；只生成 URL 不表示服务已经就绪。不要拼地址或拉起系统外部浏览器，点击链接在宿主内置浏览器打开。
 
-```
-YIDA_READY {"ok":true,...,"url":{"portal":"http://127.0.0.1:8080/<项目目录段>/本地操作页面/index.html"},"markdown":"[🏠 打开本地操作页面](...)"}
-```
+### 第4步：安全运行约定
 
-- `ok: true` → 两个服务都就绪，取 `markdown` 字段
-- `ok: false` → 看 `http.error` / `sync.error` 说明原因
-- 若进程被中断没有该行，用 `status` 复查
-
-### 第4步：向用户输出地址（唯一动作）
-
-**服务就绪后 AI 只做一件事：把脚本输出的 `markdown` 行原样贴给用户。**
-
-- ✅ 正确：直接复制脚本打印的 `[🏠 打开本地操作页面](http://127.0.0.1:8080/.../本地操作页面/index.html)`
-- ❌ 禁止：自己拼接 URL（极易漏项目目录段 → 404）
-- ❌ 禁止：把地址改写成 `file://`
-- ❌ 禁止：用 `start` / `Start-Process` / `explorer` / `open` 拉起系统外部浏览器
-- ❌ 禁止：打开 `http://127.0.0.1:8080/` 组织门户首页（无实际意义）
-
-**关于"谁来打开"**：地址交给用户点击即可，各宿主的点击行为天然一致——
-聊天里的 HTTP(S) 链接在 DSH 下默认进右侧栏 Sidebar Browser（`ui-chat.linkOpening = "sidebar"`），
-在 Trae 下进内置浏览器；两者都不需要 AI 介入。用户也可按 `Ctrl+T`（DSH）或右侧栏 guide 按钮手输地址。
-
-**可选增强（仅在宿主确实提供时使用，绝不作为必需步骤）**：Trae 有 `tools.open_preview`，可在给出链接之外**额外**生成预览框；
-调用失败（`net::ERR_ABORTED` / `IDE Command timeout`）不必重试，因为链接已经给到用户了。
-DSH 没有该工具，跳过即可——**不给预览框不影响结果，链接始终是主通道**。
+默认静态/同步服务均绑定 127.0.0.1。写请求（包括有副作用的 GET/SSE）需会话 token；浏览器页面由静态服务自动注入公共客户端，CLI 使用 lib/local-service/client.js。凭证和工具内部目录不得作为静态资产公开。不存在关闭加固后继续交付的默认路径。
 
 ### 第5步：向用户报告结果
 

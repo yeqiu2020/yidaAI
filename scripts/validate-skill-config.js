@@ -26,6 +26,7 @@
 
 const fs = require('fs');
 const path = require('path');
+const { inspectSkillText } = require('../lib/core/skill-metadata');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..');
 const SKILLS_DIR = path.join(PROJECT_ROOT, '.agents', 'skills');
@@ -88,6 +89,12 @@ function main() {
     }
     if (!fs.existsSync(path.join(SKILLS_DIR, dirName, 'SKILL.md'))) {
       errors.push(`条目 "${dirName}" 指向的目录不存在或缺少 SKILL.md（应从 skills 数组移除）`);
+    } else {
+      const text = fs.readFileSync(path.join(SKILLS_DIR, dirName, 'SKILL.md'), 'utf8');
+      for (const problem of inspectSkillText(s, text, command =>
+        fs.existsSync(path.join(PROJECT_ROOT, command)) || fs.existsSync(path.join(SKILLS_DIR, dirName, command)))) {
+        errors.push(`${dirName}: ${problem}`);
+      }
     }
   }
 

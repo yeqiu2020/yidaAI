@@ -201,6 +201,7 @@ describe('lib/core/chalk', () => {
       expect(typeof sp.succeed).toBe('function');
       expect(typeof sp.fail).toBe('function');
       expect(typeof sp.update).toBe('function');
+      sp.succeed('methods verified');
     });
 
     test('succeed 输出成功消息', () => {

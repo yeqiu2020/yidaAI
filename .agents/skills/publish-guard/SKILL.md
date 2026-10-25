@@ -59,31 +59,33 @@ description: 宜搭自定义页面发布守卫。在发布自定义页面之前�
 
 ## 命令
 
-### 发布前检查（不实际发布）
+### 建立同步基线与发布前检查（不实际发布）
+
+首次维护已有页面时先读取并核对线上内容，再执行 `node .agents/skills/publish-guard/scripts/publish-guard.js baseline --appType <appType> --formUuid <formUuid>` 保存同步基线；没有基线默认拒绝覆盖。
 
 ```bash
 # 检查线上页面是否有未同步改动
-node .agents/candidates/publish-guard/scripts/publish-guard.js check --appType <appType> --formUuid <formUuid>
+node .agents/skills/publish-guard/scripts/publish-guard.js check --appType <appType> --formUuid <formUuid>
 
 # 预览发布内容 diff
-node .agents/candidates/publish-guard/scripts/publish-guard.js diff --appType <appType> --formUuid <formUuid> --code <代码文件路径>
+node .agents/skills/publish-guard/scripts/publish-guard.js diff --appType <appType> --formUuid <formUuid> --code <代码文件路径>
 ```
 
 ### 安全发布（检查 + 发布 + health check）
 
 ```bash
 # 安全发布（有未同步改动时阻止）
-node .agents/candidates/publish-guard/scripts/publish-guard.js publish --appType <appType> --formUuid <formUuid> --code <代码文件路径>
+node .agents/skills/publish-guard/scripts/publish-guard.js publish --appType <appType> --formUuid <formUuid> --code <代码文件路径>
 
 # 强制覆盖（跳过未同步改动检查）
-node .agents/candidates/publish-guard/scripts/publish-guard.js publish --appType <appType> --formUuid <formUuid> --code <代码文件路径> --force
+node .agents/skills/publish-guard/scripts/publish-guard.js publish --appType <appType> --formUuid <formUuid> --code <代码文件路径> --force
 ```
 
 ### 发布后 health check
 
 ```bash
 # 单独执行 health check
-node .agents/candidates/publish-guard/scripts/publish-guard.js health --appType <appType> --formUuid <formUuid>
+node .agents/skills/publish-guard/scripts/publish-guard.js health --appType <appType> --formUuid <formUuid>
 ```
 
 ## 检查项
@@ -111,7 +113,7 @@ publish-guard 在 `.cache/publish-guard/` 目录维护本地发布状态缓存�
 ## 文件结构
 
 ```
-.agents/candidates/publish-guard/
+.agents/skills/publish-guard/
 ├── SKILL.md                          ← 本文件
 ├── scripts/
 │   └── publish-guard.js              ← 发布守卫核心脚本
@@ -137,3 +139,8 @@ publish-guard 在 `.cache/publish-guard/` 目录维护本地发布状态缓存�
 ## 版本历史
 
 - **v1.1.0**（2026-09-28）：新增「发布后回读核对」环节（C5）— 严格要求新增回读条款、检查项新增 C5 行、流程图增加"回读核对（C5）"节点、异常处理新增"回读与发布内容不一致"判定为假成功的处理。health check 之后必须通过 get-form-config / getFormSchema 类只读接口核对本轮发布内容已真实落库，未回读或回读不一致不得汇报「已发布/已上线」。依据：OpenYida 借鉴改造清单 P0-2（官方 yida-publish-page 证据契约 + yida-openyida-publish-guard 发布后验证原义）。（此前候选轨初始版未设版本号，记为 v1.0.0）
+
+
+## 2026-10-25 发布闭环
+
+发布必须展示本次 diff；检查后线上再次变化则中止。Native 核对 source、compiled、函数注册表；Canvas 核对 runtimeCode 和 importedModules。只有回读一致才推进缓存。CLI 的 saved/verified 仅确认持久化；runtimeVerified=false、nextAction=in_app_browser_validation 表示仍需在宿主内置浏览器进行运行验收，不能声称页面已验收。health 可加 --code 指定本次源码；仅代码非空不再视为健康。

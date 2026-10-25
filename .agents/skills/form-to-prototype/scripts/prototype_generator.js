@@ -74,11 +74,12 @@ const path = require('path');
  * 每次功能升级时递增，sync-ops.js 会比对 .generator-version 文件，
  * 版本不符则强制全量重建原型页面（保证 manifest 等新功能覆盖所有应用）。
  */
-const GENERATOR_VERSION = '2.43.1';
+const GENERATOR_VERSION = '2.43.2';
 // 导出 GENERATOR_VERSION：供 lib/sync-server/sync-ops.js 的版本感知重建机制动态读取，
 // 使 sync 期望版本与生成器版本由单一来源驱动，避免"两套版本号人工同步遗漏"导致存量应用不自动重建。
 module.exports = module.exports || {};
 module.exports.GENERATOR_VERSION = GENERATOR_VERSION;
+module.exports.generateManifestHtml = generateManifestHtml;
 
 /**
  * 解析Markdown表格行
@@ -515,7 +516,7 @@ function generateIndexHtml(systemInfo, allForms) {
     </main>
   </div>
   
-  <script src="js/app.js?v=2.43.1"></script>
+  <script src="js/app.js?v=2.43.2"></script>
   <script src="js/form-config.js"></script>
   <script>
     document.addEventListener('DOMContentLoaded', async function() {
@@ -648,7 +649,7 @@ function generateListTemplateHtml(allForms) {
     </div>
   </div>
 
-  <script src="../js/app.js?v=2.43.1"></script>
+  <script src="../js/app.js?v=2.43.2"></script>
   <script src="../js/form-config.js"></script>
   <script>
     // 页面初始化
@@ -836,7 +837,7 @@ function generateFormTemplateHtml(allForms) {
     </main>
   </div>
 
-  <script src="../js/app.js?v=2.43.1"></script>
+  <script src="../js/app.js?v=2.43.2"></script>
   <script src="../js/form-config.js"></script>
   <script>
     // 页面初始化
@@ -1099,7 +1100,7 @@ function generateGuideHtml() {
     </main>
   </div>
 
-  <script src="../js/app.js?v=2.43.1"></script>
+  <script src="../js/app.js?v=2.43.2"></script>
   <script src="../js/form-config.js"></script>
   <script>
     function copyGuidePrompt(el) {
@@ -2277,7 +2278,7 @@ function generateManifestHtml(markdownPath, outputDir, systemName) {
       refreshManifestData(window.location.search.indexOf('refresh=1') < 0);
     });
   </script>
-  <script src="../js/app.js?v=2.43.1"></script>
+  <script src="../js/app.js?v=2.43.2"></script>
   <script src="../js/form-config.js"></script>
 </body>
 </html>`;

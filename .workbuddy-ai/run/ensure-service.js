@@ -28,12 +28,14 @@ const { spawn, spawnSync } = require('child_process');
 
 const PROJECT_ROOT = path.resolve(__dirname, '..', '..');
 const PROJECT_DIR_NAME = path.basename(PROJECT_ROOT);
-const STATIC_ROOT = path.dirname(PROJECT_ROOT); // 多项目模式：公共父目录
+const { serviceLocations } = require('../../lib/local-service/locations');
+const locations = serviceLocations(PROJECT_ROOT);
+const STATIC_ROOT = locations.staticRoot;
 const HTTP_PORT = 8080;
 const SYNC_PORT = 3457;
-const PORTAL_PATH = `/${PROJECT_DIR_NAME}/本地操作页面/index.html`;
-const PORTAL_URL = `http://127.0.0.1:${HTTP_PORT}${encodeURI(PORTAL_PATH)}`;
-const MARKDOWN = `[🏠 打开本地操作页面](${PORTAL_URL})`;
+const PORTAL_URL = locations.portalEncoded;
+const PORTAL_PATH = new URL(PORTAL_URL).pathname;
+const MARKDOWN = locations.markdown;
 const LAUNCHER_BAT = path.join(PROJECT_ROOT, 'start-local-service.bat');
 const LOG_FILE = path.join(PROJECT_ROOT, 'service-start.log');
 
@@ -47,8 +49,13 @@ function probe(port, urlPath, timeout = 1500) {
   return new Promise((resolve) => {
     const req = http.get({ host: '127.0.0.1', port, path: urlPath, timeout }, (res) => {
       let bytes = 0;
-      res.on('data', (c) => { bytes += c.length; });
-      res.on('end', () => resolve({ ok: res.statusCode >= 200 && res.statusCode < 400, code: res.statusCode, bytes }));
+      const chunks = [];
+      res.on('data', (c) => { bytes += c.length; chunks.push(c); });
+      res.on('end', () => {
+        let json;
+        try { json = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (_) {}
+        resolve({ ok: res.statusCode >= 200 && res.statusCode < 400, code: res.statusCode, bytes, json });
+      });
     });
     req.on('timeout', () => { req.destroy(); resolve({ ok: false, code: 0, bytes: 0, err: 'timeout' }); });
     req.on('error', (e) => resolve({ ok: false, code: 0, bytes: 0, err: e.code || e.message }));
@@ -56,28 +63,26 @@ function probe(port, urlPath, timeout = 1500) {
 }
 
 async function snapshot() {
-  const [page, sync] = await Promise.all([
+  const [page, sync, staticHealth] = await Promise.all([
     // 路径含中文，必须 encodeURI，否则 http.get 直接抛 "Request path contains unescaped characters"
-    probe(HTTP_PORT, encodeURI(PORTAL_PATH)),
+    probe(HTTP_PORT, PORTAL_PATH),
     probe(SYNC_PORT, '/health'),
+    probe(HTTP_PORT, '/__yida_health'),
   ]);
+  page.ok = page.ok && !!(staticHealth.json && staticHealth.json.securityPatch === 'enabled');
+  sync.ok = sync.ok && !!(sync.json && sync.json.securityPatch === 'enabled');
   return { page, sync, ready: page.ok && sync.ok };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** 让 3457 同步服务帮忙拉起服务（它在宿主 Job 之外，spawn 的子进程能常驻） */
-function launchViaSyncService() {
-  return new Promise((resolve) => {
-    const p = `/ensure-service?projectDir=${encodeURIComponent(PROJECT_DIR_NAME)}`;
-    const req = http.get({ host: '127.0.0.1', port: SYNC_PORT, path: p, timeout: 4000 }, (res) => {
-      let d = '';
-      res.on('data', (c) => { d += c; });
-      res.on('end', () => resolve({ ok: true, body: d }));
-    });
-    req.on('timeout', () => { req.destroy(); resolve({ ok: false, reason: 'timeout' }); });
-    req.on('error', (e) => resolve({ ok: false, reason: e.code || e.message }));
-  });
+async function launchViaSyncService() {
+  try {
+    const { requestJson } = require('../../lib/local-service/client');
+    const r = await requestJson('http://127.0.0.1:' + SYNC_PORT, '/ensure-service?projectDir=' + encodeURIComponent(PROJECT_DIR_NAME), undefined, 'GET');
+    return { ok: r.status >= 200 && r.status < 300 && !!(r.json && r.json.success), body: r.json };
+  } catch (e) { return { ok: false, reason: e.message }; }
 }
 
 /**
@@ -113,7 +118,7 @@ function ensureNeutralLauncher() {
     if (iconv) {
       fs.writeFileSync(NEUTRAL_BAT, iconv.encode(content, 'gbk'));
     } else {
-      fs.writeFileSync(NEUTRAL_BAT, content, 'utf8');
+      throw new Error('缺少 iconv-lite，请先 npm install');
     }
     return NEUTRAL_BAT;
   } catch (e) {
@@ -123,7 +128,7 @@ function ensureNeutralLauncher() {
 
 /** 用 explorer.exe 拉起中立启动器（工作区外，无安全警告弹窗） */
 function launchViaExplorer() {
-  const bat = ensureNeutralLauncher() || (fs.existsSync(LAUNCHER_BAT) ? LAUNCHER_BAT : null);
+  const bat = ensureNeutralLauncher();
   if (!bat) {
     return { ok: false, reason: '无法生成启动器，且项目内启动脚本不存在' };
   }

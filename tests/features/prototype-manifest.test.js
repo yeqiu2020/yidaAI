@@ -11,89 +11,29 @@
 
 'use strict';
 
-// ==================== 1. 版本感知重建逻辑（与 sync-ops.js generatePrototypePages 一致）====================
-const EXPECTED_PROTOTYPE_VERSION = '2.14.0';
-
-/**
- * 判断是否需要强制全量重建。
- * @param {string|null} currentVersion - 原型页面 .generator-version 内容（不存在则为 null）
- * @param {boolean} indexExists - index.html 是否存在
- * @param {boolean} formListChanged - 表单列表是否变化
- * @returns {{needFullRegen:boolean, skip:boolean}} skip=true 表示直接跳过（无需重建）
- */
-function decidePrototypeAction(currentVersion, indexExists, formListChanged) {
-  let needFullRegen = false;
-  if (currentVersion !== EXPECTED_PROTOTYPE_VERSION) {
-    needFullRegen = true;
-  }
-  if (!indexExists) {
-    return { needFullRegen: true, skip: false }; // 不存在则完整生成
-  }
-  if (formListChanged && !needFullRegen) {
-    return { needFullRegen: false, skip: false }; // 走 form-config-only 增量
-  }
-  if (!needFullRegen) {
-    return { needFullRegen: false, skip: true }; // 版本一致且无变更，跳过
-  }
-  return { needFullRegen: true, skip: false }; // 版本不符，强制全量重建
-}
-
-// ==================== 2. manifest 字段清单解析逻辑（与 manifest.html parseFieldsData 一致）====================
-// 抽取为纯函数（不含 window/document 依赖），输出 { groups:[{name, forms:[{name, formType, dataTitle, tables:[{title,header,rows}]}]}] }
-function parseManifestFieldsMd(mdText) {
-  const lines = String(mdText || '').split('\n');
-  const groups = [];
-  let curGroup = null, curForm = null, curTable = null;
-
-  // 顶部说明区：定位到第一个真正的分组标题（形如 "## 一、基础信息"）
-  let headEnd = 0;
-  for (let i = 0; i < lines.length; i++) {
-    if (/^##\s*[一二三四五六七八九十0-9]+、/.test(lines[i].trim())) { headEnd = i; break; }
-  }
-  for (let i = headEnd; i < lines.length; i++) {
-    const t = lines[i].trim();
-    if (/^##\s+/.test(t)) {
-      curGroup = { name: t.replace(/^##\s+/, ''), forms: [] };
-      groups.push(curGroup); curForm = null; curTable = null; continue;
-    }
-    if (/^###\s+/.test(t)) {
-      const nameMatch = t.replace(/^###\s+/, '').match(/^(\(?[一二三四五六七八九十0-9]+\)?\s*)?(.+?)「(.+?)」$/);
-      curForm = { name: nameMatch ? nameMatch[2] : t.replace(/^###\s+/, ''), formType: nameMatch ? nameMatch[3] : '', dataTitle: '', tables: [] };
-      if (curGroup) curGroup.forms.push(curForm); curTable = null; continue;
-    }
-    const dt = t.match(/^\*\*数据标题[：:]\s*(.+?)\*\*/);
-    if (dt && curForm) { curForm.dataTitle = dt[1]; continue; }
-    const sub = t.match(/^\*\*子表[：:]\s*(.+?)\*\*/);
-    if (sub && curForm) { curForm._pendingTitle = '子表：' + sub[1]; curTable = null; continue; }
-    const main = t.match(/^\*\*主表[：:]\s*(.+?)\*\*/);
-    if (main && curForm) { curForm._pendingTitle = '主表：' + main[1]; curTable = null; continue; }
-    if (t.startsWith('|')) {
-      const cells = t.split('|').slice(1, -1).map(c => c.trim());
-      const isSep = cells.length && cells.every(c => /^-+$/.test(c.replace(/^:+/,'').replace(/:+$/,'')));
-      if (!isSep && cells.length) {
-        if (!curTable) {
-          const title = curForm && curForm._pendingTitle ? curForm._pendingTitle : '主表';
-          curTable = { title: title, header: cells, rows: [] };
-          if (curForm) { curForm.tables.push(curTable); curForm._pendingTitle = null; }
-        } else {
-          curTable.rows.push(cells);
-        }
-      }
-    }
-  }
-  return groups;
+const vm = require('vm');
+const path = require('path');
+const generator = require('../../.agents/skills/form-to-prototype/scripts/prototype_generator');
+const { decidePrototypeAction } = require('../../lib/sync-server/sync-ops');
+const CURRENT_VERSION = generator.GENERATOR_VERSION;
+const generatedHtml = generator.generateManifestHtml(path.resolve(__dirname,'../../temp-file/no-fixture/字段清单.md'), path.resolve(__dirname,'../../temp-file/no-fixture'), 'test');
+const functionStart = generatedHtml.indexOf('function parseFieldsData()');
+const functionEnd = generatedHtml.indexOf('// 轻量 md',functionStart);
+const actualParser = generatedHtml.slice(functionStart,functionEnd);
+function parseManifestFieldsMd(md) {
+  return vm.runInNewContext('let fieldsCache = null; ' + actualParser + '; parseFieldsData().groups;', { window: { __MANIFEST_DATA__: { fieldsMd: md } } });
 }
 
 // ==================== 测试 ====================
 describe('原型产物完整性：版本感知重建', () => {
   test('版本一致且无表单变更 → 跳过生成', () => {
-    const r = decidePrototypeAction('2.14.0', true, false);
+    const r = decidePrototypeAction(CURRENT_VERSION, true, false);
     expect(r.skip).toBe(true);
     expect(r.needFullRegen).toBe(false);
   });
 
   test('版本一致但有表单变更 → 走 form-config 增量（非跳过非全量）', () => {
-    const r = decidePrototypeAction('2.14.0', true, true);
+    const r = decidePrototypeAction(CURRENT_VERSION, true, true);
     expect(r.skip).toBe(false);
     expect(r.needFullRegen).toBe(false);
   });
@@ -117,7 +57,7 @@ describe('原型产物完整性：版本感知重建', () => {
   });
 
   test('index 不存在 → 完整生成', () => {
-    const r = decidePrototypeAction('2.14.0', false, false);
+    const r = decidePrototypeAction(CURRENT_VERSION, false, false);
     expect(r.needFullRegen).toBe(true);
     expect(r.skip).toBe(false);
   });
