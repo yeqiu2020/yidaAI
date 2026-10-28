@@ -1,8 +1,14 @@
 /**
  * 宜搭应用数据备份脚本
- * 版本: 1.6.0
+ * 版本: 1.7.0
  * 功能: 备份指定应用中的所有表单数据，支持 JSON/Excel 格式，Excel 表头自动显示字段名称
  *       v1.6.0 新增 --forms 参数：只备份指定的表单（按 UUID，竖线分隔），不传则全量备份
+ *       v1.7.0 (2026-10-27) 修复"导出全部成功但交付为零"事故：
+ *         1. 同名表单去重——文件名与合并 Excel 的 sheet 名冲突时自动追加 UUID 末4位
+ *            （此前两个同名"出口销售订单"导致 saveMergedExcel 抛 "Worksheet already exists!"）
+ *         2. 合并/打包失败不再删光已生成的明细文件——只保留目录并如实上报 partial 状态
+ *         3. Excel 单元格超 32767 字符时截断并标注，不再整表单保存失败
+ *         4. 备份过程写 _progress.json 进度文件（供页面轮询实时显示），结束自动清理
  *
  * 使用方式:
  * node scripts/backup-app-data.js <应用ID> <应用名称> [format] [输出目录] [--forms=UUID1|UUID2]
@@ -29,6 +35,55 @@ const PROJECT_ROOT = (process.env.YIDA_PROJECT_ROOT && fs.existsSync(process.env
   : SCRIPT_HOST_ROOT;
 const COOKIE_FILE = path.join(PROJECT_ROOT, '.cookies.json');
 let CURRENT_STAGING_DIR = null;
+// v1.7.0: 备份进度文件（固定写入 数据备份/_progress.json，供 sync_server /backup-progress 读取）
+let PROGRESS_FILE = null;
+
+function writeProgress(progress) {
+  if (!PROGRESS_FILE) return;
+  try {
+    fs.writeFileSync(PROGRESS_FILE, JSON.stringify({ ...progress, updatedAt: new Date().toISOString() }), 'utf-8');
+  } catch (_) {} // 进度写入失败不影响备份本身
+}
+
+function clearProgress() {
+  if (!PROGRESS_FILE) return;
+  try { fs.rmSync(PROGRESS_FILE, { force: true }); } catch (_) {}
+  PROGRESS_FILE = null;
+}
+
+/**
+ * v1.7.0: 同名表单去重——为每个 key（表单UUID）生成唯一的文件名/sheet名。
+ * 首个表单保留原名；撞名时追加「_UUID末4位」后缀（必要时再加大序号）。
+ * maxLen > 0 时（Excel sheet 名上限 31）先截断再去重，避免截断后二次撞名。
+ */
+function dedupeNames(entries, maxLen = 0) {
+  const used = new Set();
+  const result = new Map();
+  for (const { key, base } of entries) {
+    let candidate = maxLen > 0 ? base.slice(0, maxLen) : base;
+    if (!used.has(candidate)) {
+      used.add(candidate);
+      result.set(key, candidate);
+      continue;
+    }
+    const suffix = `_${key.slice(-4)}`;
+    let n = 1;
+    let finalName;
+    do {
+      const tail = n === 1 ? suffix : `${suffix}${n}`;
+      const head = maxLen > 0 ? base.slice(0, Math.max(1, maxLen - tail.length)) : base;
+      finalName = head + tail;
+      n++;
+    } while (used.has(finalName));
+    used.add(finalName);
+    result.set(key, finalName);
+  }
+  return result;
+}
+
+function safeFormName(form) {
+  return String(form.name || form.uuid || '未命名表单').replace(/[\/\\:*?"<>|]/g, '_');
+}
 
 // 加载 xlsx 库（从项目根目录 node_modules）
 let XLSX;
@@ -449,9 +504,10 @@ function formatValue(value) {
 
 /**
  * 保存为 JSON 文件
+ * v1.7.0: uniqueName = 去重后的唯一文件名（同名表单不再互相覆盖）
  */
-function saveJsonFile(outputDir, form, recordCount, data, errorMsg) {
-  const safeName = (form.name || form.uuid).replace(/[\/\\:*?"<>|]/g, '_');
+function saveJsonFile(outputDir, form, recordCount, data, errorMsg, uniqueName) {
+  const safeName = uniqueName || safeFormName(form);
   const outputFile = path.join(outputDir, `${safeName}.json`);
   const backupContent = {
     appId: form.appId,
@@ -468,15 +524,34 @@ function saveJsonFile(outputDir, form, recordCount, data, errorMsg) {
   console.log(`   💾 已保存 JSON: ${outputFile} (${recordCount} 条)`);
 }
 
+// v1.7.0: Excel 单元格文本上限 32767 字符，超长截断并标注（此前整表单保存失败）
+const EXCEL_CELL_MAX = 32767;
+const TRUNCATE_MARKER = '…【文本超长已截断，完整数据请用JSON格式备份】';
+
+function truncateRowForExcel(row) {
+  const out = {};
+  let truncated = 0;
+  for (const [k, v] of Object.entries(row)) {
+    if (typeof v === 'string' && v.length > EXCEL_CELL_MAX) {
+      out[k] = v.slice(0, EXCEL_CELL_MAX - TRUNCATE_MARKER.length) + TRUNCATE_MARKER;
+      truncated++;
+    } else {
+      out[k] = v;
+    }
+  }
+  return { row: out, truncated };
+}
+
 /**
  * 保存为 Excel 文件
+ * v1.7.0: uniqueName 去重；超长文本截断并返回截断单元格数
  */
-function saveExcelFile(outputDir, form, recordCount, data, errorMsg, fieldNameMap = {}) {
+function saveExcelFile(outputDir, form, recordCount, data, errorMsg, fieldNameMap = {}, uniqueName) {
   if (!XLSX) {
     throw new Error('xlsx 库未安装，无法导出 Excel');
   }
 
-  const safeName = (form.name || form.uuid).replace(/[\/\\:*?"<>|]/g, '_');
+  const safeName = uniqueName || safeFormName(form);
   const outputFile = path.join(outputDir, `${safeName}.xlsx`);
 
   let rows = [];
@@ -486,11 +561,19 @@ function saveExcelFile(outputDir, form, recordCount, data, errorMsg, fieldNameMa
     rows = [{ '备份状态': 'failed', '错误信息': errorMsg }];
   }
 
+  let truncatedCells = 0;
+  rows = rows.map(row => {
+    const t = truncateRowForExcel(row);
+    truncatedCells += t.truncated;
+    return t.row;
+  });
+
   const ws = XLSX.utils.json_to_sheet(rows);
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, safeName.slice(0, 31));
   XLSX.writeFile(wb, outputFile);
-  console.log(`   💾 已保存 Excel: ${outputFile} (${recordCount} 条)`);
+  console.log(`   💾 已保存 Excel: ${outputFile} (${recordCount} 条)${truncatedCells > 0 ? `，⚠️ ${truncatedCells} 个单元格超长已截断` : ''}`);
+  return truncatedCells;
 }
 
 /**
@@ -506,16 +589,24 @@ function saveMergedExcel(outputDir, appName, allFormResults, fieldNameMap = {}) 
   const outputFile = path.join(outputDir, `_全部表单汇总.xlsx`);
   const wb = XLSX.utils.book_new();
 
+  // v1.7.0: sheet 名先按 31 字符上限截断、再跨表单去重（同名表单此前直接抛
+  // "Worksheet with name |xxx| already exists!" 导致整个备份交付为零）
+  const sheetNames = dedupeNames(
+    allFormResults.map(r => ({ key: r.form.uuid, base: safeFormName(r.form) })),
+    31
+  );
+
   for (const result of allFormResults) {
-    const safeName = (result.form.name || result.form.uuid).replace(/[\/\\:*?"<>|]/g, '_').slice(0, 31);
+    const sheetName = sheetNames.get(result.form.uuid) || safeFormName(result.form).slice(0, 31);
     let rows = [];
     if (!result.error && result.data.length > 0) {
       rows = result.data.map(record => flattenRecord(record, fieldNameMap));
     } else if (result.error) {
       rows = [{ '备份状态': 'failed', '错误信息': result.error }];
     }
+    rows = rows.map(row => truncateRowForExcel(row).row);
     const ws = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, safeName);
+    XLSX.utils.book_append_sheet(wb, ws, sheetName);
   }
 
   XLSX.writeFile(wb, outputFile);
@@ -707,6 +798,13 @@ async function main() {
   fs.mkdirSync(stagingDir, { recursive: true });
   console.log(`📁 备份目录: ${baseBackupDir}\n`);
 
+  // v1.7.0: 进度文件固定放 数据备份/_progress.json（sync_server /backup-progress 按此路径读取）
+  PROGRESS_FILE = path.join(baseBackupDir, '_progress.json');
+  writeProgress({ phase: 'fetching', current: 0, total: forms.length, formName: '', format });
+
+  // v1.7.0: 预生成唯一文件名映射（同名表单追加 _UUID末4位，不再互相覆盖）
+  const uniqueFileNames = dedupeNames(forms.map(f => ({ key: f.uuid, base: safeFormName(f) })));
+
   // 逐个备份
   let totalRecords = 0;
   let successForms = 0;
@@ -717,6 +815,7 @@ async function main() {
   for (let i = 0; i < forms.length; i++) {
     const form = forms[i];
     console.log(`[${i + 1}/${forms.length}]`);
+    writeProgress({ phase: 'backuping', current: i + 1, total: forms.length, formName: form.name, format });
 
     const result = await fetchFormData(
       cleanAppId,
@@ -727,11 +826,12 @@ async function main() {
     );
 
     // 保存文件
+    let truncatedCells = 0;
     try {
       if (format === 'json') {
-        saveJsonFile(stagingDir, form, result.count, result.data, result.error);
+        saveJsonFile(stagingDir, form, result.count, result.data, result.error, uniqueFileNames.get(form.uuid));
       } else {
-        saveExcelFile(stagingDir, form, result.count, result.data, result.error, fieldNameMap);
+        truncatedCells = saveExcelFile(stagingDir, form, result.count, result.data, result.error, fieldNameMap, uniqueFileNames.get(form.uuid));
       }
       allFormData.push({ form, ...result });
     } catch (saveError) {
@@ -746,7 +846,9 @@ async function main() {
       isProcess: form.isProcess,
       success: result.success,
       recordCount: result.count,
-      error: result.error || null
+      error: result.error || null,
+      file: uniqueFileNames.get(form.uuid) || null,
+      truncatedCells
     });
 
     if (result.success) {
@@ -762,14 +864,7 @@ async function main() {
     }
   }
 
-  // Excel 模式下额外生成一个合并文件
-  let mergedExcelPath = null;
-  if (format === 'excel' && allFormData.length > 0) {
-    console.log(`\n📊 正在生成合并 Excel...`);
-    mergedExcelPath = saveMergedExcel(stagingDir, appName, allFormData, fieldNameMap);
-  }
-
-  // 保存汇总信息
+  // v1.7.0: 汇总先落盘——后面合并/打包再崩，统计也已保存
   const summary = {
     appId: cleanAppId,
     appName,
@@ -786,17 +881,39 @@ async function main() {
   };
   fs.writeFileSync(path.join(stagingDir, '_backup_summary.json'), JSON.stringify(summary, null, 2), 'utf-8');
 
-  // 打包为zip
-  console.log(`\n📦 正在打包备份文件...`);
-  const zipPath = createZipBackup(baseBackupDir, appName, timestamp, stagingDir);
-
-  try {
-    fs.rmSync(stagingDir, { recursive: true, force: true });
-    CURRENT_STAGING_DIR = null;
-  } catch (cleanupError) {
-    console.log(`   ⚠️ 清理临时目录失败: ${cleanupError.message}`);
+  // v1.7.0: 合并 Excel 失败不再致命——明细文件已全部生成，保留并如实上报
+  let mergedExcelPath = null;
+  let mergedError = null;
+  if (format === 'excel' && allFormData.length > 0) {
+    writeProgress({ phase: 'merging', current: forms.length, total: forms.length, formName: '', format });
+    console.log(`\n📊 正在生成合并 Excel...`);
+    try {
+      mergedExcelPath = saveMergedExcel(stagingDir, appName, allFormData, fieldNameMap);
+    } catch (mergeError) {
+      mergedError = mergeError.message;
+      console.log(`   ⚠️ 合并 Excel 失败（不影响已生成的单表单文件）: ${mergedError}`);
+    }
   }
 
+  // v1.7.0: 打包失败保留明细目录，不再删光交付物
+  writeProgress({ phase: 'zipping', current: forms.length, total: forms.length, formName: '', format });
+  console.log(`\n📦 正在打包备份文件...`);
+  const zipPath = createZipBackup(baseBackupDir, appName, timestamp, stagingDir);
+  let stagingKept = false;
+  if (zipPath) {
+    try {
+      fs.rmSync(stagingDir, { recursive: true, force: true });
+      CURRENT_STAGING_DIR = null;
+    } catch (cleanupError) {
+      console.log(`   ⚠️ 清理临时目录失败（明细文件保留在: ${stagingDir}）: ${cleanupError.message}`);
+      stagingKept = true;
+    }
+  } else {
+    stagingKept = true;
+    console.log(`   ⚠️ 压缩包未生成，全部明细文件已保留在: ${stagingDir}`);
+  }
+
+  const partial = Boolean(mergedError || !zipPath);
   console.log('\n═══════════════════════════════════════════');
   console.log('              备份完成汇总');
   console.log('═══════════════════════════════════════════');
@@ -805,7 +922,9 @@ async function main() {
   console.log(`❌ 备份失败: ${failForms} 个表单`);
   console.log(`📝 数据记录: ${totalRecords} 条`);
   console.log(`📁 文件目录: ${baseBackupDir}`);
-  if (mergedExcelPath) {
+  if (mergedError) {
+    console.log(`⚠️ 合并Excel: 失败（${mergedError}），单表单文件不受影响`);
+  } else if (mergedExcelPath && zipPath) {
     console.log(`📊 合并Excel: 已打包到压缩包内`);
   }
   if (zipPath) {
@@ -818,7 +937,14 @@ async function main() {
     success: true,
     outputDir: baseBackupDir,
     zipPath,
-    mergedExcelPath: zipPath && mergedExcelPath ? 'packed' : null,
+    keptDir: stagingKept ? stagingDir : null,
+    partial,
+    warnings: [
+      ...(mergedError ? [`合并Excel失败: ${mergedError}`] : []),
+      ...(!zipPath ? ['zip打包失败，已保留明细文件目录'] : []),
+      ...(failForms > 0 ? [`${failForms} 个表单导出失败，详见备份汇总`] : [])
+    ],
+    mergedExcelPath: zipPath && mergedExcelPath ? 'packed' : (mergedExcelPath ? stagingDir : null),
     format,
     backupMode: selectedCount > 0 ? 'selected' : 'all',
     totalRecords,
@@ -826,6 +952,7 @@ async function main() {
     successForms,
     failForms
   }));
+  clearProgress();
 }
 
 if (require.main === module) {
@@ -838,6 +965,8 @@ if (require.main === module) {
       }
     }
     console.error('❌ 执行出错:', error.message);
+    console.log(JSON.stringify({ success: false, error: error.message }));
+    clearProgress();
     process.exit(1);
   });
 }

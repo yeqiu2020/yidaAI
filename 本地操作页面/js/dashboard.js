@@ -1,5 +1,12 @@
 /**
  * 宜搭组织管理门户 - Dashboard JS
+ * v1.11.0: 备份体验修复（2026-10-27 "备份卡住"事故）——
+ *          ① 备份全程轮询 /backup-progress 实时显示"第 N/M 个表单"与进度条
+ *            （全量导出十几分钟，此前只有一行静态文案，看起来像卡死）；
+ *          ② 失败信息写死在弹窗内（红色文案+日志），不再只弹几秒 toast——
+ *            此前 token 失效被拒后弹窗冻结在"正在查询"，用户误以为一直在备份；
+ *          ③ executeBackup 补 serviceRunning 守卫；会话失效时提示刷新页面；
+ *          ④ 成功 toast 透传 warnings（合并/打包部分失败也能看到）。
  * v1.10.2: 修复单项目布局判断失效 — window.location.pathname 返回 URL 编码形式，
  *          原实现拿编码后的段（%E6%9C%AC...）与'本地操作页面'比较永远为 false，
  *          导致 PROJECT_NAME 被错误设为'本地操作页面'、请求携带错误 projectDir。
@@ -630,6 +637,11 @@ async function backupAppData(appName, appId, btnEl) {
 
 // 实际执行备份请求
 async function executeBackup(appName, appId, btnEl, selectedForms) {
+  if (!serviceRunning) {
+    showToast('同步服务未启动，请在对话框中输入"启动宜搭服务"', 'error');
+    return;
+  }
+
   const originalText = btnEl.innerHTML;
   btnEl.disabled = true;
   btnEl.innerHTML = '&#8987; 备份中...';
@@ -640,7 +652,62 @@ async function executeBackup(appName, appId, btnEl, selectedForms) {
 
   const scopeInfo = selectedForms ? `（${selectedForms.length} 个指定表单）` : '（全部表单）';
   showSyncModal(`正在备份【${appName}】数据${scopeInfo}...`);
-  document.getElementById('progressText').textContent = `正在以 ${format.toUpperCase()} 格式查询表单数据${scopeInfo}，请稍候...`;
+  const progressText = document.getElementById('progressText');
+  const progressFill = document.getElementById('progressFill');
+  const syncLog = document.getElementById('syncLog');
+  if (syncLog) syncLog.classList.add('show');
+  progressText.textContent = `正在以 ${format.toUpperCase()} 格式查询表单数据${scopeInfo}，全部表单约需几分钟到十几分钟...`;
+
+  const addLog = (message, type) => {
+    if (!syncLog) return;
+    const item = document.createElement('div');
+    item.className = 'sync-log-item' + (type ? ' ' + type : '');
+    item.textContent = message;
+    syncLog.appendChild(item);
+  };
+
+  // v1.11.0: 轮询备份进度（脚本写 _progress.json → 服务端 /backup-progress 读取），
+  // 全量备份可能持续十几分钟，必须让用户看到"第 N/M 个表单"在推进而不是一行静态文案
+  const phaseNames = { fetching: '获取表单清单', backuping: '导出表单数据', merging: '生成合并 Excel', zipping: '打包压缩包' };
+  let polling = true;
+  let lastSnapshot = '';
+  const pollTimer = setInterval(async () => {
+    if (!polling) return;
+    try {
+      const res = await fetch(`${SYNC_SERVICE}/backup-progress?appName=${encodeURIComponent(appName)}${PROJECT_DIR_QUERY ? '&' + PROJECT_DIR_QUERY : ''}`);
+      const d = await res.json();
+      if (!polling || !d.success || !d.found || !d.progress) return;
+      const p = d.progress;
+      const snap = `${p.phase}:${p.current}/${p.total}:${p.formName || ''}`;
+      if (snap === lastSnapshot) return;
+      lastSnapshot = snap;
+      const phaseName = phaseNames[p.phase] || p.phase;
+      const done = p.phase === 'backuping' ? p.current - 1 : p.current;
+      const pct = p.total > 0 ? Math.round((done / p.total) * 100) : 0;
+      progressText.textContent = `${phaseName}：第 ${p.current}/${p.total} 个【${p.formName || appName}】（${pct}%），全程约需几分钟到十几分钟`;
+      if (progressFill) {
+        progressFill.classList.add('determinate');
+        progressFill.style.width = `${pct}%`;
+      }
+      if (p.phase === 'backuping' && p.formName) addLog(`[${p.current}/${p.total}] ${p.formName}`);
+    } catch (_) { /* 进度查询失败不影响备份本身 */ }
+  }, 2000);
+
+  // v1.11.0: 失败信息写死在弹窗内——此前只弹几秒 toast，弹窗冻结成"卡住"假象（2026-10-27 事故）
+  const failBackup = (message) => {
+    if (progressText) {
+      progressText.textContent = `❌ 备份失败：${message}`;
+      progressText.style.color = '#d93026';
+    }
+    addLog(`❌ 备份失败：${message}`, 'error');
+    if (String(message).includes('刷新页面')) {
+      addLog('提示：本地服务重启后，旧标签页的会话会失效，刷新页面（F5）后重试即可。');
+    }
+    showSyncModalCloseBtn();
+    showToast(`备份失败：${message}`, 'error');
+    btnEl.disabled = false;
+    btnEl.innerHTML = originalText;
+  };
 
   try {
     const res = await fetch(`${SYNC_SERVICE}/backup-app-data`, {
@@ -649,24 +716,23 @@ async function executeBackup(appName, appId, btnEl, selectedForms) {
       body: JSON.stringify({ appName, appId, format, projectDir: PROJECT_NAME, ...(selectedForms ? { forms: selectedForms } : {}) })
     });
 
-    const data = await res.json();
+    let data = null;
+    try { data = await res.json(); } catch (_) {}
 
-    if (data.success) {
+    if (data && data.success) {
       hideSyncModal();
       const recordInfo = data.totalRecords > 0 ? `，共 ${data.totalRecords} 条记录` : '（表单暂无数据）';
       const formInfo = data.backupMode === 'selected' ? `【${data.totalForms} 个表单】` : '';
-      showToast(`应用【${appName}】${formInfo}备份完成${recordInfo}`, 'success');
+      const warnInfo = Array.isArray(data.warnings) && data.warnings.length > 0 ? `；⚠️ ${data.warnings.join('；')}` : '';
+      showToast(`应用【${appName}】${formInfo}备份完成${recordInfo}${warnInfo}`, 'success');
     } else {
-      showSyncModalCloseBtn();
-      showToast(`备份失败：${data.error || '未知错误'}`, 'error');
-      btnEl.disabled = false;
-      btnEl.innerHTML = originalText;
+      failBackup((data && data.error) || `HTTP ${res.status}`);
     }
   } catch (error) {
-    showSyncModalCloseBtn();
-    showToast(`请求失败：${error.message}`, 'error');
-    btnEl.disabled = false;
-    btnEl.innerHTML = originalText;
+    failBackup(error.message);
+  } finally {
+    polling = false;
+    clearInterval(pollTimer);
   }
 }
 
@@ -992,7 +1058,9 @@ async function initOrgInfo(btnEl) {
 function showSyncModal(title) {
   const modal = document.getElementById('syncModal');
   document.getElementById('syncModalTitle').textContent = title;
-  document.getElementById('progressText').textContent = '正在同步应用配置，请稍候...';
+  const progressText = document.getElementById('progressText');
+  progressText.textContent = '正在同步应用配置，请稍候...';
+  progressText.style.color = ''; // v1.11.0: 清掉上次失败留下的红色错误文案样式
   const fill = document.getElementById('progressFill');
   if (fill) { fill.style.width = '0%'; fill.classList.remove('determinate'); }
   const log = document.getElementById('syncLog');

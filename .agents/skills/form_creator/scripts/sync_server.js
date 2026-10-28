@@ -93,7 +93,7 @@ const { pushActionCode, listActionCodeVersions } = require('../../../../lib/sync
 
 // ── 常量 ────────────────────────────────────────────────
 const PORT = parseInt(process.env.SYNC_SERVICE_PORT || '3457', 10);
-const SERVER_VERSION = '3.4.0';
+const SERVER_VERSION = '3.4.1'; // v3.4.1: 新增 GET /backup-progress 备份进度查询（配合 backup-app-data.js v1.7.0 的 _progress.json）
 // 项目版本（唯一真相源 = package.json 的 version 字段，与 git tag vX.Y.Z 对应）
 let PROJECT_VERSION = '未知';
 try { PROJECT_VERSION = require('../../../../package.json').version || '未知'; } catch (e) { /* 读取失败保持"未知" */ }
@@ -142,6 +142,32 @@ return http.createServer(async (req, res) => {
       cwd: process.cwd(),
       script: __filename
     }));
+    return;
+  }
+
+  // GET /backup-progress — 备份进度查询（v3.4.1）
+  // backup-app-data.js v1.7.0 备份期间把进度写入 <项目>/<应用名>/03项目交付物/数据备份/_progress.json，
+  // 页面轮询本接口实现实时进度；备份结束脚本自动删除该文件（found=false = 当前没有进行中的备份）
+  if (parsedUrl.pathname === '/backup-progress' && req.method === 'GET') {
+    const appName = String((parsedUrl.query && parsedUrl.query.appName) || '').trim();
+    const projectDirHost = resolveProjectDir(req, {
+      projectDir: (parsedUrl.query && parsedUrl.query.projectDir) || undefined,
+      staticRoot: STATIC_ROOT
+    });
+    if (!appName || appName === '.' || appName === '..' || /[\\/:*?"<>|]/.test(appName) || !projectDirHost) {
+      res.writeHead(400);
+      res.end(JSON.stringify({ success: false, error: '参数错误' }));
+      return;
+    }
+    const progressFile = path.join(projectDirHost, appName, '03项目交付物', '数据备份', '_progress.json');
+    try {
+      const raw = fs.readFileSync(progressFile, 'utf8');
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true, found: true, progress: JSON.parse(raw) }));
+    } catch (_) {
+      res.writeHead(200);
+      res.end(JSON.stringify({ success: true, found: false }));
+    }
     return;
   }
 
@@ -1365,7 +1391,11 @@ if (parsedUrl.pathname === '/refresh-login' && req.method === 'GET') {
             zipPath: resultData.zipPath || null,
             totalRecords: resultData.totalRecords || 0,
             totalForms: resultData.totalForms || 0,
-            backupMode: resultData.backupMode || 'all'
+            backupMode: resultData.backupMode || 'all',
+            // v3.4.1: 透传 backup-app-data.js v1.7.0 的部分成功状态
+            partial: resultData.partial || false,
+            warnings: Array.isArray(resultData.warnings) ? resultData.warnings : [],
+            keptDir: resultData.keptDir || null
           }));
         });
       } catch (error) {
