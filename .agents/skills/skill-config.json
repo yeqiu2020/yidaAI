@@ -3,7 +3,7 @@
   "_description": "本文件用于配置Skill的全局行为和启用/禁用状态",
   "_dualSource_comment": "双源维护约定：各技能 SKILL.md 的 frontmatter description 是运行时权威面（Agent 实际据此触发），本文件 skills[].description 是索引面（供检索/生成 README 能力表）；修改任一侧描述时必须同步修改另一侧，保持两者一致，禁止只改 config 不改 frontmatter（否则触发词不生效）",
   "version": "2.0.0",
-  "lastUpdated": "2026-10-25",
+  "lastUpdated": "2026-10-29",
   "disabledSkills": [],
   "_exemptedSkills_comment": "豁免登记的目录：不进入 skills 数组，但必须写明豁免理由。校验脚本 scripts/validate-skill-config.js 以此为唯一事实源做反向校验（含 SKILL.md 的目录要么登记、要么在此豁免，否则报错）",
   "exemptedSkills": [
@@ -550,6 +550,24 @@
       ],
       "enabled": true,
       "verifyStatus": "real-e2e"
+    },
+    {
+      "name": "form-data-update",
+      "description": "宜搭已有实例数据修正护栏（执行层）。当用户说\"修改表单数据\"、\"更新实例\"、\"改单据字段值\"、\"刷数据\"、\"修正存量数据\"、\"回写字段\"、\"把XX记录的XX改成XX\"时触发。对已有表单实例做字段级修正（主表+子表），强制四步：改前快照→执行→回读逐字段断言→失败自动回滚。内置防护：子表完整行读取（formData 只含前 50 行）、关联表单字段必须数组（写字符串会清空关联）、下拉自动写 _id 实际值、附件/图片/签名类控件中止、写入台账与反向回填。创建新数据用 data-tester，清空数据用 data-clean。",
+      "path": ".agents/skills/form-data-update",
+      "version": "1.0.0",
+      "category": "data",
+      "tags": [
+        "宜搭",
+        "数据修正",
+        "护栏",
+        "回滚",
+        "实例更新",
+        "改数据",
+        "快照"
+      ],
+      "enabled": true,
+      "verifyStatus": "offline-unit-tested"
     }
   ],
   "_disambiguationGroups_comment": "易混技能消歧组（集中负信号）。由 scripts/generate-skill-index.js 渲染为 README 《易混技能消歧表》。when=用户意图，use=应触发技能，not=易被误触发但不该用的技能",
