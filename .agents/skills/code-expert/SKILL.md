@@ -57,7 +57,9 @@ description: "宜搭低代码平台代码开发专家。生成表单动作代码
 | **子表处理/字段联动** | "子表数据汇总到主表" | 表单交互代码 |
 | **跨表查询/数据获取** | "从其他表单获取数据" | 数据查询代码 |
 
-### 方式二：【应用场景】字段触发（与prompt-assistant配合）
+### 方式二：【应用场景】字段触发（与 code-expert 的提示词文件工序 references/prompt-assistant/ 配合）
+
+> 💡 **提示词文件工序（原 prompt-assistant skill，2026-10-30 并入）**：当用户说"写提示词"、"生成提示词"、"把需求转成规范提示词文件"时，用 `scripts/prompt-generator.js`（配套 `scripts/config-reader.js`/`scripts/field-matcher.js`）读取系统配置与组件ID清单，生成含完整字段信息的规范提示词文件。模板库与输出结构见 [references/prompt-assistant/SKILL.md](references/prompt-assistant/SKILL.md)。
 
 当用户选中或发送的提示词中包含以下【应用场景】时，**自动识别并触发**本Skill：
 

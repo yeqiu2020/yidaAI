@@ -13,7 +13,7 @@
 
 /**
  * 从字段字符串中解析字段名和类型提示
- * （从 .agents/skills/excel-to-form/scripts/parse_excel_full.js 提取的逻辑）
+ * （从 .agents/skills/requirement-analysis/scripts/excel_to_form.js 提取的逻辑）
  */
 function parseField(fieldStr) {
   const bracketMatch = fieldStr.match(/^(.+?)（(.+?)）$/);

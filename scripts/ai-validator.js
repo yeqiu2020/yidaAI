@@ -303,7 +303,7 @@ function validateAfterWrite(filePath) {
     }
   }
 
-  // 自动校验字段清单结构（参照 flow-to-form/references/字段清单模板.md）
+  // 自动校验字段清单结构（参照 .agents/skills/requirement-analysis/references/.agents/skills/requirement-analysis/references/flow-to-form/references/字段清单模板.md）
   if (fileName.includes('字段清单')) {
     const structureResult = validateFieldListStructure(filePath);
     if (!structureResult.valid) {
@@ -395,7 +395,7 @@ function validateFieldListStructure(filePath) {
   // 1. 校验前置说明
   if (!content.includes('## 📋 字段清单使用说明')) {
     results.valid = false;
-    results.errors.push('缺少"## 📋 字段清单使用说明"前置说明（参照 flow-to-form/references/字段清单模板.md）');
+    results.errors.push('缺少"## 📋 字段清单使用说明"前置说明（参照 .agents/skills/requirement-analysis/references/.agents/skills/requirement-analysis/references/flow-to-form/references/字段清单模板.md）');
   }
 
   // 2. 统计表单数量（通过 "### (" 匹配）

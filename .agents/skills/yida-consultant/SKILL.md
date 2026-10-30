@@ -64,7 +64,7 @@ description: 宜搭问题诊断与修复闭环专家（大管家）。仅当用�
 | 数据问题 | 提交报错、关联填充失败、流程状态错误、字段格式不对 | data-tester | config-sync 同步配置检查字段格式 |
 | 连接器问题 | 连接器调用失败、鉴权报错、动作配置丢失 | connector | connector 动作测试 |
 | 登录/权限问题 | 登录失败、Cookie 失效、权限组配置不对、数据范围异常 | auth-plus / config-sync | auth-plus 检查登录态 |
-| 其他问题 | 系统环境问题、终端乱码、Node.js 路径 | system-troubleshooter | 转交 system-troubleshooter |
+| 其他问题 | 系统环境问题、终端乱码、Node.js 路径 | （已归档）system-troubleshooter | 该 skill 已归档至 `.agents/archive/system-troubleshooter/`，环境事实优先查 `.agents/skills/事实层.md` |
 
 ## 五、核心工作流（8步闭环）
 

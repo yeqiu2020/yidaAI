@@ -13,7 +13,7 @@
 | `integration` | 集成自动化（逻辑流） | 创建集成自动化、逻辑流 | `node .agents/skills/integration/scripts/integration-create.js <command>` |
 | `business-rule` | 业务关联规则 | INSERT、UPDATE、DELETE、跨表规则 | `node .agents/skills/business-rule/scripts/<script>.js` |
 | `api-client` | 宜搭 API 客户端 | 静默登录、创建应用 | `node .agents/skills/api-client/scripts/api_client.js` |
-| ... | （共 40+ 个技能，详见 skill-config.json） | | |
+| ... | （共 38 个技能，详见 skill-config.json；需求梳理类已合并为 requirement-analysis，skill-creator/system-troubleshooter 归档于 .agents/archive/） | | |
 
 **🔑 核心配置文件：**
 - `skill-config.json` - Skill 全量索引与登记文件（**必须与 SKILL.md frontmatter 保持同步**）

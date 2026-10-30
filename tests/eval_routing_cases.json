@@ -1,46 +1,178 @@
 [
-  { "utterance": "帮我创建一个销售数据报表", "expected": "report" },
-  { "utterance": "做一个项目统计报表", "expected": "report" },
-  { "utterance": "做一个更美观的ECharts大屏", "expected": "custom-page" },
-  { "utterance": "做一个经营驾驶舱", "expected": "custom-page" },
-  { "utterance": "写一个字段联动的公式", "expected": "formula-generator" },
-  { "utterance": "写一段字段联动的代码", "expected": "code-expert" },
-  { "utterance": "帮我编写一段提示词", "expected": "prompt-assistant" },
-  { "utterance": "生成这个按钮点击的动作代码", "expected": "code-expert" },
-  { "utterance": "手机号格式校验代码", "expected": "code-expert" },
-  { "utterance": "创建集成自动化", "expected": "integration" },
-  { "utterance": "创建一个逻辑流", "expected": "integration" },
-  { "utterance": "审批通过后自动更新库存", "expected": "integration" },
-  { "utterance": "配置业务关联规则", "expected": "business-rule" },
-  { "utterance": "单据提交后跨表更新INSERT", "expected": "business-rule" },
-  { "utterance": "提交后改其他表", "expected": "business-rule" },
-  { "utterance": "清空这个应用的所有数据", "expected": "data-clean" },
-  { "utterance": "批量删除表单数据", "expected": "data-clean" },
-  { "utterance": "在采购入库表单中模拟生成10条测试数据", "expected": "data-tester" },
-  { "utterance": "验证校验规则是否触发", "expected": "data-tester" },
-  { "utterance": "创建视图表实现多表关联", "expected": "dataset" },
-  { "utterance": "把多张表合成一张表", "expected": "dataset" },
-  { "utterance": "创建数据准备ETL数据流", "expected": "data-prep" },
-  { "utterance": "数据清洗加工", "expected": "data-prep" },
-  { "utterance": "发布自定义页面前检查线上改动", "expected": "publish-guard" },
-  { "utterance": "防止覆盖线上页面", "expected": "publish-guard" },
-  { "utterance": "创建一个HTTP连接器", "expected": "connector" },
-  { "utterance": "从cURL创建连接器", "expected": "connector" },
-  { "utterance": "启动宜搭服务", "expected": "server-manager" },
-  { "utterance": "同步服务没启动", "expected": "server-manager" },
-  { "utterance": "新建一个进销存管理系统", "expected": "project-creator" },
-  { "utterance": "初始化项目目录", "expected": "project-creator" },
-  { "utterance": "在宜搭创建一个新应用", "expected": "api-client" },
-  { "utterance": "向已有应用添加一个表单", "expected": "form_creator" },
-  { "utterance": "生成表单字段结构", "expected": "form_creator" },
-  { "utterance": "同步应用的表单配置", "expected": "config-sync" },
-  { "utterance": "获取表单的组件ID清单", "expected": "config-sync" },
-  { "utterance": "导出表单的公式和联动规则", "expected": "rule-sync" },
-  { "utterance": "备份数据到Excel", "expected": "data-backup" },
-  { "utterance": "设置数据标题", "expected": "form-settings" },
-  { "utterance": "配置表单编辑权限", "expected": "form-settings" },
-  { "utterance": "设置自动审批规则", "expected": "flow-settings" },
-  { "utterance": "从宜搭同步组织信息和应用列表", "expected": "org-init" },
-  { "utterance": "生成表单原型页面", "expected": "form-to-prototype" },
-  { "utterance": "梳理需求设计系统架构", "expected": "architect" }
+  {
+    "utterance": "帮我创建一个销售数据报表",
+    "expected": "report"
+  },
+  {
+    "utterance": "做一个项目统计报表",
+    "expected": "report"
+  },
+  {
+    "utterance": "做一个更美观的ECharts大屏",
+    "expected": "custom-page"
+  },
+  {
+    "utterance": "做一个经营驾驶舱",
+    "expected": "custom-page"
+  },
+  {
+    "utterance": "写一个字段联动的公式",
+    "expected": "formula-generator"
+  },
+  {
+    "utterance": "写一段字段联动的代码",
+    "expected": "code-expert"
+  },
+  {
+    "utterance": "帮我编写一段提示词",
+    "expected": "code-expert"
+  },
+  {
+    "utterance": "生成这个按钮点击的动作代码",
+    "expected": "code-expert"
+  },
+  {
+    "utterance": "手机号格式校验代码",
+    "expected": "code-expert"
+  },
+  {
+    "utterance": "创建集成自动化",
+    "expected": "integration"
+  },
+  {
+    "utterance": "创建一个逻辑流",
+    "expected": "integration"
+  },
+  {
+    "utterance": "审批通过后自动更新库存",
+    "expected": "integration"
+  },
+  {
+    "utterance": "配置业务关联规则",
+    "expected": "business-rule"
+  },
+  {
+    "utterance": "单据提交后跨表更新INSERT",
+    "expected": "business-rule"
+  },
+  {
+    "utterance": "提交后改其他表",
+    "expected": "business-rule"
+  },
+  {
+    "utterance": "清空这个应用的所有数据",
+    "expected": "data-clean"
+  },
+  {
+    "utterance": "批量删除表单数据",
+    "expected": "data-clean"
+  },
+  {
+    "utterance": "在采购入库表单中模拟生成10条测试数据",
+    "expected": "data-tester"
+  },
+  {
+    "utterance": "验证校验规则是否触发",
+    "expected": "data-tester"
+  },
+  {
+    "utterance": "创建视图表实现多表关联",
+    "expected": "dataset"
+  },
+  {
+    "utterance": "把多张表合成一张表",
+    "expected": "dataset"
+  },
+  {
+    "utterance": "创建数据准备ETL数据流",
+    "expected": "data-prep"
+  },
+  {
+    "utterance": "数据清洗加工",
+    "expected": "data-prep"
+  },
+  {
+    "utterance": "发布自定义页面前检查线上改动",
+    "expected": "publish-guard"
+  },
+  {
+    "utterance": "防止覆盖线上页面",
+    "expected": "publish-guard"
+  },
+  {
+    "utterance": "创建一个HTTP连接器",
+    "expected": "connector"
+  },
+  {
+    "utterance": "从cURL创建连接器",
+    "expected": "connector"
+  },
+  {
+    "utterance": "启动宜搭服务",
+    "expected": "server-manager"
+  },
+  {
+    "utterance": "同步服务没启动",
+    "expected": "server-manager"
+  },
+  {
+    "utterance": "新建一个进销存管理系统",
+    "expected": "project-creator"
+  },
+  {
+    "utterance": "初始化项目目录",
+    "expected": "project-creator"
+  },
+  {
+    "utterance": "在宜搭创建一个新应用",
+    "expected": "api-client"
+  },
+  {
+    "utterance": "向已有应用添加一个表单",
+    "expected": "form_creator"
+  },
+  {
+    "utterance": "生成表单字段结构",
+    "expected": "form_creator"
+  },
+  {
+    "utterance": "同步应用的表单配置",
+    "expected": "config-sync"
+  },
+  {
+    "utterance": "获取表单的组件ID清单",
+    "expected": "config-sync"
+  },
+  {
+    "utterance": "导出表单的公式和联动规则",
+    "expected": "rule-sync"
+  },
+  {
+    "utterance": "备份数据到Excel",
+    "expected": "data-backup"
+  },
+  {
+    "utterance": "设置数据标题",
+    "expected": "form-settings"
+  },
+  {
+    "utterance": "配置表单编辑权限",
+    "expected": "form-settings"
+  },
+  {
+    "utterance": "设置自动审批规则",
+    "expected": "flow-settings"
+  },
+  {
+    "utterance": "从宜搭同步组织信息和应用列表",
+    "expected": "org-init"
+  },
+  {
+    "utterance": "生成表单原型页面",
+    "expected": "form-to-prototype"
+  },
+  {
+    "utterance": "梳理需求设计系统架构",
+    "expected": "requirement-analysis"
+  }
 ]

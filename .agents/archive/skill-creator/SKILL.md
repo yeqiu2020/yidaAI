@@ -1,3 +1,5 @@
+> ⚠️ **已归档（2026-10-30）**：本 skill 依据《Skill体系优化方案_20261029.md》阶段三/四判据降级归档，已移出 skill 触发面（不在 skill-config.json 登记，AI 不再自动触发）。环境事实优先查 `.agents/skills/事实层.md`。本目录内容仅作历史知识留存，脚本如需使用请手动调用。
+
 ---
 name: skill-creator
 description: Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, edit, or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.

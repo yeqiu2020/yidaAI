@@ -41,112 +41,8 @@ description: 宜搭集成自动化（逻辑流）管理工具。当用户说'集
 | [references/integration-spec.schema.json](references/integration-spec.schema.json) | 组装/校验 --spec 声明式规格（P4-2）：节点类型枚举、条件/赋值结构、extraArgs 逃生舱口 | 用 spec 模式创建逻辑流前 |
 | [references/version-history.md](references/version-history.md) | 需要了解某能力何时引入/修复了什么时 |
 
-## 一、核心能力
 
-| 能力 | 说明 | 脚本 |
-|------|------|------|
-| **创建集成自动化** | 创建新的逻辑流，支持多种节点组合 | `integration-create.js` |
-| **修改集成自动化** | 修改已有逻辑流的节点配置 | `integration-create.js --process-code` |
-| **查询逻辑流列表** | 查询应用内所有逻辑流，支持筛选 | `integration-list.js list` |
-| **启用/停用逻辑流** | 控制逻辑流的开关状态 | `integration-list.js enable/disable` |
-| **检查运行日志** | 查询运行日志，排查异常；`--output` 可导出 Excel 报告；**v2.10.0 起自动检测「启用中但无执行记录」的静默失败候选（`--no-silent` 关闭）** | `integration-check.js` |
-| **回读逻辑流配置** | 回读并展示已有逻辑流的节点结构（修改前查看/排查） | `integration-get.js` |
-| **体检逻辑流配置** | 审计任意已有逻辑流（含其他工具/AI 创建的）：占位符、空壳节点、空公式、断链 | `integration-validate.js` |
-| **删除逻辑流** | 删除指定逻辑流（已启用的流程需 `--force` 自动停用后删除） | `integration-delete.js` |
-| **设计器面板修复** | Playwright 打开设计器，点击节点触发重渲染并保存（修复循环容器内发起审批面板空白） | `integration-designer-fix.js` |
-
-## 二、支持的节点类型
-
-| 节点 | 类型标识 | 说明 |
-|------|----------|------|
-| **表单事件触发** | `trigger` | 触发器，支持 insert/update/delete/comment/processFinish/activityTask 六种事件 |
-| **获取单条数据** | `dataRetrieve` | 按条件从表单获取单条数据，支持字段关联映射 |
-| **获取多条数据** | `dataRetrieve` (multiple) | 按条件从表单获取多条数据，通过 quantity 控制条数 |
-| **新增数据** | `dataCreate` | 向指定表单新增数据，支持字段赋值（引用触发表单字段、固定值、公式） |
-| **更新数据** | `dataUpdate` | 直接更新目标表单数据，支持主表/子表更新；主条件定位主表记录、子条件逐行匹配子表行、公式累加赋值；`noneOperation=add` 即 upsert（API 直建已回归验证） |
-| **删除数据** | `dataDelete` | 删除前置获取节点拿到的数据（主表或子表行），必须配合获取单条/多条节点使用（API 直建已回归验证） |
-| **发起审批** | `initiateApproval` | 向流程表单发起一条审批，支持指定发起人和字段赋值 |
-| **连接器调用** | `httpConnector`/`innerConnector` | 调用任意 HTTP/内置连接器，内置钉钉待办2.0预设，支持入参映射 |
-| **消息通知** | `sendMessage` | 发送工作通知，支持标题/内容/按钮/接收人/表单字段引用 |
-| **脚本(JS/Groovy)** | `CodeExecutor` | JavaScript 或 Groovy 脚本节点（`--script-lang js|groovy`），支持输出变量供后续节点引用（API 直建已回归验证） |
-| **条件分支** | `route` + 子 `condition` | 条件容器+两分支（条件1/其他情况），命中分支走尾节点、默认分支直达结束形成真分流；支持多条件 + AND/OR（API 直建已回归验证） |
-| **循环容器** | `foreach` | 遍历前置「获取多条数据」输出，循环体内嵌子节点（API 直建已回归验证） |
-| **结束** | `finish` | 流程结束节点 |
-
-### API 直建回归状态（2026-07-28）
-
-| 节点 | componentName | CLI 参数 | 状态 |
-|------|------|------|------|
-| 脚本(JS) | `JavaScriptNode` | `--script-code` + `--script-output`（`--script-lang js`，默认） | ✅ API 直建已回归（回归E） |
-| 脚本(Groovy) | `GroovyNode` | `--script-code` + `--script-lang groovy`（镜像 JS 兄弟节点） | ✅ CLI 已封装 + 离线断言通过（线上直建待回归） |
-| 条件分支 | `ConditionContainer` + 子 `ConditionNode` | 单条件：`--branch-field/--branch-operator/--branch-value/--branch-field-name`；多条件：可重复 `--branch-condition` + `--branch-logic and|or` | ✅ API 直建已回归（回归F）；默认分支已修复为直达结束 |
-| 并行分支 | `ConditionContainer`(type:parallel) + 子 `ParallelNode` | — | 设计器可用；API 直建待回归 |
-| 循环容器 | `CycleContainer` | `--cycle`（需 `--data-query-type multiple` + 循环体节点：消息通知/更新数据/发起审批） | ✅ API 直建已回归（回归G，只能遍历「获取多条数据」输出） |
-
-> 2026-07-30：view-builder 已与 process-builder/create.js 完成对齐重写（nodeIds 消费顺序、GroovyNode/JavaScriptNode、GetBatchDataNode、ConditionContainer+ConditionNode、CycleContainer、DeleteDataNode、InitiateApprovalNode、userFields 默认 form_inst_creator），离线断言 `integration-builder.test.js` 34 用例全绿，含 viewJson/processJson 节点 ID 一一对应校验。
-
-### 节点执行顺序
-
-```
-trigger -> dataRetrieve -> addData -> initiateApproval -> [updateData] -> [deleteData] -> [script] -> connector -> [condition] -> [cycle] -> message -> end
-```
-
-> 带 `--cycle` 时消息节点作为循环体嵌入循环容器内部（不再是顶层节点）。
-
-### 触发事件类型
-
-| 事件名 | API值 | 说明 |
-|--------|-------|------|
-| create/insert | `insert` | 表单数据创建时触发 |
-| update | `update` | 表单数据更新时触发 |
-| delete | `delete` | 表单数据删除时触发 |
-| comment | `comment` | 表单评论时触发 |
-| processFinish | `processFinish` | 流程审批完成时触发（需指定审批动作） |
-| activityTask | `activityTask` | 审批节点事件触发（需指定节点ID和审批动作） |
-
-### 触发条件运算符
-
-`Equal`(等于) / `NotEqual`(不等于) / `Contain`(包含) / `NotContain`(不包含) / `HasValue`(有值) / `NoValue`(没有值) / `GreaterThan`(大于) / `LessThan`(小于) / `GreaterThanOrEqual`(大于等于) / `LessThanOrEqual`(小于等于) / `In`(等于任意一个) / `NotIn`(不等于任意一个)
-
-## 三·五、节点 componentName 权威对照表（全 16 面板节点 · 从公开 bundle 提取，零猜测）
-
-> 权威来源 = 公开 CDN 引擎 bundle 里的运行时节点枚举(pb) + 面板材料(configure)。
-> **任何 AI 可一行复现（无需登录）**：`node .agents/skills/integration/scripts/dump-node-catalog.js`
-> 配置时直接照抄，不要再猜。完整默认 props 形状 + 分支容器 children 结构见 [references/canonical-node-shapes.md](references/canonical-node-shapes.md)；根因复盘 + 15 条避坑清单 + 黄金配方 + 设计器兜底见 [references/node-playbook.md](references/node-playbook.md)。
-
-| # | 节点（中文） | componentName | props 顶层键(rulesKey) | setter |
-|---|---|---|---|---|
-| 1 | 新增数据 | `AddDataNode` | `addDataRules` | AddDataSetter |
-| 2 | 更新数据 | `UpdateDataNode` | `updateDataRules` | UpdateDataSetter |
-| 3 | 获取单条数据 | `GetSingleDataNode` | `getData`（+type:"single"） | GetDataSetter |
-| 4 | 获取多条数据 | `GetBatchDataNode` | `getData`（+type:"batch"） | GetDataSetter |
-| 5 | 删除数据 | `DeleteDataNode` | `deleteData`（⚠️非 Rules 后缀） | DeleteDataSetter |
-| 6 | 连接流 | `AINode` | `workFlowRules`（type:aiFlow） | iframe 子编辑器 |
-| 7 | 连接器 | `ConnectorNode` | `connectorRules` | ConnectorSetter |
-| 8 | 消息通知 | `SendMessageNode` | `sendMessageRules` | SendMessageSetter |
-| 9 | 发送邮件 | `SendEmailNode` | `sendEmailRules` | SendEmailSetter |
-| 10 | 发送卡片 | `CardNode` | cardRules（运行时确认） | CardSetter |
-| 11 | 更新卡片 | `CardUpdateNode` | cardRules（运行时确认） | CardSetter |
-| 12 | 条件分支 | `ConditionContainer` + 子 `ConditionNode` | 容器`{name}`；子节点`conditions` | BranchSetter |
-| 13 | 并行分支 | `ConditionContainer`（加`type:"parallel"`）+ 子 `ParallelNode` | 子节点`conditions` | BranchSetter(parallel) |
-| 14 | 循环容器 | `CycleContainer` | `cycleContainerRules` | 需前置 GetBatchDataNode |
-| 15 | 发起审批 | `InitiateApprovalNode` | `initiateApprovalRules` | InitiateApprovalSetter |
-| 16 | 脚本 | `GroovyNode`(Groovy) / `JavaScriptNode`(JS) | `groovy` / `JavaScript`（内含 action.code） | GroovySetter / JavaScriptSetter |
-| — | 根容器 | `CanvasEngine` | — | — |
-| — | 表单事件触发 | `StartNode` | `start` | —（引擎自带首节点） |
-| — | 结束 | `EndNode` | `name`(i18n) | —（引擎自带尾节点） |
-
-> `CarbonNode/ApplyNode/ApprovalNode/OperatorNode` 是流程审批内部节点，不在面板里。
-
-### 决定性避坑速查（详解 + 完整 15 条见 [node-playbook.md](references/node-playbook.md) 第 1 节，每条都曾导致崩溃/白屏/保存失败）
-
-1. 脚本节点叫 `JavaScriptNode`（**不是** `ScriptNode`）；多条获取叫 `GetBatchDataNode`（**不是** `GetMultipleDataNode`，错名保存不报错但画布静默不渲染）。
-2. `UpdateDataNode`/`AddDataNode` 的 viewJson props 是扁平的 `{name, nodeName, description, xxxRules}`，createNode 缺任意一项 → 画布白屏崩溃。
-3. **🔴 processJson 的 `dataUpdate` props 必须扁平展开 updateDataRules**（与 viewJson 相反），嵌套或带 appType → 后端报「转换xml失败」。
-4. **🔴 目标表单类型必须匹配节点 formTypes 白名单**：AddDataNode 只能 receipt（普通表单）、InitiateApprovalNode 只能 process（流程表单）；流程表单要新增记录必须用「发起审批」节点。`assertFormType` 已硬拦截，禁止绕过。
-5. `CycleContainer` 只能遍历「获取多条数据」输出，**不能遍历触发子表行**——子表累加用 direct_form 子表更新（黄金配方见 node-playbook.md 第 2 节，含完整 updateDataRules JSON + 公式编码规则：跨表 `#{formUuid/fieldId}`、触发 `#{fieldId}`）。
-6. 连接器：`currentStep` 必须为 2；人员/部门字段 literal 值必须是 `[{id,name}]` 数组；必填入参必须全部映射。
-
+> 📚 「一、核心能力 / 二、节点类型 / 三、回归状态 / 三·五、componentName 权威对照表」已外移至 [references/节点与组件知识.md](references/节点与组件知识.md)（2026-10-30 上下文收敛）——建流需要查节点 componentName、触发事件、运算符时加载它。
 ## 四、前置依赖
 
 本 skill 依赖 `api-client` skill 提供的登录态管理和 HTTP 请求能力：
@@ -619,9 +515,5 @@ node .agents/skills/integration/scripts/integration-validate.js --file <processJ
 
 ---
 
-## 版本历史
 
-- **v2.10.5 (2026-10-16)**：【原生流运行时不随 API 保存刷新 + 公式字段引用源=0】①lit3 555 实验：原生流 saveProcess 成功+回读正确但执行仍走旧定义，须用户设计器保存/发布（自建流不受限）；②待付公式引用 SUM 公式字段 kl5u8j6c 作源求值 0（落地-130），流公式目标/源双向禁用公式字段，总额源改用付款行 kkkskxba（860/500 双实证）。详见 references/version-history.md。
-- **v2.10.4 (2026-10-15)**：【公式字段写入覆盖机制破案】流对 valueType=formula 目标字段赋值被字段自身公式重算覆盖（SUM(子表) 链在流上下文=0，公式/字面量全变 0，四轮判定实验实锤）；专属硬规则 9 + 已知限制 8 固化。配套：getProcess 树展开在顶层取树三分支、saveProcess 双槽位、JSON.stringify undefined 丢键兜底、减法 ADD+PRODUCT 安全模式、中间表字段映射实锤（付款子表 fwr6rzxa=产品编码/bmrgjus5=产品规格）。
-
-完整版本历史见 [references/version-history.md](references/version-history.md)。
+> 📚 版本历史外移至 [references/version-history.md](references/version-history.md)（2026-10-30）。

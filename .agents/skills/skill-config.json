@@ -3,7 +3,7 @@
   "_description": "本文件用于配置Skill的全局行为和启用/禁用状态",
   "_dualSource_comment": "双源维护约定：各技能 SKILL.md 的 frontmatter description 是运行时权威面（Agent 实际据此触发），本文件 skills[].description 是索引面（供检索/生成 README 能力表）；修改任一侧描述时必须同步修改另一侧，保持两者一致，禁止只改 config 不改 frontmatter（否则触发词不生效）",
   "version": "2.0.0",
-  "lastUpdated": "2026-10-29",
+  "lastUpdated": "2026-10-30",
   "disabledSkills": [],
   "_exemptedSkills_comment": "豁免登记的目录：不进入 skills 数组，但必须写明豁免理由。校验脚本 scripts/validate-skill-config.js 以此为唯一事实源做反向校验（含 SKILL.md 的目录要么登记、要么在此豁免，否则报错）",
   "exemptedSkills": [
@@ -88,15 +88,6 @@
       "verifyStatus": "real-e2e"
     },
     {
-      "name": "flow-to-form",
-      "description": "当用户上传包含业务流程的思维导图/流程图截图时，本 Skill 会自动识别图中各模块（分组、数据表单、执行表单、关键字段、流程、子表明细、状态流转、同步规则），并输出为标准 Markdown 格式的表单字段定义文件和业务规则清单，支持直接导入到低代码平台或作为开发需求文档。",
-      "path": ".agents/skills/flow-to-form",
-      "version": "1.0.2",
-      "category": "form-generation",
-      "enabled": true,
-      "verifyStatus": "offline-unit"
-    },
-    {
       "name": "form-to-prototype",
       "description": "根据字段清单自动生成HTML原型页面。当用户说'生成原型'、'创建HTML原型'、'表单原型'、'预览表单界面'、'生成界面原型'时触发此skill。模拟宜搭表单界面风格，支持字段ID显示和点击复制、同步配置等功能。",
       "path": ".agents/skills/form-to-prototype",
@@ -124,22 +115,6 @@
       "verifyStatus": "real-e2e"
     },
     {
-      "name": "architect",
-      "description": "专为宜搭低代码开发设计的系统架构师。当用户说'梳理需求'、'设计系统架构'、'分析业务流程'、'做需求分析'、'规划系统功能'时触发此skill。能够将模糊的业务需求转化为标准的'业务逻辑图'、'关键功能清单'、'字段定义表'和'自动化逻辑规则'，直接指导开发人员配置宜搭表单和流程。适用于装修、零售、教育、制造等行业的客户管理、进销存、学员管理等场景。",
-      "path": ".agents/skills/architect",
-      "version": "1.5.0",
-      "category": "低代码开发",
-      "tags": [
-        "宜搭",
-        "低代码",
-        "表单设计",
-        "业务流程",
-        "系统架构"
-      ],
-      "enabled": true,
-      "verifyStatus": "offline-unit"
-    },
-    {
       "name": "code-expert",
       "description": "宜搭低代码平台代码开发专家。生成表单动作代码、字段校验规则、自动化脚本。当用户需要编写宜搭 JS 代码、表单交互逻辑、数据校验、流程脚本时调用。特别注意：当用户提示词中包含【应用场景】：表单动作代码/跨表单代码/字段校验代码/集成自动化代码 时，自动触发本Skill生成对应代码",
       "path": ".agents/skills/code-expert",
@@ -159,24 +134,8 @@
       "verifyStatus": "real-e2e"
     },
     {
-      "name": "prompt-assistant",
-      "description": "宜搭提示词助手 - 将用户的自然语言需求转换为规范的提示词文件，支持公式类和代码类提示词生成，自动读取系统配置和组件ID清单，生成包含完整字段信息的规范提示词。",
-      "path": ".agents/skills/prompt-assistant",
-      "version": "2.7.0",
-      "category": "prompt-generation",
-      "tags": [
-        "宜搭",
-        "提示词",
-        "公式",
-        "代码",
-        "模板"
-      ],
-      "enabled": true,
-      "verifyStatus": "offline-unit"
-    },
-    {
       "name": "formula-generator",
-      "description": "宜搭公式生成专家。当用户说'写公式'、'写宜搭公式'、'生成公式'、'生成计算公式'、'表单字段公式'、'报表公式'时触发此skill。生成表单公式、报表公式，包含精确的marks位置计算。特别注意：当用户提示词中包含【应用场景】：表单公式/报表公式/自动化公式时，自动触发本Skill。注意：说'写提示词'时触发prompt-assistant而非本Skill。",
+      "description": "宜搭公式生成专家。当用户说'写公式'、'写宜搭公式'、'生成公式'、'生成计算公式'、'表单字段公式'、'报表公式'时触发此skill。生成表单公式、报表公式，包含精确的marks位置计算。特别注意：当用户提示词中包含【应用场景】：表单公式/报表公式/自动化公式时，自动触发本Skill。注意：说'写提示词'时走 code-expert 的提示词文件工序（原 prompt-assistant，见其 references/prompt-assistant/）。",
       "path": ".agents/skills/formula-generator",
       "version": "4.5.1",
       "author": "叶秋",
@@ -251,15 +210,6 @@
       "category": "authentication",
       "enabled": true,
       "verifyStatus": "real-e2e"
-    },
-    {
-      "name": "skill-creator",
-      "description": "Create new skills, modify and improve existing skills, and measure skill performance. Use when users want to create a skill from scratch, edit, or optimize an existing skill, run evals to test a skill, benchmark skill performance with variance analysis, or optimize a skill's description for better triggering accuracy.",
-      "path": ".agents/skills/skill-creator",
-      "version": "1.0.0",
-      "category": "skill-development",
-      "enabled": true,
-      "verifyStatus": "offline-unit"
     },
     {
       "name": "config-sync",
@@ -360,24 +310,6 @@
       "category": "automation",
       "enabled": true,
       "verifyStatus": "real-e2e"
-    },
-    {
-      "name": "excel-to-form",
-      "description": "当用户说\"将Excel转字段清单\"、\"从Excel生成表单\"、\"Excel导入\"、\"表格转字段清单\"、\"Excel做表单\"时触发此skill。Excel转宜搭表单字段清单专家 - 将用户填写的Excel表单基础信息转换为标准的字段清单.md和规则清单.md。禁止使用占位数据。关键词：Excel转字段、Excel导入、表单清单、字段清单、规则清单",
-      "path": ".agents/skills/excel-to-form",
-      "version": "1.4.0",
-      "category": "form-generation",
-      "enabled": true,
-      "verifyStatus": "offline-unit"
-    },
-    {
-      "name": "system-troubleshooter",
-      "description": "当用户说\"系统问题\"、\"终端乱码\"、\"编码错误\"、\"脚本执行失败\"、\"环境问题\"、\"配置错误\"、\"记录问题\"、\"收集问题\"、\"问题诊断\"时触发此skill。系统问题诊断与处理中心，提供问题诊断、解决方案推荐、知识库查询和预防措施建议。",
-      "path": ".agents/skills/system-troubleshooter",
-      "version": "1.0.0",
-      "category": "troubleshooting",
-      "enabled": true,
-      "verifyStatus": "offline-unit"
     },
     {
       "name": "playwright-cli",
@@ -568,6 +500,24 @@
       ],
       "enabled": true,
       "verifyStatus": "offline-unit-tested"
+    },
+    {
+      "name": "requirement-analysis",
+      "description": "需求梳理与表单清单生成（三合一：原 architect / flow-to-form / excel-to-form）。当用户说\"梳理需求\"、\"设计系统架构\"、\"分析业务流程\"、\"做需求分析\"、\"规划系统功能\"、\"根据流程图/思维导图生成表单清单\"、\"Excel转字段清单\"、\"从Excel生成表单\"、\"Excel导入\"时触发此skill。将业务需求、流程图截图或Excel表单基础信息转化为标准的业务逻辑图、字段清单.md、规则清单.md和表单清单.md条目，可直接导入宜搭或交给 form_creator 建表。禁止使用占位数据。关键词：需求梳理、架构设计、流程图、Excel转字段、字段清单、规则清单",
+      "path": ".agents/skills/requirement-analysis",
+      "version": "1.0.0",
+      "category": "analysis",
+      "tags": [
+        "宜搭",
+        "需求梳理",
+        "架构设计",
+        "流程图",
+        "Excel转字段",
+        "字段清单",
+        "规则清单"
+      ],
+      "enabled": true,
+      "verifyStatus": "merged-from-3-skills"
     }
   ],
   "_disambiguationGroups_comment": "易混技能消歧组（集中负信号）。由 scripts/generate-skill-index.js 渲染为 README 《易混技能消歧表》。when=用户意图，use=应触发技能，not=易被误触发但不该用的技能",
