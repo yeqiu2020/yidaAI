@@ -119,14 +119,36 @@ function unwrapRecord(resp) {
   return resp;
 }
 
-/** 防护 1：完整读取 = getFormDataById 的 instValue（主表）+ listTableData 分页（子表全量行，totalCount 交叉校验） */
-async function readFullInstance(session, appId, formUuid, formInstId, formType, tableFieldIds) {
-  let record; let detectedType = formType;
-  if (formType === 'process') {
-    record = unwrapRecord(await request('GET', session, `/dingtalk/web/${appId}/v1/process/getInstanceById.json?processInstanceId=${encodeURIComponent(formInstId)}`));
-  } else {
-    record = unwrapRecord(await request('GET', session, `/dingtalk/web/${appId}/v1/form/getFormDataById.json?formInstId=${encodeURIComponent(formInstId)}${formUuid ? `&formUuid=${encodeURIComponent(formUuid)}` : ''}`));
+/** 查询表单类型（receipt/process/...，designer 同款接口）。
+ * 2026-10-31 实测：getFormDataById 对流程表单实例不返回 processInstanceId，
+ * 原 hint 探测恒失效 → auto 模式下流程表单被误判为 receipt，写入走错端点被服务端拒绝。 */
+async function fetchFormType(session, appId, formUuid) {
+  try {
+    const qs = `supportSerialNo=y&ccMode=fold&formTypes=${encodeURIComponent('receipt,process,virtualView,report')}`
+      + `&needAssocField=false&appType=${encodeURIComponent(appId)}&formUuid=${encodeURIComponent(formUuid)}`;
+    const resp = await request('GET', session, `/alibaba/web/${appId}/query/formdesign/getFormAndAppInfo.json?${qs}`);
+    if (!resp || resp.success === false) return null;
+    const content = (resp && resp.content) || {};
+    const values = (content.formDatas && Array.isArray(content.formDatas.values) && content.formDatas.values)
+      || (Array.isArray(content.values) && content.values) || [];
+    const hit = values.find(v => v && v.formUuid === formUuid) || values[0];
+    return (hit && hit.formType) || null;
+  } catch (e) {
+    return null; // 探测失败不阻断，退回原 hint 逻辑
   }
+}
+
+/** 防护 1：完整读取 = getFormDataById 的 instValue（主表）+ listTableData 分页（子表全量行，totalCount 交叉校验）
+ *  读取统一走 getFormDataById：2026-10-31 实测它对流程表单实例同样返回完整 instValue（含子表 cell.rowId），
+ *  而 process/getInstanceById 只返回扁平 formData（无 instValue、无 rowId），无法支撑整表回写。
+ *  类型探测（fetchFormType/hint）只决定写入端点（updateInstance vs updateFormData）。 */
+async function readFullInstance(session, appId, formUuid, formInstId, formType, tableFieldIds) {
+  let detectedType = formType;
+  if (formType === 'auto' && formUuid) {
+    const ft = await fetchFormType(session, appId, formUuid);
+    if (ft === 'process') detectedType = 'process';
+  }
+  const record = unwrapRecord(await request('GET', session, `/dingtalk/web/${appId}/v1/form/getFormDataById.json?formInstId=${encodeURIComponent(formInstId)}${formUuid ? `&formUuid=${encodeURIComponent(formUuid)}` : ''}`));
   if (detectedType !== 'process' && record) {
     const hint = record.processInstanceId || (record.formData && record.formData.processInstanceId);
     if (hint) detectedType = 'process';
@@ -139,8 +161,10 @@ async function readFullInstance(session, appId, formUuid, formInstId, formType, 
     while (true) {
       const qs = `formUuid=${encodeURIComponent(formUuid)}&formInstanceId=${encodeURIComponent(formInstId)}&tableFieldId=${encodeURIComponent(tfId)}&currentPage=${page}&pageSize=${lib.SUB_PAGE_SIZE}`;
       const resp = await request('GET', session, `/dingtalk/web/${appId}/v1/form/listTableDataByFormInstIdAndTableId.json?${qs}`);
-      const list = (resp && Array.isArray(resp.data)) ? resp.data : ((resp && resp.result && resp.result.data) || []);
-      const tc = resp ? (resp.totalCount !== undefined ? resp.totalCount : (resp.result && resp.result.totalCount)) : 0;
+      // 兼容三种响应包装：{data} / {result:{data}} / {content:{data}}（searchFormDatas 同族标准形态，2026-10-31 实测）
+      const wrapped = (resp && resp.content && typeof resp.content === 'object' && !Array.isArray(resp.content)) ? resp.content : resp;
+      const list = (wrapped && Array.isArray(wrapped.data)) ? wrapped.data : ((wrapped && wrapped.result && wrapped.result.data) || []);
+      const tc = wrapped ? (wrapped.totalCount !== undefined ? wrapped.totalCount : (wrapped.result && wrapped.result.totalCount)) : 0;
       if (totalCount === null) totalCount = Number(tc || 0);
       rows.push(...list);
       if (rows.length >= totalCount) break;
@@ -154,16 +178,26 @@ async function readFullInstance(session, appId, formUuid, formInstId, formType, 
     if (Array.isArray(instRows) && instRows.length > 0 && instRows.length !== rows.length) {
       throw new Error(`[子表行数交叉校验失败] ${tfId}: instValue ${instRows.length} 行 ≠ 分页接口 ${rows.length} 行（totalCount=${totalCount}）。数据可能正被并发修改，请重试或排查。`);
     }
-    tables[tfId] = rows;
+    // 🔴 2026-10-31 架构修复：整表回写数据源从分页扁平行换成 instValue 原始行转换。
+    // 分页扁平行没有关联表单列的本体键（只有 *_id 镜像），用它回写会把关联清空（实测事故 fdu_20261031_070709）。
+    // instValue 原始 cell 自带：rowId、关联对象数组、下拉实际值——是最保真的回写源头。
+    // 分页行在此仅承担行数交叉校验（上方），并把 *_id 镜像键按行序补进转换行（防护 3 依赖）。
+    const flatRows = lib.cellRowsToFlatRows(instRows);
+    lib.mergeIdMirrorKeys(flatRows, rows);
+    // instValue 行自身缺 rowId 的（存量老行）保持缺失 → buildUpdatePayload 仍会中止，宁可失败不可丢标识。
+    tables[tfId] = flatRows;
   }
   return { main: parsed.main, tables, raw: record, formType: detectedType };
 }
 
 /** 写入（普通表单 updateFormData / 流程表单 process/updateInstance），成功返回 null */
-async function writePayload(session, appId, formType, formInstId, payload) {
+async function writePayload(session, appId, formType, formInstId, payload, formUuid) {
   const params = { updateFormDataJson: JSON.stringify(payload) };
   if (formType === 'process') params.processInstanceId = formInstId;
-  else params.formInstanceId = formInstId;
+  else {
+    params.formInstanceId = formInstId;
+    if (formUuid) params.formUuid = formUuid; // 服务端校验要求 formUuid + formInstId 双参（2026-10-31 补）
+  }
   const apiPath = formType === 'process'
     ? `/dingtalk/web/${appId}/v1/process/updateInstance.json`
     : `/dingtalk/web/${appId}/v1/form/updateFormData.json`;
@@ -293,7 +327,7 @@ async function runUpdate(session, ctx) {
   // —— 执行 ——
   let writeResp;
   try {
-    writeResp = await writePayload(session, ctx.appId, ctx.formType, ctx.formInstId, ctx.payload);
+    writeResp = await writePayload(session, ctx.appId, ctx.formType, ctx.formInstId, ctx.payload, ctx.formUuid);
   } catch (e) {
     console.error(`\n❌ 写入未完成: ${e.message}`);
     console.error('快照与载荷已留存于台账，未产生需回滚的写入。');
@@ -337,7 +371,7 @@ async function runUpdate(session, ctx) {
   console.error('\n…… 正在自动回滚（恢复为写前快照值）');
   const rollbackPlan = lib.buildRollbackPayload(beforeFull, ctx.payload);
   try {
-    await writePayload(session, ctx.appId, ctx.formType, ctx.formInstId, rollbackPlan.payload);
+    await writePayload(session, ctx.appId, ctx.formType, ctx.formInstId, rollbackPlan.payload, ctx.formUuid);
     const afterRollback = await readFullInstance(session, ctx.appId, ctx.formUuid, ctx.formInstId, ctx.formType, ctx.tableFieldIds);
     const rbVerdict = lib.assertAfterWrite(beforeFull, afterRollback, rollbackPlan.payload, rollbackPlan.meta);
     if (rbVerdict.ok) {

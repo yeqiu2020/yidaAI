@@ -183,20 +183,33 @@ for (const n of usedFields) {
   if (nameMap[n].length > 1) fail(`公式引用的字段名「${n}」在表单中重名（${nameMap[n].map(f => f.fieldId).join(', ')}），请改名后重试`);
 }
 
-// formula-generator 生成 marks JSON（wrapper 自动补零宽空格并校验位置）
-// 注意：wrapper 成功后会删除 --formulaFile 指向的文件，故先复制到 temp-file/ 保护用户源文件
+// formula-generator 生成 marks JSON
+// 【2026-10-31 修复】字段名互为子串时（如 数量 ⊂ 已出库数量），wrapper 的逐名替换按 --fields
+// 顺序执行，短名先处理会把长名劈开（实测「已出库数量」被标记成「已出库​数量​」→ 宜搭以
+// "表达式解析失败"拒收）。改为流水线内按「长名优先 + 占位 token」预标记零宽空格，
+// 经 --formulaBase64 传给 wrapper（base64 路径跳过其自动标记），字段名解析与 marks 校验不变。
 const outDir = path.join(formDir, '公式');
 fs.mkdirSync(outDir, { recursive: true });
 const outputJson = path.join(outDir, formulaName + '.json');
-const wrapperInput = path.join(ROOT, 'temp-file', '_pipeline_wrapper_' + Date.now() + '.txt');
-fs.mkdirSync(path.dirname(wrapperInput), { recursive: true });
-fs.copyFileSync(path.resolve(process.cwd(), args['formula-file']), wrapperInput);
+const rawFormula = fs.readFileSync(path.resolve(process.cwd(), args['formula-file']), 'utf8').trim();
+const sortedNames = usedFields.slice().sort((a, b) => b.length - a.length);
+const tokens = [];
+let markedFormula = rawFormula;
+for (let i = 0; i < sortedNames.length; i++) {
+  const n = sortedNames[i];
+  const token = '\u0000TK' + i + '\u0000';
+  markedFormula = markedFormula.split(n).join(token);
+  tokens.push({ token, n });
+}
+for (const t of tokens) {
+  markedFormula = markedFormula.split(t.token).join('\u200b' + t.n + '\u200b');
+}
 const fieldsArg = usedFields.map(n => `${n}:${nameMap[n][0].fieldId}`).join(',');
 const gen = runNode(WRAPPER, [
   '--formulaName', formulaName,
   '--category', category,
   '--fields', fieldsArg,
-  '--formulaFile', wrapperInput,
+  '--formulaBase64', Buffer.from(markedFormula, 'utf8').toString('base64'),
   '--outputPath', path.relative(ROOT, outputJson),
 ], '生成公式');
 if (!gen.ok) fail(`公式生成失败:\n${gen.out.slice(-1200)}`);

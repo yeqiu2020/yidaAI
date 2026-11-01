@@ -368,3 +368,130 @@ describe('buildRollbackPayload 反向回填计划', () => {
     expect(v.ok).toBe(true);
   });
 });
+
+// ============ 2026-10-31 架构修复回归：整表回写数据源 = instValue 原始行 ============
+// 背景：fdu_20261031_070709 实测事故——分页扁平行没有关联列本体键，用它整表回写会清空关联；
+// 服务端每次 updateInstance 重写 rowId、重算/裁剪 *_id 镜像。修复后：
+//   回写源 = cellRowsToFlatRows(instValue 原始行)；断言对 rowId/_id 差异 warn 豁免，关联本体仍硬断言。
+describe('cellRowsToFlatRows instValue 原始行转换（架构修复）', () => {
+  const cellRows = [
+    [
+      { fieldId: 'textField_a', fieldData: { value: 'x' }, rowId: 'R-1' },
+      { fieldId: 'selectField_s', fieldData: { value: '1.13' }, rowId: 'R-1' },
+      { fieldId: 'associationFormField_a', fieldData: { value: [{ formType: 'receipt', instanceId: 'FINST-9', title: '防锈油' }] }, rowId: 'R-1' },
+    ],
+    [
+      { fieldId: 'textField_a', fieldData: { value: 'y' }, rowId: 'R-2' },
+      { fieldId: 'associationFormField_a', fieldData: { value: [{ formType: 'receipt', instanceId: 'FINST-8', title: '价格调整' }] }, rowId: 'R-2' },
+    ],
+  ];
+  test('转换保留 rowId / 关联数组 / 下拉实际值', () => {
+    const flat = lib.cellRowsToFlatRows(cellRows);
+    expect(flat).toHaveLength(2);
+    expect(flat[0].rowId).toBe('R-1');
+    expect(flat[0].selectField_s).toBe('1.13');
+    expect(flat[0].associationFormField_a).toEqual([{ formType: 'receipt', instanceId: 'FINST-9', title: '防锈油' }]);
+    expect(flat[1].rowId).toBe('R-2');
+  });
+  test('mergeIdMirrorKeys 只补缺失的 _id 键，不覆盖本体', () => {
+    const flat = lib.cellRowsToFlatRows(cellRows);
+    lib.mergeIdMirrorKeys(flat, [
+      { selectField_s: '13%', selectField_s_id: '1.13', selectField_sx_id: '9' },
+      { associationFormField_a_id: 'json' },
+    ]);
+    expect(flat[0].selectField_s).toBe('1.13');           // 本体不被分页显示值覆盖
+    expect(flat[0].selectField_s_id).toBe('1.13');        // 缺失的 _id 被补上
+    expect(flat[0].selectField_sx_id).toBe('9');
+    expect(flat[1].associationFormField_a_id).toBe('json');
+  });
+  test('cell 行缺 rowId → 转换行无 rowId（后续 buildUpdatePayload 中止）', () => {
+    const flat = lib.cellRowsToFlatRows([[{ fieldId: 'textField_a', fieldData: { value: 'x' } }]]);
+    expect(flat[0].rowId).toBeUndefined();
+  });
+});
+
+describe('含关联列子表整表回写（架构修复主场景）', () => {
+  const before = {
+    main: { serialNumberField_no: 'XP-1' },
+    tables: {
+      tableField_t: [
+        { rowId: 'R-1', textField_name: '防锈油', selectField_tax: '1.13', selectField_tax_id: '1.13',
+          associationFormField_prod: [{ formType: 'receipt', instanceId: 'FINST-9', title: '防锈油' }],
+          associationFormField_prod_id: 'json-1' },
+        { rowId: 'R-2', textField_name: '价格调整', selectField_tax: '1.13', selectField_tax_id: '1.13',
+          associationFormField_prod: [{ formType: 'receipt', instanceId: 'FINST-8', title: '价格调整' }],
+          associationFormField_prod_id: 'json-2' },
+      ],
+    },
+  };
+  const sorted = lib.sortAndGuardChanges({
+    tableField_t: [{ rowId: 'R-1', selectField_status: '已收票' }],
+  });
+  const plan = lib.buildUpdatePayload(before, sorted);
+
+  test('未改行携带关联本体原样回写', () => {
+    const row2 = plan.payload.tableField_t.find(r => r.rowId === 'R-2');
+    expect(row2.associationFormField_prod).toEqual([{ formType: 'receipt', instanceId: 'FINST-8', title: '价格调整' }]);
+    expect(row2.selectField_tax).toBe('1.13'); // 未改行下拉实际值原样
+  });
+  test('改动行 merge 目标列且保有关联', () => {
+    const row1 = plan.payload.tableField_t.find(r => r.rowId === 'R-1');
+    expect(row1.selectField_status).toBe('已收票');
+    expect(row1.associationFormField_prod).toEqual([{ formType: 'receipt', instanceId: 'FINST-9', title: '防锈油' }]);
+  });
+
+  test('服务端 rowId 重写 + _id 裁剪 → ok=true 且仅 warnings', () => {
+    // 模拟服务端：写入 payload、重写全部 rowId、裁剪全部 *_id 镜像、丰富关联对象
+    const after = simulateAfter(before, plan.payload, (a) => {
+      a.tables.tableField_t.forEach((r, i) => {
+        r.rowId = `NEW-${i}`;
+        Object.keys(r).forEach(k => { if (k.endsWith('_id')) delete r[k]; });
+        if (Array.isArray(r.associationFormField_prod)) {
+          r.associationFormField_prod = r.associationFormField_prod.map(x => ({ ...x, subTitle: 'CP-1', appType: 'APP_X' }));
+        }
+      });
+    });
+    const v = lib.assertAfterWrite(before, after, plan.payload, plan.meta);
+    expect(v.ok).toBe(true);
+    expect(v.warnings.some(w => w.path.endsWith('.rowId'))).toBe(true);
+  });
+
+  test('关联本体被清空 → 硬断言失败（防止再次清空）', () => {
+    const after = simulateAfter(before, plan.payload, (a) => {
+      a.tables.tableField_t.forEach((r) => { r.associationFormField_prod = []; });
+    });
+    const v = lib.assertAfterWrite(before, after, plan.payload, plan.meta);
+    expect(v.ok).toBe(false);
+    expect(v.diffs.some(d => d.path.includes('associationFormField_prod'))).toBe(true);
+  });
+
+  test('目标关联列写入：instanceId 序列一致即通过（服务端丰富字段可接受）', () => {
+    const sorted2 = lib.sortAndGuardChanges({
+      tableField_t: [{ rowId: 'R-1', associationFormField_prod: [{ instanceId: 'FINST-9', title: '防锈油' }] }],
+    });
+    const plan2 = lib.buildUpdatePayload(before, sorted2);
+    const after = simulateAfter(before, plan2.payload, (a) => {
+      // 服务端回存：丰富字段 + 重写 rowId + _id 重算
+      a.tables.tableField_t.forEach((r, i) => {
+        r.rowId = `NEW-${i}`;
+        if (r.associationFormField_prod && r.associationFormField_prod.length) {
+          r.associationFormField_prod = r.associationFormField_prod.map(x => ({ formType: 'receipt', formUuid: 'FORM-1', appType: 'APP_X', subTitle: 'CP', ...x }));
+        }
+      });
+    });
+    const v = lib.assertAfterWrite(before, after, plan2.payload, plan2.meta);
+    expect(v.ok).toBe(true);
+  });
+  test('回读关联与写入意图不符 → 硬断言失败', () => {
+    const sorted2 = lib.sortAndGuardChanges({
+      tableField_t: [{ rowId: 'R-1', associationFormField_prod: [{ instanceId: 'FINST-9', title: '防锈油' }] }],
+    });
+    const plan2 = lib.buildUpdatePayload(before, sorted2);
+    const after = simulateAfter(before, plan2.payload, (a) => {
+      // 模拟服务端未按写入意图落库：R-1 关联被写成别的实例
+      a.tables.tableField_t[0].associationFormField_prod = [{ formType: 'receipt', instanceId: 'FINST-404', title: '别的东西' }];
+    });
+    const v = lib.assertAfterWrite(before, after, plan2.payload, plan2.meta);
+    expect(v.ok).toBe(false);
+  });
+});

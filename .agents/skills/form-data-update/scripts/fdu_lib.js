@@ -227,6 +227,59 @@ function assertSubRowCount(accumulatedRows, totalCount, tableFieldId) {
   }
 }
 
+/**
+ * instValue 原始行（cell 数组的数组）→ 整表回写扁平行。
+ * 🔴 2026-10-31 架构修复：整表回写的数据源必须是 instValue 原始 cell（关联表单列本体只存在于
+ * instValue 的 cell.value 中——对象数组形态；分页接口的扁平行只有 *_id 镜像键、没有本体键，
+ * 用分页行回写会把关联清空——实测事故 fdu_20261031_070709）。本转换保留：
+ *   - rowId（同行 cell 共享）
+ *   - 关联列对象数组原样（保真关键）
+ *   - 下拉实际值（原始 instValue 存实际值，非显示值）
+ * @param {Array} cellRows - parseInstValue.tables[tfId]（cell 数组的数组）
+ * @returns {Array} 扁平行 [{rowId, <fieldId>: value, ...}, ...]
+ */
+function cellRowsToFlatRows(cellRows) {
+  return (Array.isArray(cellRows) ? cellRows : []).map(cells => {
+    const flat = {};
+    if (Array.isArray(cells) && cells[0] && cells[0].rowId !== undefined && cells[0].rowId !== null) {
+      flat.rowId = String(cells[0].rowId);
+    }
+    (Array.isArray(cells) ? cells : []).forEach(c => {
+      if (c && c.fieldId) flat[c.fieldId] = c.fieldData ? deepClone(c.fieldData.value) : null;
+    });
+    return flat;
+  });
+}
+
+/**
+ * 把分页扁平行中转换行缺失的 `*_id` 镜像键补进转换行（按行序，行数已交叉校验相等）。
+ * 作用：恢复 normalizeSelectValue 的「_id=实际值」快照上下文（防护 3 依赖）。
+ * 只补缺失键，绝不覆盖转换行已有键（转换行本体=实际值，是更保真的源头）。
+ */
+function mergeIdMirrorKeys(flatRows, pagedRows) {
+  if (!Array.isArray(flatRows) || !Array.isArray(pagedRows)) return flatRows;
+  const n = Math.min(flatRows.length, pagedRows.length);
+  for (let i = 0; i < n; i++) {
+    const flat = flatRows[i]; const paged = pagedRows[i] || {};
+    for (const [k, v] of Object.entries(paged)) {
+      if (k.endsWith('_id') && !Object.prototype.hasOwnProperty.call(flat, k)) flat[k] = deepClone(v);
+    }
+  }
+  return flatRows;
+}
+
+/** 关联列断言用的可比序列：对象数组取 instanceId 序列；字符串化 JSON 解包后取；其它原样 */
+function assocInstanceIdSeq(v) {
+  let arr = v;
+  if (typeof arr === 'string') {
+    const s = arr.trim();
+    if (s.startsWith('[')) { try { arr = JSON.parse(s); } catch (e) { return [s]; } }
+    else return [s];
+  }
+  if (!Array.isArray(arr)) return [JSON.stringify(arr)];
+  return arr.map(x => (x && typeof x === 'object') ? String(x.instanceId) : String(x));
+}
+
 // ============ changes 形态守卫与分拣 ============
 
 /**
@@ -351,8 +404,12 @@ function buildUpdatePayload(before, sorted) {
       }
       const rowId = String(row.rowId);
       const wanted = wantedRows.find(w => String(w.rowId) === rowId);
-      if (!wanted) return deepClone(row); // 未改行：原样保真
-      const merged = deepClone(row);
+      // 🔴 2026-10-31：*_id 镜像键不进载荷（镜像由服务端按本体重算；sortAndGuardChanges 也禁止用户传 _id）。
+      // 快照行的 _id 仅作为 normalizeSelectValue 的上下文（ctx），此处统一剥离。
+      const clone = deepClone(row);
+      for (const k of Object.keys(clone)) { if (k.endsWith('_id')) delete clone[k]; }
+      if (!wanted) return clone; // 未改行：本体原样保真（含关联对象数组/下拉实际值）
+      const merged = clone;
       merged.rowId = row.rowId; // 防护 2：行内必须带 rowId
       for (const [colId, rawVal] of Object.entries(wanted.cols)) {
         const norm = normalizeCellValue(colId, rawVal, row);
@@ -434,6 +491,8 @@ function assertAfterWrite(before, after, payload, meta) {
       const base = k.endsWith('_id') ? k.slice(0, -3) : null;
       if (base && targetKeys.includes(base)) {
         warnings.push({ path: `main.${k}`, before: undefined, after: afterMain[k], reason: '服务端为写入目标派生的新镜像键（可接受）' });
+      } else if (k.endsWith('_id')) {
+        warnings.push({ path: `main.${k}`, before: undefined, after: afterMain[k], reason: '_id 镜像键由服务端重算（本体键严格断言兜底，可接受）' });
       } else {
         diffs.push({ path: `main.${k}`, kind: 'key-added', before: undefined, after: afterMain[k] });
       }
@@ -442,6 +501,12 @@ function assertAfterWrite(before, after, payload, meta) {
     if (tolerantKeys.has(k)) {
       if (!deepEqual(beforeMain[k], afterMain[k])) {
         warnings.push({ path: `main.${k}`, before: beforeMain[k], after: afterMain[k], reason: '_id 镜像随显示值写入由服务端重算（可接受）' });
+      }
+      continue;
+    }
+    if (k.endsWith('_id')) {
+      if (!deepEqual(beforeMain[k], afterMain[k])) {
+        warnings.push({ path: `main.${k}`, before: beforeMain[k], after: afterMain[k], reason: '_id 镜像键由服务端重算/裁剪（本体键严格断言兜底，可接受）' });
       }
       continue;
     }
@@ -480,7 +545,9 @@ function assertAfterWrite(before, after, payload, meta) {
       if (!aRow) { diffs.push({ path: `tables.${tfId}[${idx}]`, kind: 'row-missing', rowId: bRow.rowId }); return; }
       const rowIdLabel = `tables.${tfId}[${idx}](rowId=${bRow.rowId !== undefined ? bRow.rowId : idx})`;
       if (bRow.rowId !== undefined && !deepEqual(bRow.rowId, aRow.rowId)) {
-        diffs.push({ path: `${rowIdLabel}.rowId`, kind: 'unexpected-change', before: bRow.rowId, after: aRow.rowId });
+        // 2026-10-31 实测：服务端 updateInstance 每次整表回写都会重写 rowId（行标识由服务端重算，
+        // 行数据本体不受影响）→ 降级 warn；行匹配已按行序兜底。
+        warnings.push({ path: `${rowIdLabel}.rowId`, before: bRow.rowId, after: aRow.rowId, reason: '服务端 updateInstance 重写 rowId（行标识重算，无业务影响）' });
       }
       const pCols = {}; for (const [c, v] of Object.entries(pRow)) { if (c !== 'rowId') pCols[c] = v; }
       const targetCols = Object.keys(pCols);
@@ -490,6 +557,14 @@ function assertAfterWrite(before, after, payload, meta) {
       // 目标列断言（与主表同款形态感知）
       for (const c of targetCols) {
         const w = rowTouched && rowTouched[c];
+        if (isAssocField(c)) {
+          // 关联列：写入后服务端会丰富关联对象（formType/appType/subTitle 等），
+          // 按写入意图断言 instanceId 序列一致（顺序敏感）；本体缺失/清空仍会被抓出
+          if (JSON.stringify(assocInstanceIdSeq(pCols[c])) !== JSON.stringify(assocInstanceIdSeq(aRow[c]))) {
+            diffs.push({ path: `${rowIdLabel}.${c}`, kind: 'target-mismatch', expect: assocInstanceIdSeq(pCols[c]), after: assocInstanceIdSeq(aRow[c]), before: bRow[c] });
+          }
+          continue;
+        }
         if (w && w.wrote === '_id' && Object.prototype.hasOwnProperty.call(aRow, `${c}_id`)) {
           rowMirrorAsserted.add(`${c}_id`); rowTolerant.add(c);
           if (!deepEqual(aRow[`${c}_id`], pCols[c])) {
@@ -514,13 +589,16 @@ function assertAfterWrite(before, after, payload, meta) {
         if (targetCols.includes(c) || rowMirrorAsserted.has(c)) continue;
         const inB = Object.prototype.hasOwnProperty.call(bRow, c);
         const inA = Object.prototype.hasOwnProperty.call(aRow, c);
-        if (!inB && inA) {
-          const base = c.endsWith('_id') ? c.slice(0, -3) : null;
-          if (base && targetCols.includes(base)) {
-            warnings.push({ path: `${rowIdLabel}.${c}`, before: undefined, after: aRow[c], reason: '服务端为写入目标派生的新镜像键（可接受）' });
-          } else {
-            diffs.push({ path: `${rowIdLabel}.${c}`, kind: 'key-added', before: undefined, after: aRow[c] });
+        // 2026-10-31：*_id 镜像键由服务端按存储值重算/裁剪（updateInstance 实测），
+        // 数据本体由不带 _id 的键严格断言兜底 → 镜像差异一律降级 warn
+        if (c.endsWith('_id')) {
+          if (!deepEqual(inB ? bRow[c] : undefined, inA ? aRow[c] : undefined)) {
+            warnings.push({ path: `${rowIdLabel}.${c}`, before: inB ? bRow[c] : undefined, after: inA ? aRow[c] : undefined, reason: '_id 镜像键由服务端重算/裁剪（本体键严格断言兜底，可接受）' });
           }
+          continue;
+        }
+        if (!inB && inA) {
+          diffs.push({ path: `${rowIdLabel}.${c}`, kind: 'key-added', before: undefined, after: aRow[c] });
           continue;
         }
         if (inB && !inA) { diffs.push({ path: `${rowIdLabel}.${c}`, kind: 'key-lost', before: bRow[c], after: undefined }); continue; }
@@ -558,7 +636,10 @@ function buildRollbackPayload(before, appliedPayload) {
   let touched = 0;
   for (const k of Object.keys(appliedPayload || {})) {
     if (isTableField(k)) {
-      payload[k] = deepClone((before.tables && before.tables[k]) || []);
+      const rows = deepClone((before.tables && before.tables[k]) || []);
+      // 与写入载荷同规：*_id 镜像键不进载荷（服务端按本体重算）
+      rows.forEach(r => { for (const kk of Object.keys(r)) { if (kk.endsWith('_id')) delete r[kk]; } });
+      payload[k] = rows;
       meta.tableWrites[k] = {};
       touched++;
     } else if (isSelectField(k) && before.main[`${k}_id`] !== undefined && before.main[`${k}_id`] !== null) {
@@ -580,7 +661,7 @@ module.exports = {
   isPlainObject, deepClone, deepEqual,
   isTableField, isAssocField, isSelectField, isDateField, isNumberField, isComplexField,
   normalizeAssociationValue, normalizeDateValue, normalizeNumberValue, normalizeSelectValue, normalizeCellValue,
-  parseInstValue, assertSubRowCount,
+  parseInstValue, assertSubRowCount, cellRowsToFlatRows, mergeIdMirrorKeys, assocInstanceIdSeq,
   sortAndGuardChanges, guardComplexFieldsOnFullRewrite,
   buildUpdatePayload, assertAfterWrite, buildRollbackPayload,
 };
