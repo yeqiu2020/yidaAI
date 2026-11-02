@@ -10,10 +10,13 @@ description: 宜搭API客户端，提供静默式登录、创建应用、创建�
 > 本区块 1-5 条通用硬规则统一维护于 [../通用硬规则.md](../通用硬规则.md)（单一来源，避免多点复制导致规则漂移），执行前必须阅读并严格遵守。
 
 ### 专属硬规则
-1. **saveFormSchema仅允许对新建表单调用** — 严禁对已有表单调用
-2. **deleteForm仅允许在创建失败回滚时调用** — 禁止删除业务表单
-3. **Cookie持久化与simulated-login共用** — 统一使用根目录.cookies.json
-4. **【强制·v1.1.0】WAF 误拦判定与规避** — 发布/提交类写接口（saveFormSchema、saveOrUpdatePermit、连接器动作保存等）返回 **HTTP 200 但响应体不是 JSON 且包含 `waf_block`** 时，判定为平台安全（WAF）拦截，**不是未知错误**：
+1. **saveFormSchema 允许对已有表单调用（v1.2.0 起）** — 公式、字段校验、字段结构等改动由 AI 直接推送到线上，不再要求用户手工复制粘贴。推送必须执行三步：**先导出线上 schema 备份 → 只做最小必要改动 → 推送后回读逐项比对**
+2. **【强制·v1.3.0】推送必须走 schema_guard 三道闸（机制级护栏，代码已内置）** — `saveFormSchema` 内部已自动执行闸1（拦截 mobile/email/url 等 UI 不可见校验类型）；推送脚本还需调用 `require('./schema_guard')` 的 `backupBeforePush(beforeSchema, formDir)`（闸2，推送前备份）和 `assertPushResult(before, after, {allowPaths})`（闸3，回读断言：页面 JS 未变 + 变更全在白名单）。见 `scripts/schema_guard.js`。紧急逃生口 `SCHEMA_GUARD_OFF=1` 会打印显眼警告，仅平台结构变更时临时使用
+3. **【强制·v1.2.0】UI 可见性铁律（写入即须可见）** — 通过 saveFormSchema 写入的任何配置（校验、公式、联动、规则、JS），必须能在设计器对应面板上看到。找不到"用户能看见的位置"的配置**禁止写入**，因为设计器保存时会用 UI 状态整体覆盖 schema，不可见项会被静默丢弃。详见 §字段校验（validation）写入规范
+4. **deleteForm仅允许在创建失败回滚时调用** — 禁止删除业务表单
+5. **Cookie持久化与simulated-login共用** — 统一使用根目录.cookies.json
+6. **【强制·v1.1.0】WAF 误拦判定与规避** — 发布/提交类写接口（saveFormSchema、saveOrUpdatePermit、连接器动作保存等）返回 **HTTP 200 但响应体不是 JSON 且包含 `waf_block`** 时，判定为平台安全（WAF）拦截，**不是未知错误**：
+
    - **处理**：用**二分法**定位本次提交内容中命中 WAF 规则的片段（每次注释掉一半内容重试提交，约 log2 次即可定位到最小命中片段），改写该片段后重试
    - **规避写法**：命中片段避免——正则字面量（如 `/<script>/`）、危险 HTML/script 字符串（`<script>`、`javascript:`、`onerror=` 等）、SQL/命令注入特征串（`' OR 1=1`、`; DROP TABLE` 等）
    - **适用范围**：仅发布/提交类写接口适用；常规生成、查询类接口**不套用**（查询被拦通常是登录态问题，先查 Cookie）
@@ -108,6 +111,54 @@ POST /dingtalk/web/{appType}/_view/query/formdesign/saveFormSchema.json
 POST /dingtalk/web/{appType}/query/formdesign/updateFormConfig.json
 参数: { formUuid, version: 1, configType: "MINI_RESOURCE", value: 0 }
 ```
+
+### 4. 字段校验（validation）写入规范【v1.2.0 实测】
+
+字段校验存放在组件的 `props.validation` 数组。**设计器「字段 → 属性 → 校验」面板只渲染 4 类**，UI 不认的 type 会被静默丢弃：
+
+| type | 设计器可见 | 运行时生效 | 结论 |
+|------|-----------|-----------|------|
+| `required` / `minLength` / `maxLength` | ✅ 有勾选框 | ✅ | 可写 |
+| `customValidate` | ✅ 勾选 + 代码框显示函数 | ✅ | 可写（格式校验唯一可靠写法） |
+| `mobile` / `email` / `url` / `minValue` / `maxValue` | ❌ 面板四项全空 | ✅ | **禁止写入** |
+
+踩坑实例（2026-11-01 客户信息「联系电话」）：写入 `{type:"mobile"}` 后校验确实生效，但设计器面板毫无痕迹；用户此后在 UI 点「保存」，面板按 4 类状态整体提交，`mobile` 项会被覆盖丢失。
+
+自定义函数校验的正确写法（save → get 往返实测原样保留）：
+
+```json
+{
+  "type": "customValidate",
+  "param": "function validateRule(value) {\n  if (value === undefined || value === null) {\n    return true;\n  }\n  var text = String(value).replace(/\\s+/g, '');\n  if (text === '') {\n    return true;\n  }\n  return /^1[3-9]\\d{9}$/.test(text);\n}",
+  "message": {
+    "zh_CN": "请输入正确的手机号码（11位，1开头）",
+    "en_US": "Please enter a valid 11-digit mobile number",
+    "type": "i18n"
+  }
+}
+```
+
+要点：
+
+- `param` 必须是**函数源码字符串**（`function validateRule(value) {...}`），不能是 `JSExpression` 对象，不能只写正则字面量
+- 函数名固定为 `validateRule`（设计器模板即此名）
+- `customValidate` 不会自动跳过空值，空值放行必须写在函数体内；"必填"另用 `{type:"required"}`
+- 正则中的 `\s`、`\d` 在字符串里要双反斜杠
+
+**推送后的可见性断言（必做，不可省略）**：
+
+1. 回读 schema 取目标字段 `validation`
+2. 断言每项 `type` ∈ `{required, minLength, maxLength, customValidate}`，出现白名单外的 type → 立即用备份回滚
+3. 断言 `customValidate.param` 是包含 `function validateRule` 的字符串
+4. 断言推送前后页面 JS（`__initMethods__.value`）未变
+
+**通用写入自检三问**（除校验外的公式、联动、规则、JS 同样适用）：
+
+1. 这项配置在设计器哪个面板能看到？（答不出来 = 不准写）
+2. 用户在设计器保存该面板时，会不会用 UI 状态覆盖掉它？
+3. 回读时用什么条件断言"这项仍然存在且形态正确"？
+
+已确认可用的两类：字段校验见上表；页面 JS 位于 Page 组件的 `methods.__initMethods__.value`（设计器「页面 JS」面板可见），写入时必须读取原内容并在原内容上增量合并，禁止整段替换。
 
 ## 使用方式
 
@@ -205,14 +256,22 @@ const result = await formManager.createForm(appType, formTitle, fields);
 - [ ] 确认已获取有效的csrf_token
 
 ### 执行后确认
-- [ ] 确认未通过API修改已有应用的表单字段内容（规则25）
+- [ ] 确认对已有表单的写入已先备份线上 schema，并回读比对了变更（规则25）
+- [ ] 确认写入的校验项 type 全部落在可见白名单内（required / minLength / maxLength / customValidate）
+- [ ] 确认 `customValidate.param` 是含 `function validateRule` 的字符串
+- [ ] 确认推送前后页面 JS（`__initMethods__.value`）未被改动
 - [ ] 确认所有ID使用真实值，无占位符（规则24）
-- [ ] 确认saveFormSchema仅对新建表单调用，严禁对已有表单调用
 - [ ] 确认Cookie保存到项目根目录，非Skill子目录
 
 ---
 
 ## 版本信息
+
+**SKILL.md v1.3.0** (2026-11-02)
+- 规则25 变更：`saveFormSchema` 允许对已有表单调用，改为"能改就直接改"；推送必须走"备份 → 最小改动 → 回读断言"
+- 新增 §字段校验（validation）写入规范：设计器校验面板只渲染 `required`/`minLength`/`maxLength`/`customValidate` 四类；`mobile`/`email`/`url`/`minValue`/`maxValue` 运行时生效但 UI 不渲染，**禁止写入**（UI 保存时会静默丢弃）
+- 新增 UI 可见性铁律与"通用写入自检三问"；`customValidate.param` 必须是函数源码字符串（save→get 往返实测原样保留）
+- 新增机制级护栏 `scripts/schema_guard.js`（三道闸：闸1 拦不可见校验类型已内置 saveFormSchema；闸2 强制备份；闸3 回读断言页面 JS 未变+diff 白名单），11 个用例全部通过
 
 **SKILL.md v1.2.0** (2026-09-28)
 - 执行前确认清单接入统一预检（P5-3）：`server-manager/scripts/agent_capabilities.js` 输出登录态/服务/配置摘要，expired 退出码 1

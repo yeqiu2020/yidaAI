@@ -1,4 +1,4 @@
-﻿# form_creator 常见问题预防与解决方案
+﻿﻿# form_creator 常见问题预防与解决方案
 
 > 本文件从 SKILL.md 拆分而来（Phase 6 任务 6-6），包含 13 个常见问题的详细描述、原因分析和解决方案。
 
@@ -343,9 +343,9 @@ SERIALNUMBER("corpId", "appId", "formUuid", "fieldId", "{\"type\":\"custom\",\"v
 在 `form_manager.js` 的 `createForm` 函数中，`buildFormSchema` 后、`saveFormSchema` 前，调用 `enrichSerialNumberFormula()` 函数，遍历 schema 找到所有 SerialNumberField 字段，用 `corpId`/`appType`/`formUuid`/`fieldId`/`serialNumberRule` 拼出完整的 `SERIALNUMBER()` 公式写入 `formula.expression`。
 
 #### 对已创建表单的影响
-- 规则25禁止通过API修改已有应用的表单字段内容
-- 已创建的表单只能手动操作：进入流水号字段 → 随便加一条规则 → 删掉 → 保存
-- 修复后新创建的表单将自动生效
+- 规则25（v1.2.0 起）允许对已有表单调用 saveFormSchema，因此历史表单的流水号公式可由脚本直接补齐，无需手动操作
+- 补齐方式：导出线上 schema → 仅修改 SerialNumberField 的 formula.expression → 保存 → 回读断言（不改其它字段）
+- 新建的表单由创建流程自动写入，无需额外处理
 
 ---
 
@@ -378,9 +378,8 @@ SERIALNUMBER("corpId", "appId", "formUuid", "fieldId", "{\"type\":\"custom\",\"v
 - 位置匹配：多个关联字段指向同一目标表单时，填充字段归属到最近的关联表单字段。
 
 #### 对已创建表单的影响
-- 规则25禁止通过API修改已有应用的表单字段内容
-- 已创建的关联字段需要手动在宜搭后台配置显示设置和数据填充
-- 修复后新创建的表单将自动生效
+- 规则25（v1.2.0 起）允许对已有表单调用 saveFormSchema，历史表单的关联字段显示设置与数据填充可由脚本直接补齐（同"备份 → 最小改动 → 回读断言"三步）
+- 新建的表单由 updateAssociationFields 自动配置，无需额外处理
 
 ---
 

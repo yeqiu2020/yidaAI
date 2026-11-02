@@ -534,12 +534,23 @@ async function createEmptyForm(authRef, appType, formTitle, formType = "receipt"
  * @param {Object} schema - 表单Schema
  * @returns {Promise<Object>}
  *
- * ⚠️【安全警告】此函数仅允许对新建的表单调用，严禁对已有表单调用！
- * 对已有应用的表单字段内容（公式、代码、字段增删改）的修改，只能通过用户手动复制粘贴到宜搭平台。
- * 详见全局规则第25条。
+ * ✅【v1.2.0 起】此函数允许对已有表单调用（规则25 已放开），AI 直接推送公式/校验/字段结构改动，不再要求用户手工复制粘贴。
+ * 但推送必须遵守三步：① 先导出线上 schema 作为备份；② 只做最小必要改动；③ 推送后回读逐项比对。
+ * 🔴 字段校验写入前必读：设计器校验面板只渲染 required / minLength / maxLength / customValidate 四类，
+ *    mobile / email / url / minValue / maxValue 虽然运行时生效但 UI 不渲染（设计器保存时会被静默丢弃），禁止写入。
+ *    详见 SKILL.md §字段校验（validation）写入规范。
  */
-async function saveFormSchema(authRef, appType, formUuid, schema) {
+async function saveFormSchema(authRef, appType, formUuid, schema, opts) {
   console.error("\n📝 Step 2: 保存表单Schema...");
+
+  // 🔒 [schema_guard 闸1] 推送前拦截"设计器不可见"的校验类型（mobile/email/url 等）
+  const schemaGuard = require("./schema_guard");
+  schemaGuard.assertValidationVisible(schema);
+
+  // 🔒 [schema_guard 闸2] 若调用方传入 backupDir，推送前强制备份线上原 schema
+  if (opts && opts.backupDir && opts.beforeSchema) {
+    schemaGuard.backupBeforePush(opts.beforeSchema, opts.backupDir, opts.tag || "before-push");
+  }
 
   // 【根因修复】_csrf_token 必须在闭包内用 auth.csrfToken 构造，
   // 不能在闭包外用 authRef.csrfToken 固化；否则当 requestWithAutoLogin
